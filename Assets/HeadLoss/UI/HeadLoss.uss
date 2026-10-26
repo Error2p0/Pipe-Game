@@ -1,4 +1,5 @@
-/* Head Loss UI. Layout only; colours come from game.json (applied in code). Reference resolution 1920×1080. */
+/* Head Loss UI. Layout only; colours come from game.json (applied in code). Reference resolution 1920×1080.
+   Every interactive element is at least 44 × 44 px (CLAUDE.md rule 13). */
 
 .hl-root {
     position: absolute;
@@ -15,12 +16,14 @@
 .hl-title {
     font-size: 22px;
     -unity-font-style: bold;
+    white-space: normal;
 }
 
 .hl-subtitle {
     font-size: 15px;
     opacity: 0.75;
     margin-top: 2px;
+    white-space: normal;
 }
 
 .hl-section {
@@ -57,28 +60,189 @@
     font-size: 16px;
 }
 
-.hl-toolbox {
+/* ---- building view: left ---- */
+
+.hl-leftcolumn {
     position: absolute;
-    left: 16px; top: 108px;
-    width: 280px;
+    left: 16px; top: 16px; bottom: 76px;
+    width: 290px;
 }
 
-.hl-titlecard {
+.hl-toolbox {
+    margin-top: 10px;
+}
+
+.hl-crank {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    padding: 0;
+}
+
+.hl-crank-fill {
     position: absolute;
-    left: 16px; top: 16px;
-    min-width: 280px;
+    left: 0; top: 0; bottom: 0;
+    width: 0;
+}
+
+.hl-crank-label {
+    font-size: 16px;
+    -unity-text-align: middle-center;
 }
 
 .hl-heatmaps {
     position: absolute;
-    right: 16px; top: 16px;
+    left: 16px; bottom: 16px;
     flex-direction: row;
+}
+
+/* ---- building view: top centre ---- */
+
+.hl-moneybar {
+    position: absolute;
+    top: 16px;
+    left: 50%;
+    translate: -50% 0;
+    flex-direction: row;
+    align-items: center;
+    padding: 4px 10px;
+}
+
+.hl-money {
+    font-size: 24px;
+    -unity-font-style: bold;
+    margin: 0 12px;
+}
+
+.hl-money-debt {
+    font-size: 17px;
+    margin: 0 8px;
+}
+
+.hl-money-rate {
+    font-size: 18px;
+}
+
+.hl-breakdown {
+    position: absolute;
+    top: 76px;
+    left: 50%;
+    translate: -50% 0;
+    width: 320px;
+}
+
+.hl-designbar {
+    position: absolute;
+    top: 86px;
+    left: 50%;
+    translate: -50% 0;
+    width: 760px;
+    padding: 6px 12px;
+    align-items: center;
+}
+
+.hl-design-text {
+    font-size: 17px;
+    white-space: normal;
+    -unity-text-align: middle-center;
+}
+
+.hl-design-reason {
+    font-size: 15px;
+    -unity-text-align: middle-center;
+}
+
+/* ---- building view: right ---- */
+
+.hl-rightcolumn {
+    position: absolute;
+    right: 16px; top: 16px; bottom: 132px;
+    width: 380px;
+}
+
+.hl-outlets {
+    flex-shrink: 1;
+}
+
+.hl-outlet-row {
+    min-height: 44px;
+    padding: 4px 2px;
+    margin-top: 2px;
+}
+
+.hl-zone-chip {
+    width: 12px; height: 12px;
+    border-radius: 6px;
+    margin-right: 8px;
+}
+
+.hl-outlet-name {
+    flex-grow: 1;
+    font-size: 16px;
+    -unity-font-style: bold;
+}
+
+.hl-outlet-value {
+    font-size: 16px;
+}
+
+.hl-outlet-zone {
+    font-size: 14px;
+    margin-left: 20px;
+}
+
+.hl-gauge {
+    height: 8px;
+    margin: 4px 0 2px 20px;
+    border-radius: 4px;
+}
+
+.hl-gauge-band {
+    position: absolute;
+    top: 0; bottom: 0;
+}
+
+.hl-gauge-mark {
+    position: absolute;
+    top: -3px; bottom: -3px;
+    width: 2px;
+}
+
+.hl-gauge-dot {
+    position: absolute;
+    top: -3px;
+    width: 14px; height: 14px;
+    margin-left: -7px;
+    border-radius: 7px;
+}
+
+.hl-readout {
+    margin-top: 12px;
+}
+
+.hl-readout-line {
+    font-size: 16px;
+    margin-top: 3px;
+    white-space: normal;
+}
+
+.hl-readout-title {
+    font-size: 19px;
+    -unity-font-style: bold;
+    white-space: normal;
+}
+
+.hl-slider {
+    min-height: 44px;
+    min-width: 300px;
+    font-size: 16px;
 }
 
 .hl-legend {
     position: absolute;
     right: 16px; bottom: 16px;
-    width: 340px;
+    width: 380px;
 }
 
 .hl-legend-bar {
@@ -94,24 +258,15 @@
     margin-top: 2px;
 }
 
-.hl-readout {
-    position: absolute;
-    right: 16px; top: 92px;
-    width: 340px;
-}
-
-.hl-readout-line {
-    font-size: 16px;
-    margin-top: 3px;
-    white-space: normal;
-}
+/* ---- labels, hint, overlays ---- */
 
 .hl-hint {
     position: absolute;
-    bottom: 22px;
+    bottom: 80px;
     left: 30%; right: 30%;
     -unity-text-align: middle-center;
     font-size: 17px;
+    white-space: normal;
 }
 
 .hl-world-label {
@@ -119,12 +274,18 @@
     font-size: 14px;
     padding: 1px 6px;
     border-radius: 4px;
+    border-width: 1px;
     -unity-text-align: middle-center;
+}
+
+.hl-sheet {
+    position: absolute;
+    left: 24%; right: 24%; top: 10%; bottom: 10%;
 }
 
 .hl-debug {
     position: absolute;
-    left: 320px; top: 76px; right: 380px; bottom: 120px;
+    left: 320px; top: 160px; right: 410px; bottom: 140px;
     font-size: 13px;
 }
 
@@ -143,8 +304,52 @@
     padding: 0 4px;
 }
 
-.hl-readout-title {
-    font-size: 19px;
+/* ---- menu and building list ---- */
+
+.hl-menu {
+    position: absolute;
+    left: 50%; top: 22%;
+    translate: -50% 0;
+    width: 560px;
+    padding: 28px;
+}
+
+.hl-menu-title {
+    font-size: 44px;
     -unity-font-style: bold;
-    white-space: normal;
+}
+
+.hl-menu-button {
+    margin-top: 10px;
+    font-size: 19px;
+}
+
+.hl-buildings {
+    position: absolute;
+    left: 50%; top: 110px;
+    translate: -50% 0;
+    width: 760px;
+    padding: 20px;
+}
+
+.hl-building-row {
+    align-items: center;
+    margin-top: 14px;
+    padding-bottom: 8px;
+}
+
+.hl-slider .unity-base-slider__tracker {
+    height: 8px;
+    margin-top: -4px;
+}
+
+.hl-slider .unity-base-slider__dragger {
+    width: 22px;
+    height: 36px;
+    margin-top: -18px;
+    border-radius: 6px;
+}
+
+.hl-slider .unity-base-slider__drag-container {
+    min-height: 44px;
 }

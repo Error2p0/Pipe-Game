@@ -35,10 +35,13 @@ namespace HeadLoss.Game.Commands
         public bool CanRedo => _undone.Count > 0;
         public string UndoDescription => _done.Count > 0 ? _done[_done.Count - 1].Description : "";
         public string RedoDescription => _undone.Count > 0 ? _undone[_undone.Count - 1].Description : "";
+        /// <summary>Raised after a command applied (sound, autosave hooks).</summary>
+        public event System.Action<ICommand>? Executed;
 
         public bool Execute(ICommand command, BuildingSession session)
         {
             if (!command.Execute(session)) return false;
+            Executed?.Invoke(command);
             if (command.Undoable)
             {
                 if (_done.Count == 0 || !_done[_done.Count - 1].TryMerge(command)) _done.Add(command);

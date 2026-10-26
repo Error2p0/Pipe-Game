@@ -34,6 +34,21 @@ namespace HeadLoss.Unity.View
             Camera.orthographicSize = Mathf.Clamp(size, (float)_def.ZoomMin, (float)_def.ZoomMax);
         }
 
+        /// <summary>
+        /// Frames a rectangle (world metres) inside the part of the screen the HUD leaves free. Insets are screen
+        /// fractions covered by panels on each side.
+        /// </summary>
+        public void FrameInsets(Rect r, float left, float right, float top, float bottom, float margin)
+        {
+            float aspect = Camera.aspect > 0 ? Camera.aspect : 16f / 9f;
+            float freeW = Mathf.Max(0.2f, 1 - left - right), freeH = Mathf.Max(0.2f, 1 - top - bottom);
+            float halfH = Mathf.Max((r.height + 2 * margin) / freeH, (r.width + 2 * margin) / (freeW * aspect)) * 0.5f;
+            Camera.orthographicSize = Mathf.Clamp(halfH, (float)_def.ZoomMin, (float)_def.ZoomMax);
+            float viewH = Camera.orthographicSize * 2, viewW = viewH * aspect;
+            float cx = (left + (1 - right)) * 0.5f - 0.5f, cy = (bottom + (1 - top)) * 0.5f - 0.5f;
+            transform.position = new Vector3(r.center.x - cx * viewW, r.center.y - cy * viewH, -10);
+        }
+
         public Vector2 ScreenToWorld(Vector2 screen)
         {
             Vector3 w = Camera.ScreenToWorldPoint(new Vector3(screen.x, screen.y, 10));

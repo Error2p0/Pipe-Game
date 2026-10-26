@@ -21,6 +21,10 @@ namespace HeadLoss.Unity.View
         public int HoverSegment;
         public int HoverNode;
         public string FluidId = "air";
+        /// <summary>Part placement: highlight this tile (good colour when the part fits, warning when not).</summary>
+        public bool Placing;
+        public TilePos PlaceTile;
+        public bool PlaceValid;
     }
 
     /// <summary>
@@ -108,6 +112,14 @@ namespace HeadLoss.Unity.View
                 if (input.GhostSegments.Contains(c.SegmentId)) col.a *= 0.6f;
                 float h = c.Size * 0.5f;
                 m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZCap, col);
+            }
+
+            if (input.Placing)
+            {
+                Color c = input.PlaceValid ? p.Good : p.Warning;
+                c.a = 0.35f;
+                TilePos t = input.PlaceTile;
+                m.Rect(t.X + 0.08f, t.Y + 0.08f, t.X + 0.92f, t.Y + 0.92f, ZHighlight + 0.05f, c);
             }
 
             if (input.InvalidPath != null && input.InvalidPath.Count > 1)

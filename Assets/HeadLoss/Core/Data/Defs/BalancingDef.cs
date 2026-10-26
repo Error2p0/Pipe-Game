@@ -18,6 +18,18 @@ namespace HeadLoss.Core.Data.Defs
         public SaveDef Save = new SaveDef();
         public OfflineDef Offline = new OfflineDef();
         public AudioDef Audio = new AudioDef();
+        public TargetsDef Targets = new TargetsDef();
+    }
+
+    /// <summary>Tuning targets the balancing report checks (<c>13-balancing.md</c> §Targets).</summary>
+    public sealed class TargetsDef
+    {
+        /// <summary>Starter house: minutes of cranking to pay a small axial fan plus ducts [low, high].</summary>
+        public List<double> StarterCrankPaysFanMinutes = new List<double>();
+        /// <summary>First building payback per tier, minutes.</summary>
+        public List<double> PaybackMinutes = new List<double>();
+        /// <summary>Electricity share of gross at the reference layout [low, high].</summary>
+        public List<double> ElectricityShare = new List<double>();
     }
 
     /// <summary>Physical constants (SI).</summary>

@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using HeadLoss.Core;
+using HeadLoss.Game;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Commands;
 using HeadLoss.Game.Session;
@@ -20,9 +21,28 @@ namespace HeadLoss.PlayMode.Tests
 {
     static class Scenes
     {
-        public static IEnumerator LoadMain()
+        /// <summary>Loads Main (it opens on the main menu).</summary>
+        public static IEnumerator LoadMenu()
         {
             SceneManager.LoadScene("Main");
+            yield return null;
+            yield return null;
+        }
+
+        /// <summary>
+        /// Loads Main and starts a new game without saving (tests never touch the player's save), with the
+        /// requirement sheets marked as seen and, unless <paramref name="crank"/>, the Phase 1 small axial fan in the
+        /// test house instead of the starter's hand crank.
+        /// </summary>
+        public static IEnumerator LoadMain(bool crank = false)
+        {
+            yield return LoadMenu();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            GameState g = GameContext.NewGame(root.Data!);
+            foreach (BuildingRecord b in g.Buildings) b.SheetSeen = true;
+            root.StartGame(g, saving: false);
+            if (!crank) root.Session!.Execute(new SetIntakeEquipmentCommand("air-intake", "small-axial-fan"));
+            root.Session!.SolveNow();
             yield return null;
             yield return null;
         }
@@ -58,6 +78,15 @@ namespace HeadLoss.PlayMode.Tests
     {
         [UnityTearDown]
         public IEnumerator UnloadScene() => Scenes.Unload();
+
+        [UnityTest]
+        public IEnumerator Main_OpensOnTheMenu()
+        {
+            yield return Scenes.LoadMenu();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            Assert.IsTrue(root.InMenu);
+            Assert.IsNull(root.Session);
+        }
 
         [UnityTest]
         public IEnumerator Main_Boots_SolvesTestHouseWithoutErrors()

@@ -3,6 +3,10 @@
   "version": "0.2.0-phase2",
   "currencySymbol": "$",
   "starterBuildings": ["test-house", "small-house"],
+  "toolbox": {
+    "intakeEquipment": ["hand-crank-fan", "small-axial-fan"],
+    "parts": ["damper", "inline-duct-fan"]
+  },
   "theme": {
     "paper": "#F4F1EA",
     "gridLines": "#E3DED2",

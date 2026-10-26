@@ -15,6 +15,8 @@ MonoBehaviour:
   entries:
   - path: balancing.json
     text: {fileID: 4900000, guid: 5bb634cf80527f249ad0404d8206207b, type: 3}
+  - path: codes.json
+    text: {fileID: 4900000, guid: 344e4e590e3db304f93c621561dde0ba, type: 3}
   - path: equipment.json
     text: {fileID: 4900000, guid: 85df87ba1bdcff841adca549b71a7f30, type: 3}
   - path: fittings.json
@@ -41,6 +43,8 @@ MonoBehaviour:
     text: {fileID: 4900000, guid: 6b7246ba9ab79b04f8abea1462eb9faa, type: 3}
   - path: game.json
     text: {fileID: 4900000, guid: d0eb796547780f446b26ca55a2a0c09f, type: 3}
+  - path: handmade/small-house.json
+    text: {fileID: 4900000, guid: 4f9c0c7a0a61a654ca17c64b90ecdea4, type: 3}
   - path: handmade/test-house.json
     text: {fileID: 4900000, guid: 24e6fead3f9622f4ea7b71e17edcf271, type: 3}
   - path: materials.json

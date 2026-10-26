@@ -11,7 +11,17 @@ namespace HeadLoss.Core.Data.Defs
         public string CurrencySymbol = "";
         /// <summary>Hand-made buildings offered before the city exists (Phase 2); a new game opens the first.</summary>
         public List<string> StarterBuildings = new List<string>();
+        /// <summary>What the building toolbox offers until tech unlocks arrive (Phase 3).</summary>
+        public ToolboxDef Toolbox = new ToolboxDef();
         public ThemeDef Theme = new ThemeDef();
+    }
+
+    public sealed class ToolboxDef
+    {
+        /// <summary>Equipment offered at an entry opening.</summary>
+        public List<string> IntakeEquipment = new List<string>();
+        /// <summary>Inline parts (fitting or equipment ids) placed on a duct.</summary>
+        public List<string> Parts = new List<string>();
     }
 
     /// <summary>UI palette (hex colours) from <c>11-ui-visuals-audio.md</c>.</summary>

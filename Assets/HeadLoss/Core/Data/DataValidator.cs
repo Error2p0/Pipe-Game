@@ -32,6 +32,7 @@ namespace HeadLoss.Core.Data
             ValidateFittings(data, errors);
             ValidateEquipment(data, errors);
             ValidateOutlets(data, errors);
+            ValidateCodes(data, errors);
             ValidateHandmade(data, errors);
             return errors;
         }
@@ -71,6 +72,14 @@ namespace HeadLoss.Core.Data
             if (data.Game.StarterBuildings.Count == 0) errors.Add("game.json: starterBuildings is empty");
             foreach (string id in data.Game.StarterBuildings)
                 if (data.FindHandmadeBuilding(id) == null) errors.Add($"game.json: starter building '{id}' unknown");
+            foreach (string id in data.Game.Toolbox.IntakeEquipment)
+                if (data.FindEquipment(id)?.Placement != "intake") errors.Add($"game.json toolbox: '{id}' is not intake equipment");
+            foreach (string id in data.Game.Toolbox.Parts)
+            {
+                bool fan = data.FindEquipment(id)?.Placement == "inline";
+                bool valve = data.FindFitting(id)?.Model == "valve";
+                if (!fan && !valve) errors.Add($"game.json toolbox: '{id}' is not an inline fan or valve");
+            }
             foreach (var kv in t.RoomFills) Colour($"game.json theme.roomFills.{kv.Key}", kv.Value, errors);
             if (t.RoomFillAlpha < 0 || t.RoomFillAlpha > 1) errors.Add("game.json theme.roomFillAlpha outside 0–1");
         }
@@ -146,6 +155,10 @@ namespace HeadLoss.Core.Data
             if (b.Save.BackupCount < 0) errors.Add(f + " save.backupCount negative");
             Positive(f + " save.gzipThresholdBytes", b.Save.GzipThresholdBytes, errors);
             Positive(f + " offline.maxHours", b.Offline.MaxHours, errors);
+
+            if (b.Targets.StarterCrankPaysFanMinutes.Count != 2) errors.Add(f + " targets.starterCrankPaysFanMinutes needs [low, high]");
+            PerTier(f + " targets.paybackMinutes", b.Targets.PaybackMinutes, errors);
+            if (b.Targets.ElectricityShare.Count != 2) errors.Add(f + " targets.electricityShare needs [low, high]");
 
             AudioDef a = b.Audio;
             Fraction(f + " audio.masterVolume", a.MasterVolume, errors);
@@ -344,6 +357,21 @@ namespace HeadLoss.Core.Data
                     if (!(r.Min > 0 && r.Ideal >= r.Min)) errors.Add($"{w} tier {kv.Key}: need 0 < min ≤ ideal");
                     if (r.Max != 0 && r.Max < r.Ideal) errors.Add($"{w} tier {kv.Key}: code max below ideal");
                 }
+            }
+        }
+
+        static readonly HashSet<string> CodeKinds = new HashSet<string> { "layout", "operating", "city" };
+
+        static void ValidateCodes(DataRepository data, List<string> errors)
+        {
+            foreach (CodeDef c in data.Codes)
+            {
+                string w = $"codes.json '{c.Id}'";
+                Id("codes.json", c.Id, errors);
+                if (!CodeKinds.Contains(c.Kind)) errors.Add($"{w}: kind '{c.Kind}' unknown");
+                if (c.Tiers.Count == 0 && c.BuildingTypes.Count == 0) errors.Add($"{w}: in force nowhere (no tiers, no building types)");
+                foreach (int t in c.Tiers) Tier(w, t, errors);
+                if (string.IsNullOrWhiteSpace(c.Reason) || string.IsNullOrWhiteSpace(c.Why)) errors.Add($"{w}: reason and why are needed for the requirement sheet");
             }
         }
 

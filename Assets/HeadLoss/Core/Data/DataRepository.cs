@@ -27,6 +27,7 @@ namespace HeadLoss.Core.Data
         public IReadOnlyList<FittingDef> Fittings => _fittings;
         public IReadOnlyList<EquipmentDef> Equipment => _equipment;
         public IReadOnlyList<OutletDef> Outlets => _outlets;
+        public IReadOnlyList<CodeDef> Codes => _codes;
         public IReadOnlyList<HandmadeBuildingDef> HandmadeBuildings => _handmade;
 
         /// <summary>Fluid tables by fluid id.</summary>
@@ -44,6 +45,7 @@ namespace HeadLoss.Core.Data
         readonly List<FittingDef> _fittings = new List<FittingDef>();
         readonly List<EquipmentDef> _equipment = new List<EquipmentDef>();
         readonly List<OutletDef> _outlets = new List<OutletDef>();
+        readonly List<CodeDef> _codes = new List<CodeDef>();
         readonly List<HandmadeBuildingDef> _handmade = new List<HandmadeBuildingDef>();
         readonly Dictionary<string, FluidTableDef> _fluidTables = new Dictionary<string, FluidTableDef>();
         readonly List<string> _loadIssues = new List<string>();
@@ -54,6 +56,7 @@ namespace HeadLoss.Core.Data
         readonly Dictionary<string, FittingDef> _fittingById = new Dictionary<string, FittingDef>();
         readonly Dictionary<string, EquipmentDef> _equipmentById = new Dictionary<string, EquipmentDef>();
         readonly Dictionary<string, OutletDef> _outletById = new Dictionary<string, OutletDef>();
+        readonly Dictionary<string, CodeDef> _codeById = new Dictionary<string, CodeDef>();
         readonly Dictionary<string, HandmadeBuildingDef> _handmadeById = new Dictionary<string, HandmadeBuildingDef>();
 
         static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
@@ -79,6 +82,7 @@ namespace HeadLoss.Core.Data
             AddAll(repo, Parse<List<FittingDef>>(source, "fittings.json"), repo._fittings, repo._fittingById, f => f.Id, "fittings.json");
             AddAll(repo, Parse<List<EquipmentDef>>(source, "equipment.json"), repo._equipment, repo._equipmentById, e => e.Id, "equipment.json");
             AddAll(repo, Parse<List<OutletDef>>(source, "outlets.json"), repo._outlets, repo._outletById, o => o.Id, "outlets.json");
+            AddAll(repo, Parse<List<CodeDef>>(source, "codes.json"), repo._codes, repo._codeById, c => c.Id, "codes.json");
 
             foreach (FluidDef fluid in repo._fluids)
             {
@@ -159,6 +163,7 @@ namespace HeadLoss.Core.Data
         public FittingDef? FindFitting(string id) => _fittingById.TryGetValue(id, out var v) ? v : null;
         public EquipmentDef? FindEquipment(string id) => _equipmentById.TryGetValue(id, out var v) ? v : null;
         public OutletDef? FindOutlet(string id) => _outletById.TryGetValue(id, out var v) ? v : null;
+        public CodeDef? FindCode(string id) => _codeById.TryGetValue(id, out var v) ? v : null;
         public HandmadeBuildingDef? FindHandmadeBuilding(string id) => _handmadeById.TryGetValue(id, out var v) ? v : null;
 
         public FluidDef Fluid(string id) => FindFluid(id) ?? throw new KeyNotFoundException($"Unknown fluid '{id}'");
