@@ -146,10 +146,31 @@ namespace HeadLoss.Unity
             View.SelectedNode = ix.Selected.Kind == TargetKind.Node || ix.Selected.Kind == TargetKind.Inline ? ix.Selected.Id : 0;
             View.HoverSegment = ix.Hover.Kind == TargetKind.Segment ? ix.Hover.Id : 0;
             View.HoverNode = ix.Hover.Kind == TargetKind.Node || ix.Hover.Kind == TargetKind.Inline ? ix.Hover.Id : 0;
+            View.SelectedTile = TileOf(ix.Selected);
+            View.HoverTile = TileOf(ix.Hover);
+            View.Box = ix.IsBoxSelecting ? ix.BoxWorld : (Rect?)null;
             View.Placing = ix.PlaceTool.Length > 0 && ix.PlaceHovering;
             View.PlaceTile = ix.PlaceTile;
             View.PlaceValid = ix.PlaceValid;
             Ducts.Rebuild(View);
+        }
+
+        /// <summary>The tile of an intake, outlet or inline part target (null for ducts and fittings).</summary>
+        TilePos? TileOf(Target t)
+        {
+            switch (t.Kind)
+            {
+                case TargetKind.Intake:
+                    var o = Session.Layout.FindOpening(t.Anchor);
+                    return o != null ? new TilePos(o.X, o.Y) : (TilePos?)null;
+                case TargetKind.Outlet:
+                    var v = Session.Layout.FindOutlet(t.Anchor);
+                    return v != null ? new TilePos(v.X, v.Y) : (TilePos?)null;
+                case TargetKind.Inline:
+                    return Session.State.Air.FindNode(t.Id)?.Pos;
+                default:
+                    return null;
+            }
         }
 
         public void Dispose()

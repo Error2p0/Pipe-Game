@@ -40,6 +40,7 @@ namespace HeadLoss.Unity.UI
             net.RegisterCallback<PointerLeaveEvent>(_ => Show(_pinned));
 
             _breakdown = ui.Panel(parent, "hl-breakdown");
+            _breakdown.style.backgroundColor = ui.P.Paper;
             UiKit.Text(_breakdown, "Income per second", "hl-section");
             _gross = UiKit.Text(_breakdown, "", "hl-readout-line");
             _electricity = UiKit.Text(_breakdown, "", "hl-readout-line");
@@ -58,7 +59,18 @@ namespace HeadLoss.Unity.UI
             Show(_pinned);
         }
 
-        void Show(bool on) => _breakdown.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+        void Show(bool on)
+        {
+            _breakdown.style.display = on ? DisplayStyle.Flex : DisplayStyle.None;
+            if (on) _breakdown.BringToFront();
+        }
+
+        /// <summary>Keeps the bar and its breakdown above screens built after it (the building HUD).</summary>
+        public void BringToFront()
+        {
+            _bar.BringToFront();
+            _breakdown.BringToFront();
+        }
 
         /// <summary>Refreshes the numbers at the economy tick rate (no per-frame text churn).</summary>
         public void Update(float time)

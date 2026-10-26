@@ -207,7 +207,6 @@ namespace HeadLoss.Unity.Interaction
                     UpdateBox(world);
                     if (!_input.Primary.IsPressed())
                     {
-                        SelectBox();
                         _mode = Mode.Idle;
                         Revision++;
                     }
@@ -303,10 +302,12 @@ namespace HeadLoss.Unity.Interaction
             Revision++;
         }
 
+        /// <summary>Updates the box and selects what it covers as it is dragged (live).</summary>
         void UpdateBox(Vector2 world)
         {
             Vector2 a = _camera.ScreenToWorld(_pressScreen);
             BoxWorld = Rect.MinMaxRect(Mathf.Min(a.x, world.x), Mathf.Min(a.y, world.y), Mathf.Max(a.x, world.x), Mathf.Max(a.y, world.y));
+            SelectBox();
             Revision++;
         }
 

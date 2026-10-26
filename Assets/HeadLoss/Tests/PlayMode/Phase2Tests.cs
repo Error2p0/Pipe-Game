@@ -138,6 +138,31 @@ namespace HeadLoss.PlayMode.Tests
         }
 
         [UnityTest]
+        public IEnumerator BoxSelect_ShowsTheBoxAndSelectsLiveWhileDragging()
+        {
+            yield return Scenes.LoadMain();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            BuildingSession s = root.Session!;
+            s.Execute(new PlaceRunCommand(Scenes.Path((0, 3), (8, 3), (8, 5)), 125, "galvanized-duct", false));
+            yield return null;
+            Camera cam = Camera.main;
+            Move(_mouse.position, (Vector2)cam.WorldToScreenPoint(new Vector3(1.2f, 0.4f, 0)));
+            yield return null;
+            Press(_mouse.leftButton);
+            yield return null;
+            Move(_mouse.position, (Vector2)cam.WorldToScreenPoint(new Vector3(9.6f, 6.6f, 0)));
+            yield return null;
+            yield return null;
+            Assert.IsTrue(root.Interaction!.IsBoxSelecting);
+            Assert.IsTrue(root.View.Box.HasValue, "the box is drawn while dragging");
+            Assert.AreEqual(2, root.Interaction.SelectedSegments.Count, "ducts inside are selected before release");
+            Release(_mouse.leftButton);
+            yield return null;
+            Assert.IsFalse(root.View.Box.HasValue);
+            Assert.AreEqual(2, root.Interaction.SelectedSegments.Count);
+        }
+
+        [UnityTest]
         public IEnumerator CtrlZ_CtrlY_UndoAndRedo()
         {
             yield return Scenes.LoadMain();
