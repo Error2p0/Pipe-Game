@@ -639,7 +639,7 @@ namespace HeadLoss.Unity.UI
             SolveResult r = snap!.Result;
             i = Line(i, $"Flow  {Units.FormatAirFlow(System.Math.Abs(r.Flow[k]))}");
             i = Line(i, $"Pressure lost  {Units.FormatPa(System.Math.Abs(r.DpFittings[k]))}");
-            return Line(i, "Close it to send air to other branches. Moving it costs nothing; it takes effect when you Commit.");
+            return Line(i, "Drag the Open slider to send air to other branches. Changing the opening is free; it takes effect when you Commit. To put the damper somewhere else, Remove it and place a new one.");
         }
 
         int OutletReadout(string outletId, int i)
