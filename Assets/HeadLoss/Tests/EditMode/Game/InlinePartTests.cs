@@ -93,7 +93,7 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
-        public void Damper_OnBuiltPart_AppliesToCommittedStateAtOnce()
+        public void Damper_OnBuiltPart_IsFreeButNeedsCommit()
         {
             BuildingSession s = TwoBranches();
             s.Execute(new PlaceInlineCommand(new TilePos(3, 4), "damper"));
@@ -101,10 +101,11 @@ namespace HeadLoss.Game.Tests
             s.Record.EverOnline = true;
             Assert.IsTrue(s.Commit());
             s.Execute(new SetDamperOpeningCommand(new TilePos(3, 4), 0.4));
-            Assert.AreEqual(0.4, s.Committed.Air.NodeAt(new TilePos(3, 4))!.Opening, 1e-12, "balancing is free and live");
-            Assert.IsFalse(s.HasPendingDesign);
-            s.Undo();
-            Assert.AreEqual(1.0, s.Committed.Air.NodeAt(new TilePos(3, 4))!.Opening, 1e-12);
+            Assert.AreEqual(1.0, s.Committed.Air.NodeAt(new TilePos(3, 4))!.Opening, 1e-12, "the built damper waits for Commit");
+            Assert.IsTrue(s.HasPendingDesign);
+            Assert.AreEqual(0.0, s.PendingCost.Net, 1e-12, "moving a damper costs nothing");
+            Assert.IsTrue(s.Commit());
+            Assert.AreEqual(0.4, s.Committed.Air.NodeAt(new TilePos(3, 4))!.Opening, 1e-12);
         }
 
         [Test]

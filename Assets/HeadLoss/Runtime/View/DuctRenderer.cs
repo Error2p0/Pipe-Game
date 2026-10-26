@@ -25,6 +25,11 @@ namespace HeadLoss.Unity.View
         public bool Placing;
         public TilePos PlaceTile;
         public bool PlaceValid;
+        /// <summary>Selected / hovered tile of an intake, outlet or inline part (outlined).</summary>
+        public TilePos? SelectedTile;
+        public TilePos? HoverTile;
+        /// <summary>Box selection in progress (world rectangle).</summary>
+        public Rect? Box;
     }
 
     /// <summary>
@@ -62,6 +67,10 @@ namespace HeadLoss.Unity.View
             }
             return _palette!.Ramp(_heatmap.Palette, _heatmap.Normalise(snap.Result.Velocity[link]));
         }
+
+        /// <summary>Square ring just inside a tile (the symbol on the tile stays readable).</summary>
+        static void TileOutline(MeshBuilder m, TilePos t, Color c) =>
+            m.Outline(t.X + 0.03f, t.Y + 0.03f, t.X + 0.97f, t.Y + 0.97f, 0.07f, ZHighlight + 0.04f, c);
 
         public void Rebuild(DuctViewInput input)
         {
@@ -112,6 +121,20 @@ namespace HeadLoss.Unity.View
                 if (input.GhostSegments.Contains(c.SegmentId)) col.a *= 0.6f;
                 float h = c.Size * 0.5f;
                 m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZCap, col);
+            }
+
+            if (input.HoverTile is TilePos ht && ht != input.SelectedTile)
+                TileOutline(m, ht, hover);
+            if (input.SelectedTile is TilePos st)
+                TileOutline(m, st, select);
+            if (input.Box is Rect box)
+            {
+                Color fill = p.Text;
+                fill.a = 0.06f;
+                m.Rect(box.xMin, box.yMin, box.xMax, box.yMax, ZHighlight + 0.05f, fill);
+                Color edge = p.Text;
+                edge.a = 0.55f;
+                m.Outline(box.xMin, box.yMin, box.xMax, box.yMax, 0.04f, ZHighlight + 0.06f, edge);
             }
 
             if (input.Placing)

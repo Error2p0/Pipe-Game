@@ -315,8 +315,9 @@ namespace HeadLoss.Game.Commands
     }
 
     /// <summary>
-    /// A free operating setting (on/off, damper position). It applies at once to the design and, when the same
-    /// part is already built, to the committed state too, so income responds live while balancing.
+    /// A free operating setting (fan on/off; fan speed with a variable-speed drive from Phase 3). It applies at
+    /// once to the design and, when the same part is already built, to the committed state too (D25). Damper
+    /// positions are design changes and need a Commit.
     /// </summary>
     public abstract class OperationalCommand : ICommand
     {
@@ -445,13 +446,14 @@ namespace HeadLoss.Game.Commands
         }
     }
 
-    /// <summary>Sets a damper's opening θ. Consecutive moves of the same damper merge into one undo step.</summary>
-    public sealed class SetDamperOpeningCommand : OperationalCommand
+    /// <summary>
+    /// Sets a damper's opening θ in the design (it takes effect on Commit; moving a damper costs nothing).
+    /// Consecutive moves of the same damper merge into one undo step.
+    /// </summary>
+    public sealed class SetDamperOpeningCommand : DesignCommand
     {
         readonly TilePos _tile;
         double _opening;
-        double _wasDesign, _wasCommitted;
-        bool _hadCommitted;
 
         /// <param name="opening">θ, clamped to the damper's minimum opening–1.</param>
         public SetDamperOpeningCommand(TilePos tile, double opening)
@@ -462,7 +464,7 @@ namespace HeadLoss.Game.Commands
 
         public override string Description => $"Damper {_opening:P0} open";
 
-        public override bool Execute(BuildingSession s)
+        protected override bool Apply(BuildingSession s)
         {
             DuctNode? n = s.State.Air.NodeAt(_tile);
             if (n == null || n.Kind != DuctNodeKind.Inline) return false;
@@ -471,27 +473,13 @@ namespace HeadLoss.Game.Commands
             double v = System.Math.Max(f.MinOpening, System.Math.Min(1.0, _opening));
             if (System.Math.Abs(n.Opening - v) < 1e-12) return false;
             _opening = v;
-            DuctNode? c = s.CommittedTwin(n);
-            _wasDesign = n.Opening;
             n.Opening = v;
-            _hadCommitted = c != null;
-            if (c != null)
-            {
-                _wasCommitted = c.Opening;
-                c.Opening = v;
-            }
             return true;
-        }
-
-        public override void Undo(BuildingSession s)
-        {
-            if (s.State.Air.NodeAt(_tile) is DuctNode n) n.Opening = _wasDesign;
-            if (_hadCommitted && s.Committed.Air.NodeAt(_tile) is DuctNode c) c.Opening = _wasCommitted;
         }
 
         public override bool TryMerge(ICommand next)
         {
-            if (!(next is SetDamperOpeningCommand d) || d._tile != _tile || d._hadCommitted != _hadCommitted) return false;
+            if (!(next is SetDamperOpeningCommand d) || d._tile != _tile) return false;
             _opening = d._opening;
             return true;
         }

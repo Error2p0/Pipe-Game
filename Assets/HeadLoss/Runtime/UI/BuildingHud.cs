@@ -455,14 +455,17 @@ namespace HeadLoss.Unity.UI
 
         void RefreshReadout(bool stateChanged)
         {
-            Target t = _ix.Hover.Kind != TargetKind.None ? _ix.Hover : _ix.Selected;
-            bool actions = t.Kind != TargetKind.None && _ix.Hover.Kind == TargetKind.None;
+            // A selection keeps its panel and actions while the pointer moves (also over other things); with
+            // nothing selected the panel shows what is under the pointer, read-only.
+            bool selected = _ix.Selected.Kind != TargetKind.None;
+            Target t = selected ? _ix.Selected : _ix.Hover;
+            bool actions = selected;
             int lines = 0;
             NetworkSnapshot? snap = _s.Current;
             switch (t.Kind)
             {
                 case TargetKind.Segment:
-                    if (t.Id == 0 || _ix.SelectedSegments.Count > 1 && _ix.Hover.Kind == TargetKind.None)
+                    if (t.Id == 0 || _ix.SelectedSegments.Count > 1 && selected)
                     {
                         _readoutTitle.text = $"{_ix.SelectedSegments.Count} ducts selected";
                         lines = Line(lines, "Change their size or delete them.");
@@ -636,7 +639,7 @@ namespace HeadLoss.Unity.UI
             SolveResult r = snap!.Result;
             i = Line(i, $"Flow  {Units.FormatAirFlow(System.Math.Abs(r.Flow[k]))}");
             i = Line(i, $"Pressure lost  {Units.FormatPa(System.Math.Abs(r.DpFittings[k]))}");
-            return Line(i, "Close it to send air to other branches. Balancing is free and takes effect at once.");
+            return Line(i, "Close it to send air to other branches. Moving it costs nothing; it takes effect when you Commit.");
         }
 
         int OutletReadout(string outletId, int i)

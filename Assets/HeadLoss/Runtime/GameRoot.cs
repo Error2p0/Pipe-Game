@@ -190,7 +190,7 @@ namespace HeadLoss.Unity
             _screen = ScreenKind.List;
             _list?.Dispose();
             _list = new BuildingListScreen(_uiRoot!, _ui!, _ctx, OpenBuilding, ShowMenu);
-            _topBar!.Root.BringToFront();
+            _topBar!.BringToFront();
         }
 
         /// <summary>Opens a building in the building view.</summary>
@@ -201,7 +201,7 @@ namespace HeadLoss.Unity
             _scene?.Dispose();
             BuildingSession s = _ctx!.Open(id);
             _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild);
-            _topBar!.Root.BringToFront();
+            _topBar!.BringToFront();
             _screen = ScreenKind.Building;
         }
 
