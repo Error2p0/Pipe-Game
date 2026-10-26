@@ -5,7 +5,7 @@ Status: **built, waiting for your gate playtest.** Branches `phase-2/economy` an
 ## Changes after your review
 
 - Confirmed D22, D23, D24, D35, D36.
-- **Dampers now need a Commit** (D25): moving the slider is free and previews at once, but the built damper changes when you press Commit. Fan on/off stays instant. The fan speed slider you asked for is the variable-speed drive, which the roadmap puts in Phase 3 (task 7). It will apply without a Commit, like on/off.
+- **Dampers now need a Commit** (D25): changing a damper's opening with its Open slider is free and previews at once, but the built damper changes when you press Commit. Fan on/off stays instant. The fan speed slider you asked for is the variable-speed drive, which the roadmap puts in Phase 3 (task 7). It will apply without a Commit, like on/off.
 - The income breakdown opens above the design bar (it was underneath).
 - Selected (and hovered) intakes, outlets, dampers and inline fans get a square outline.
 - With something selected, the right panel keeps its buttons while you hover other things (D43), so buying at the intake or resizing a duct works without moving the pointer away first.
