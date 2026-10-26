@@ -86,6 +86,13 @@ namespace HeadLoss.Sim.Fluids
             _logP = new double[table.PressuresPa.Count];
             for (int i = 0; i < _logP.Length; i++) _logP[i] = Math.Log(table.PressuresPa[i]);
             _rho = ToGrid(table.Density);
+            if (_idealGas)
+            {
+                // Gas density is ~∝ p/T; interpolating ρ·T/p (nearly flat) keeps the log-p interpolation accurate.
+                for (int i = 0; i < _logP.Length; i++)
+                    for (int j = 0; j < _tK.Length; j++)
+                        _rho[i, j] *= _tK[j] / table.PressuresPa[i];
+            }
             _mu = ToGrid(table.Viscosity);
             _cp = ToGrid(table.SpecificHeat);
             _k = ToGrid(table.Conductivity);
@@ -105,7 +112,8 @@ namespace HeadLoss.Sim.Fluids
             _idealGas ? IdealGas.Density(pressureAbsPa, _molarMass, temperatureK, _gasConstant) : Lookup(_rho, pressureAbsPa, temperatureK);
 
         /// <summary>Density from the table itself (also for ideal gases; used to check the ideal gas law).</summary>
-        public double TableDensity(double pressureAbsPa, double temperatureK) => Lookup(_rho, pressureAbsPa, temperatureK);
+        public double TableDensity(double pressureAbsPa, double temperatureK) =>
+            _idealGas ? Lookup(_rho, pressureAbsPa, temperatureK) * pressureAbsPa / temperatureK : Lookup(_rho, pressureAbsPa, temperatureK);
 
         public double Viscosity(double pressureAbsPa, double temperatureK) => Lookup(_mu, pressureAbsPa, temperatureK);
         public double SpecificHeat(double pressureAbsPa, double temperatureK) => Lookup(_cp, pressureAbsPa, temperatureK);

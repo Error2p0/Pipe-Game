@@ -172,6 +172,17 @@ namespace HeadLoss.Sim.Tests
         }
 
         [Test]
+        public void Solver_NoDrivingForce_LoopBetweenRooms_ConvergesToZero()
+        {
+            // Two vents joined by ducts, fan off: air could circulate room → duct → room, but nothing drives it.
+            NetworkGraph g = RandomNetwork(42, 20);
+            foreach (NetworkLink l in g.Links) if (l.Kind == LinkKind.Fan) l.Speed = 0;
+            SolveResult r = new NetworkSolver(new SolverSettings()).Solve(g, Air);
+            Assert.IsTrue(r.Converged);
+            foreach (double q in r.Flow) Assert.AreEqual(0, q, 1e-9);
+        }
+
+        [Test]
         public void Solver_DisconnectedDuct_IsInactiveAndHarmless()
         {
             var g = new NetworkGraph();

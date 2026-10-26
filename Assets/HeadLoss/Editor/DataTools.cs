@@ -7,9 +7,43 @@ using UnityEngine;
 
 namespace HeadLoss.Editor
 {
-    /// <summary>Keeps the data catalog in sync with the JSON files and validates them.</summary>
-    public sealed class DataTools : AssetPostprocessor
+    /// <summary>
+    /// Keeps the data catalog in sync with the JSON files and validates them. The catalog is rebuilt after
+    /// imports, and again whenever it is stale on entering Play mode or before a player build (a domain
+    /// reload can drop the post-import rebuild).
+    /// </summary>
+    [InitializeOnLoad]
+    public sealed class DataTools : AssetPostprocessor, UnityEditor.Build.IPreprocessBuildWithReport
     {
+        static DataTools()
+        {
+            EditorApplication.playModeStateChanged += state =>
+            {
+                if (state == PlayModeStateChange.ExitingEditMode && CatalogIsStale()) RebuildCatalog();
+            };
+        }
+
+        public int callbackOrder => 0;
+
+        public void OnPreprocessBuild(UnityEditor.Build.Reporting.BuildReport report)
+        {
+            if (CatalogIsStale()) RebuildCatalog();
+        }
+
+        /// <summary>True when the catalog misses a JSON file, lists a removed one, or holds an unloaded reference.</summary>
+        public static bool CatalogIsStale()
+        {
+            var catalog = AssetDatabase.LoadAssetAtPath<DataCatalog>(CatalogPath);
+            if (catalog == null) return true;
+            var files = new HashSet<string>();
+            foreach (string f in Directory.GetFiles(DataFolder, "*.json", SearchOption.AllDirectories))
+                files.Add(f.Replace('\\', '/').Substring(DataFolder.Length + 1));
+            if (files.Count != catalog.entries.Count) return true;
+            foreach (DataCatalog.Entry e in catalog.entries)
+                if (e.text == null || !files.Contains(e.path)) return true;
+            return false;
+        }
+
         public const string DataFolder = "Assets/HeadLoss/Data";
         public const string CatalogPath = "Assets/HeadLoss/Data/_Catalog.asset";
 

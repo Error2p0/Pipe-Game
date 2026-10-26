@@ -42,7 +42,7 @@
     "defaultMaterial": "galvanized-duct",
     "defaultDuctFamily": "round-duct",
     "defaultDuctSizeMm": 125,
-    "maxNodeDegree": 3,
+    "maxNodeDegree": 4,
     "ductDisplayWidthBase": 0.1,
     "ductDisplayWidthFactor": 0.6
   },

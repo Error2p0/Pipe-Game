@@ -210,20 +210,36 @@ namespace HeadLoss.Sim.Tests
             Rel(expected, IdealGas.Density(101325, molarMass, 293.15, 8.314462618), 0.005);
         }
 
-        [Test]
-        public void AirTable_AgreesWithIdealGas_WithinOnePercent()
+        /// <summary>06-fluids.md: the ideal gas law agrees with the CoolProp table within 1% for air and methane in the game's range.</summary>
+        /// <remarks>Methane up to 2 bar absolute (building-side gas); at MP-main pressure and −20 °C real-gas effects reach 1.1% (decision D21).</remarks>
+        [TestCase("air", 0.028965, 300000.0)]
+        [TestCase("natural-gas", 0.016043, 200000.0)]
+        public void Table_AgreesWithIdealGas_WithinOnePercent(string fluidId, double molarMass, double maxPressure)
         {
             DataRepository data = DataRepository.Load(new FileDataSource(SimTestData.DataRoot));
-            var air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
+            var fluid = new TableFluid(data.Fluid(fluidId), data.FluidTables[fluidId], data.Balancing.Physics.GasConstant);
+            StringAssert.StartsWith("CoolProp", data.FluidTables[fluidId].Source);
             for (double tC = -20; tC <= 100; tC += 7)
             {
-                foreach (double pAbs in new[] { 95000.0, 101325.0, 110000.0, 300000.0 })
+                foreach (double pAbs in new[] { 95000.0, 101325.0, 110000.0, maxPressure })
                 {
-                    double ideal = IdealGas.Density(pAbs, 0.028965, tC + 273.15, 8.314462618);
-                    Rel(ideal, air.TableDensity(pAbs, tC + 273.15), 0.01, $"ρ at {tC} °C, {pAbs} Pa");
+                    double ideal = IdealGas.Density(pAbs, molarMass, tC + 273.15, 8.314462618);
+                    Rel(ideal, fluid.TableDensity(pAbs, tC + 273.15), 0.01, $"{fluidId} ρ at {tC} °C, {pAbs} Pa");
                 }
             }
-            Rel(1.813e-5, air.Viscosity(101325, 293.15), 0.005, "μ at 20 °C");
+        }
+
+        [Test]
+        public void Tables_MatchTextbookValuesAt20C()
+        {
+            DataRepository data = DataRepository.Load(new FileDataSource(SimTestData.DataRoot));
+            double g = data.Balancing.Physics.GasConstant;
+            var air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], g);
+            var water = new TableFluid(data.Fluid("water"), data.FluidTables["water"], g);
+            Rel(1.204, air.TableDensity(101325, 293.15), 0.005, "air ρ");
+            Rel(1.813e-5, air.Viscosity(101325, 293.15), 0.01, "air μ");
+            Rel(998.2, water.Density(101325, 293.15), 0.001, "water ρ (T3)");
+            Rel(1.002e-3, water.Viscosity(101325, 293.15), 0.005, "water μ (T3)");
         }
     }
 

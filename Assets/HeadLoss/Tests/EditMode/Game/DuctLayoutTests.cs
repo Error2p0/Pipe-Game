@@ -161,6 +161,109 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
+        public void Session_FanOff_WithSeveralBranches_ConvergesToZeroFlow()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (5, 3), (5, 5), (8, 5)));
+            Place(s, Path((3, 3), (3, 5)));
+            Place(s, Path((5, 3), (5, 1), (7, 1)));
+            s.SolveNow();
+            Assert.Greater(s.OutletFlow("vent-2"), 0);
+            s.Execute(new SetEquipmentOnCommand("air-intake", false));
+            s.SolveNow();
+            Assert.IsFalse(s.Settling, "fan off must converge");
+            foreach (double q in s.Current!.Result.Flow) Assert.AreEqual(0, q, 1e-9);
+        }
+
+        [Test]
+        public void Session_FanOff_ThenDrawMore_StillSolves_ThenFanOnDelivers()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (5, 3), (5, 5), (8, 5)));
+            s.Execute(new SetEquipmentOnCommand("air-intake", false));
+            s.SolveNow();
+            Place(s, Path((3, 3), (3, 5)));
+            s.SolveNow();
+            Assert.IsFalse(s.Settling);
+            Assert.IsTrue(s.Current!.Compiled.OutletLink.ContainsKey("vent-1"), "new duct is in the shown solve");
+            s.Execute(new SetEquipmentOnCommand("air-intake", true));
+            s.SolveNow();
+            Assert.Greater(s.OutletFlow("vent-1"), 0);
+        }
+
+        [Test]
+        public void Cross_DrawingStraightAcrossADuct_MakesFourWayJunction()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (8, 3), (8, 5)));
+            Assert.IsTrue(Place(s, Path((7, 1), (7, 2), (6, 2), (6, 5), (3, 5))), "run crossing the trunk at (6,3)");
+            DuctNode cross = s.State.Air.NodeAt(new TilePos(6, 3))!;
+            Assert.AreEqual(4, s.State.Air.Degree(cross.Id));
+            CompiledNetwork c = NetworkCompiler.Compile(s.Layout, s.State, Data, 293.15);
+            var atCross = c.Fittings.FindAll(f => f.NodeId == cross.Id);
+            Assert.AreEqual(3, atCross.Count);
+            Assert.IsTrue(atCross.TrueForAll(f => f.FittingId == "cross-sharp"));
+            Assert.AreEqual(1, atCross.FindAll(f => f.Kind == FittingKind.TeeRun).Count);
+            s.SolveNow();
+            Assert.IsFalse(s.Settling);
+            Assert.Greater(s.OutletFlow("vent-1"), 0);
+            Assert.Greater(s.OutletFlow("vent-2"), 0);
+            Assert.Greater(s.OutletFlow("vent-3"), 0);
+        }
+
+        [Test]
+        public void Cross_FromExistingTee_FourthDuct()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (8, 3), (8, 5)));
+            Place(s, Path((5, 3), (5, 1), (7, 1)));
+            Assert.IsTrue(Place(s, Path((5, 3), (5, 5), (3, 5))));
+            Assert.AreEqual(4, s.State.Air.Degree(s.State.Air.NodeAt(new TilePos(5, 3))!.Id));
+        }
+
+        [Test]
+        public void Cross_DrawingAlongADuct_IsStillAnOverlap()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (8, 3), (8, 5)));
+            Assert.AreEqual(DrawError.Overlap, DuctEditor.Validate(s.State.Air, s.Layout, Path((7, 1), (4, 1), (4, 3), (6, 3), (6, 5)), 4));
+        }
+
+        [Test]
+        public void OpenEnd_DanglingDuct_DischargesAllFanFlowIntoRoom()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (4, 3), (4, 1)));
+            s.SolveNow();
+            DuctNode end = s.State.Air.NodeAt(new TilePos(4, 1))!;
+            Assert.IsTrue(s.Current!.Compiled.OpenEndLink.TryGetValue(end.Id, out int link));
+            double fan = s.Current.Result.Flow[s.Current.Compiled.FanLink["air-intake"]];
+            Assert.Greater(Units.M3sToM3h(fan), 50);
+            Assert.AreEqual(fan, s.Current.Result.Flow[link], 1e-9);
+        }
+
+        [Test]
+        public void OpenEnd_SplitsFlowWithVent()
+        {
+            BuildingSession s = TestHouse();
+            Place(s, Path((0, 3), (3, 3), (3, 5)));
+            s.SolveNow();
+            double ventAlone = s.OutletFlow("vent-1");
+            Place(s, Path((2, 3), (2, 1)));
+            s.SolveNow();
+            Assert.Less(s.OutletFlow("vent-1"), ventAlone, "air leaking from an open branch starves the vent");
+        }
+
+        [Test]
+        public void OpenEnd_FanWithNoDuct_BlowsIntoRoom()
+        {
+            BuildingSession s = TestHouse();
+            s.SolveNow();
+            Assert.AreEqual(1, s.Current!.Compiled.OpenEndLink.Count);
+            Assert.Greater(s.Current.Result.Flow[s.Current.Compiled.FanLink["air-intake"]], 0);
+        }
+
+        [Test]
         public void Preview_DoesNotChangeState()
         {
             BuildingSession s = TestHouse();

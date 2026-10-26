@@ -93,6 +93,15 @@ namespace HeadLoss.Sim.Network
             var gk = new double[linkCount];
             var rhs = new double[n];
             var p = new double[n];
+            if (!HasDrivingForce(graph, res))
+            {
+                // Nothing pushes the fluid: the exact answer is zero flow and hydrostatic pressures.
+                // (Newton only halves a Q|Q| flow per step on the way to zero, so iterating would never converge.)
+                SolveStatic(graph, res, unknown);
+                FillResults(graph, fluid, res, mu);
+                return res;
+            }
+
             double gMin = 0;
             double relax = 1.0;
             double prevResidual = double.PositiveInfinity;
@@ -173,7 +182,8 @@ namespace HeadLoss.Sim.Network
                 double residual = sumQ > 0 ? sumDq / sumQ : (sumDq > 0 ? double.PositiveInfinity : 0);
                 res.Residual = residual;
                 res.MaxImbalance = MaxImbalance(graph, res, unknown);
-                if (residual < _s.FlowTolerance && res.MaxImbalance < _s.MassImbalanceTolerance)
+                bool settled = residual < _s.FlowTolerance || sumDq < _s.ZeroFlowThreshold;
+                if (settled && res.MaxImbalance < _s.MassImbalanceTolerance)
                 {
                     res.Converged = true;
                     break;
@@ -190,6 +200,50 @@ namespace HeadLoss.Sim.Network
             res.Unstable = !res.Converged;
             FillResults(graph, fluid, res, mu);
             return res;
+        }
+
+        /// <summary>
+        /// True when something can drive flow: a running fan, a non-zero demand, or active fixed-pressure nodes
+        /// at different piezometric heads (p + ρ·g·z).
+        /// </summary>
+        bool HasDrivingForce(NetworkGraph graph, SolveResult res)
+        {
+            for (int k = 0; k < graph.Links.Count; k++)
+                if (res.LinkActive[k] && graph.Links[k].Kind == LinkKind.Fan) return true;
+            double rho = res.Density.Length > 0 ? res.Density[0] : 0;
+            bool first = true;
+            double head = 0;
+            for (int i = 0; i < graph.Nodes.Count; i++)
+            {
+                if (!res.NodeActive[i]) continue;
+                NetworkNode n = graph.Nodes[i];
+                if (n.Kind == NodeKind.Demand && n.Demand != 0) return true;
+                if (n.Kind != NodeKind.FixedPressure) continue;
+                double h = n.FixedPressure + rho * _s.Gravity * n.Elevation;
+                if (first) { head = h; first = false; }
+                else if (Math.Abs(h - head) > 1e-9 * (1 + Math.Abs(head))) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Zero flow; every active node sits at the common piezometric head.</summary>
+        void SolveStatic(NetworkGraph graph, SolveResult res, int[] unknown)
+        {
+            double rho = res.Density.Length > 0 ? res.Density[0] : 0;
+            double head = 0;
+            for (int i = 0; i < graph.Nodes.Count; i++)
+            {
+                NetworkNode n = graph.Nodes[i];
+                if (res.NodeActive[i] && n.Kind == NodeKind.FixedPressure) { head = n.FixedPressure + rho * _s.Gravity * n.Elevation; break; }
+            }
+            for (int i = 0; i < graph.Nodes.Count; i++)
+                if (unknown[i] >= 0) res.NodePressure[i] = head - rho * _s.Gravity * graph.Nodes[i].Elevation;
+            System.Array.Clear(res.Flow, 0, res.Flow.Length);
+            res.Iterations = 0;
+            res.Residual = 0;
+            res.MaxImbalance = 0;
+            res.Converged = true;
+            res.Unstable = false;
         }
 
         void BuildStructure(NetworkGraph graph, SolveResult res, long key)

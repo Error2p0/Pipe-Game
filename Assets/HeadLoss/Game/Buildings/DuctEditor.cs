@@ -36,7 +36,8 @@ namespace HeadLoss.Game.Buildings
 
     /// <summary>
     /// Pure editing rules for the duct layer: orthogonal runs on the tile grid, corners become elbow
-    /// nodes, drawing from or onto the middle of a segment makes a tee, one duct per tile.
+    /// nodes, drawing from or onto the middle of a segment makes a tee (a cross where a tee already is),
+    /// one duct per tile. A free end is an open end that discharges into the room.
     /// </summary>
     public static class DuctEditor
     {
@@ -48,7 +49,7 @@ namespace HeadLoss.Game.Buildings
             DrawError.StartNotOnNetwork => "Start from the intake, an outlet or an existing duct",
             DrawError.OutsideBuilding => "Ducts stay inside the building",
             DrawError.CrossesWall => "A wall is in the way",
-            DrawError.Overlap => "Another duct is already there",
+            DrawError.Overlap => "Another duct is already there (cross it straight to join)",
             DrawError.SelfCrossing => "The run crosses itself",
             DrawError.NodeFull => "No more connections fit here",
             DrawError.Duplicate => "These points are already connected",
@@ -99,7 +100,11 @@ namespace HeadLoss.Game.Buildings
             if (start.IsEmpty) return DrawError.StartNotOnNetwork;
 
             for (int i = 1; i < path.Count - 1; i++)
-                if (occ.ContainsKey(path[i])) return DrawError.Overlap;
+            {
+                if (!occ.TryGetValue(path[i], out TileOccupant o)) continue;
+                DrawError e = CrossingError(net, path, i, o, maxFreeDegree);
+                if (e != DrawError.None) return e;
+            }
 
             // Endpoint capacity.
             if (start.NodeId != 0)
@@ -123,6 +128,26 @@ namespace HeadLoss.Game.Buildings
             return DrawError.None;
         }
 
+        /// <summary>
+        /// A run may pass straight across an existing duct (making a cross) or straight through a free node
+        /// that has room for two more ducts. Anything else on the way is an overlap.
+        /// </summary>
+        static DrawError CrossingError(DuctNetworkState net, IReadOnlyList<TilePos> path, int i, TileOccupant o, int maxFreeDegree)
+        {
+            (int ax, int ay) = path[i - 1].DirectionTo(path[i]);
+            (int bx, int by) = path[i].DirectionTo(path[i + 1]);
+            bool straight = ax == bx && ay == by;
+            if (!straight) return DrawError.Overlap;
+            if (o.SegmentId != 0)
+            {
+                if (Collinear(net, o.SegmentId, path[i - 1], path[i])) return DrawError.Overlap;
+                return maxFreeDegree >= 4 ? DrawError.None : DrawError.Overlap;
+            }
+            DuctNode n = net.FindNode(o.NodeId)!;
+            if (n.Kind != DuctNodeKind.Free) return DrawError.Overlap;
+            return net.Degree(n.Id) + 2 <= maxFreeDegree ? DrawError.None : DrawError.NodeFull;
+        }
+
         static bool Connected(DuctNetworkState net, int a, int b)
         {
             foreach (DuctSegment s in net.Segments)
@@ -143,6 +168,11 @@ namespace HeadLoss.Game.Buildings
         /// <param name="diameterMm">Duct size, mm.</param>
         public static void PlaceRun(DuctNetworkState net, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
         {
+            // Tiles where the run meets the existing network on its way (crossings) become junctions.
+            var crossings = new HashSet<TilePos>();
+            Dictionary<TilePos, TileOccupant> occ = Occupancy(net);
+            for (int i = 1; i < path.Count - 1; i++)
+                if (occ.ContainsKey(path[i])) crossings.Add(path[i]);
             int startNode = NodeOrSplit(net, path[0]);
             int endNode = NodeOrSplit(net, path[path.Count - 1]);
             var keys = new List<int> { startNode };
@@ -150,7 +180,8 @@ namespace HeadLoss.Game.Buildings
             {
                 (int dx0, int dy0) = path[i - 1].DirectionTo(path[i]);
                 (int dx1, int dy1) = path[i].DirectionTo(path[i + 1]);
-                if (dx0 != dx1 || dy0 != dy1) keys.Add(AddNode(net, path[i], smoothElbows));
+                if (crossings.Contains(path[i])) keys.Add(NodeOrSplit(net, path[i]));
+                else if (dx0 != dx1 || dy0 != dy1) keys.Add(AddNode(net, path[i], smoothElbows));
             }
             keys.Add(endNode);
             for (int i = 0; i < keys.Count - 1; i++)

@@ -46,6 +46,9 @@ namespace HeadLoss.Unity.UI
         readonly Label[] _lines = new Label[ReadoutLines];
         VisualElement _labelLayer = null!;
         readonly List<Label> _ventLabels = new List<Label>();
+        readonly List<Label> _openLabels = new List<Label>();
+        readonly List<Vector2> _openLabelWorld = new List<Vector2>();
+        int _openLabelCount;
         readonly List<Label> _fittingLabels = new List<Label>();
         readonly List<Vector2> _fittingLabelWorld = new List<Vector2>();
         int _fittingLabelCount;
@@ -416,8 +419,19 @@ namespace HeadLoss.Unity.UI
             int degree = _s.State.Air.Degree(id);
             _readoutTitle.text = elbow
                 ? _data.Fitting(n.SmoothFittings ? "elbow-90-long-radius" : "elbow-90-sharp").DisplayName
-                : degree >= 3 ? _data.Fitting("tee-sharp").DisplayName : _data.Fitting("reducer").DisplayName;
+                : degree >= 4 ? _data.Fitting("cross-sharp").DisplayName
+                : degree == 3 ? _data.Fitting("tee-sharp").DisplayName
+                : degree == 1 ? _data.Fitting("open-end").DisplayName
+                : _data.Fitting("reducer").DisplayName;
             if (snap == null) return Line(i, "Solving…");
+            if (degree == 1)
+            {
+                if (!snap.Compiled.OpenEndLink.TryGetValue(id, out int k)) return Line(i, "Solving…");
+                double q = snap.Result.Flow[k];
+                i = Line(i, $"Air escaping  {Units.FormatAirFlow(q)}");
+                i = Line(i, $"Exit loss  K {_data.Fitting("open-end").K:0.0} · {Units.FormatPa(System.Math.Abs(snap.Result.DpFittings[k]))}");
+                return Line(i, "This air reaches no outlet. Extend the duct to a vent or remove it.");
+            }
             bool any = false;
             foreach (CompiledFitting f in snap.Compiled.Fittings)
             {
@@ -526,6 +540,26 @@ namespace HeadLoss.Unity.UI
         void RefreshVentLabels()
         {
             NetworkSnapshot? snap = _s.Current;
+            _openLabelCount = 0;
+            _openLabelWorld.Clear();
+            if (snap != null)
+            {
+                foreach (var kv in snap.Compiled.OpenEndLink)
+                {
+                    DuctNode? n = snap.State.Air.FindNode(kv.Key);
+                    if (n == null) continue;
+                    if (_openLabelCount == _openLabels.Count)
+                    {
+                        Label l = WorldLabel();
+                        l.style.color = _p.Warning;
+                        _openLabels.Add(l);
+                    }
+                    _openLabels[_openLabelCount++].text = "open end · " + Units.FormatAirFlow(snap.Result.Flow[kv.Value]);
+                    _openLabelWorld.Add(DuctGeometry.Centre(n.Pos) + new Vector2(0, 0.5f));
+                }
+            }
+            for (int i = 0; i < _openLabels.Count; i++)
+                _openLabels[i].style.display = i < _openLabelCount ? DisplayStyle.Flex : DisplayStyle.None;
             for (int i = 0; i < _s.Layout.Outlets.Count; i++)
             {
                 OutletPlacementDef o = _s.Layout.Outlets[i];
@@ -575,6 +609,7 @@ namespace HeadLoss.Unity.UI
                 Place(panel, _ventLabels[i], new Vector2(o.X + 0.5f, o.Y + 1.0f));
             }
             for (int i = 0; i < _fittingLabelCount; i++) Place(panel, _fittingLabels[i], _fittingLabelWorld[i]);
+            for (int i = 0; i < _openLabelCount; i++) Place(panel, _openLabels[i], _openLabelWorld[i]);
         }
 
         void Place(IPanel panel, Label l, Vector2 world)

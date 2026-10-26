@@ -120,14 +120,15 @@ namespace HeadLoss.Core.Data
                 Positive($"fluids.json '{fl.Id}' molarMass", fl.MolarMass, errors);
                 Positive($"fluids.json '{fl.Id}' gamma", fl.Gamma, errors);
                 if (!string.IsNullOrEmpty(fl.Table) && data.FluidTables.TryGetValue(fl.Id, out FluidTableDef table))
-                    ValidateTable(fl, table, errors);
+                    ValidateTable(data, fl, table, errors);
             }
         }
 
-        static void ValidateTable(FluidDef fluid, FluidTableDef t, List<string> errors)
+        static void ValidateTable(DataRepository data, FluidDef fluid, FluidTableDef t, List<string> errors)
         {
             string f = fluid.Table;
-            if (t.Fluid != fluid.Id) errors.Add($"{f}: fluid '{t.Fluid}' does not match '{fluid.Id}'");
+            // Several fluids may share one table (hot water and heating water use the water table).
+            if (data.FindFluid(t.Fluid) == null) errors.Add($"{f}: fluid '{t.Fluid}' unknown");
             if (string.IsNullOrWhiteSpace(t.Source)) errors.Add($"{f}: source is empty");
             Ascending(f + " temperaturesC", t.TemperaturesC, errors);
             Ascending(f + " pressuresPa", t.PressuresPa, errors);

@@ -56,6 +56,9 @@ namespace HeadLoss.PlayMode.Tests
 
     public class BuildingViewTests
     {
+        [UnityTearDown]
+        public IEnumerator UnloadScene() => Scenes.Unload();
+
         [UnityTest]
         public IEnumerator Main_Boots_SolvesTestHouseWithoutErrors()
         {
@@ -66,7 +69,6 @@ namespace HeadLoss.PlayMode.Tests
             Assert.IsNotNull(root.Session!.Current);
             Assert.IsTrue(root.Session.Current!.Result.Converged);
             Assert.IsNotNull(Camera.main);
-            yield return Scenes.Unload();
         }
 
         /// <summary>
@@ -100,7 +102,6 @@ namespace HeadLoss.PlayMode.Tests
             Assert.Less(elapsed, 1f, "heatmap must update within one second");
             Assert.Greater(flowAfter / flowBefore, 1.08, "visible flow gain");
             Assert.Greater(colourDelta, 0.08f, "visible colour change");
-            yield return Scenes.Unload();
         }
     }
 
@@ -109,6 +110,10 @@ namespace HeadLoss.PlayMode.Tests
     {
         Mouse _mouse = null!;
         Keyboard _keyboard = null!;
+
+        /// <summary>Runs before the fixture restores the input system, so the game's actions are disposed first.</summary>
+        [UnityTearDown]
+        public IEnumerator UnloadScene() => Scenes.Unload();
 
         public override void Setup()
         {
@@ -147,7 +152,6 @@ namespace HeadLoss.PlayMode.Tests
             Assert.IsTrue(DuctEditor.IsElbow(s.State.Air, s.State.Air.NodeAt(new TilePos(2, 3))!));
             Assert.IsTrue(DuctEditor.IsElbow(s.State.Air, s.State.Air.NodeAt(new TilePos(2, 5))!));
             Assert.Greater(Units.M3sToM3h(s.OutletFlow("vent-1")), 30);
-            yield return Scenes.Unload();
         }
 
         [UnityTest]
@@ -175,7 +179,6 @@ namespace HeadLoss.PlayMode.Tests
             Release(_keyboard.deleteKey);
             yield return null;
             Assert.AreEqual(2, s.State.Air.Segments.Count, "deleted the selected duct");
-            yield return Scenes.Unload();
         }
 
         [UnityTest]
@@ -198,7 +201,6 @@ namespace HeadLoss.PlayMode.Tests
             Release(_keyboard.digit1Key);
             yield return null;
             Assert.AreEqual(HeatmapMode.Velocity, root.Heatmap.Mode);
-            yield return Scenes.Unload();
         }
     }
 

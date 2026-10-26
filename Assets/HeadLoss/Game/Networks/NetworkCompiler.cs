@@ -34,6 +34,8 @@ namespace HeadLoss.Game.Networks
         public Dictionary<string, int> OutletLink = new Dictionary<string, int>();
         /// <summary>Entry opening id → fan link index.</summary>
         public Dictionary<string, int> FanLink = new Dictionary<string, int>();
+        /// <summary>Duct node id of an open end (or a bare intake) → discharge link index.</summary>
+        public Dictionary<int, int> OpenEndLink = new Dictionary<int, int>();
         public List<CompiledFitting> Fittings = new List<CompiledFitting>();
     }
 
@@ -94,6 +96,30 @@ namespace HeadLoss.Game.Networks
                 c.OutletLink[n.AnchorId] = vent;
             }
 
+            // Open ends: a free node with one duct, or an intake with equipment and no duct, discharges into the
+            // room through the open-end exit loss (referenced to the duct or fan connection area).
+            FittingDef openEnd = data.Fitting("open-end");
+            foreach (DuctNode n in net.Nodes)
+            {
+                double area;
+                int degree = net.Degree(n.Id);
+                if (n.Kind == DuctNodeKind.Free && degree == 1)
+                {
+                    DuctSegment seg = net.Segments.Find(x => x.NodeA == n.Id || x.NodeB == n.Id)!;
+                    double d = Units.MmToM(seg.DiameterMm);
+                    area = Math.PI * d * d / 4;
+                }
+                else if (n.Kind == DuctNodeKind.Intake && degree == 0 && c.FanLink.TryGetValue(n.AnchorId, out int fanLink))
+                {
+                    area = g.Links[fanLink].Area;
+                }
+                else continue;
+                int room = g.AddFixed(0, z, $"room-open-{n.Id}");
+                int link = g.AddVent(c.NodeIndex[n.Id], room, openEnd.K, area, $"open-n{n.Id}");
+                g.Links[link].Temperature = airTemperatureK;
+                c.OpenEndLink[n.Id] = link;
+            }
+
             AssignFittings(net, data, c, segLink);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
             return c;
@@ -132,8 +158,9 @@ namespace HeadLoss.Game.Networks
             FittingDef sharp = data.Fitting("elbow-90-sharp");
             FittingDef smooth = data.Fitting("elbow-90-long-radius");
             FittingDef tee = data.Fitting("tee-sharp");
+            FittingDef cross = data.Fitting("cross-sharp");
             FittingDef reducer = data.Fitting("reducer");
-            var segs = new List<DuctSegment>(3);
+            var segs = new List<DuctSegment>(4);
 
             foreach (DuctNode n in net.Nodes)
             {
@@ -172,13 +199,14 @@ namespace HeadLoss.Game.Networks
                     continue;
                 }
 
-                // Tee: run continues straight from upstream, branch turns 90°.
+                // Tee (3 ducts) or cross (4 ducts): the run continues straight from upstream, branches turn 90°.
+                FittingDef junction = segs.Count >= 4 ? cross : tee;
                 for (int i = 1; i < segs.Count; i++)
                 {
                     DuctSegment out_ = segs[i];
                     TilePos outPos = net.FindNode(out_.Other(n.Id))!.Pos;
                     bool run = (upPos.X == pos.X && outPos.X == pos.X) || (upPos.Y == pos.Y && outPos.Y == pos.Y);
-                    Add(c, n.Id, run ? FittingKind.TeeRun : FittingKind.TeeBranch, tee.Id, run ? tee.KRun : tee.KBranch, segLink[out_.Id]);
+                    Add(c, n.Id, run ? FittingKind.TeeRun : FittingKind.TeeBranch, junction.Id, run ? junction.KRun : junction.KBranch, segLink[out_.Id]);
                     AddReducer(c, n.Id, reducer, up, out_, segLink);
                 }
             }

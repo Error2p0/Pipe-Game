@@ -23,6 +23,22 @@ MonoBehaviour:
     text: {fileID: 4900000, guid: 96613ec3102f0bd449a830ed30fda1dc, type: 3}
   - path: fluids/air.json
     text: {fileID: 4900000, guid: 3d1e239d2b7298045b7ea58121a3cabe, type: 3}
+  - path: fluids/co2.json
+    text: {fileID: 4900000, guid: ac0b2c29d30e07145bb484265456d0ea, type: 3}
+  - path: fluids/hydrogen.json
+    text: {fileID: 4900000, guid: b32d6abe260c5fe41b39e48b4e71d4c6, type: 3}
+  - path: fluids/natural-gas.json
+    text: {fileID: 4900000, guid: 2b00be561c949f64f897be8f9ac218cf, type: 3}
+  - path: fluids/nitrogen.json
+    text: {fileID: 4900000, guid: c0d70389dcf919249894edeec2211f60, type: 3}
+  - path: fluids/oxygen.json
+    text: {fileID: 4900000, guid: 27b2e5884aa57e6499ad27ef5dc8177e, type: 3}
+  - path: fluids/propane.json
+    text: {fileID: 4900000, guid: c05143290c6bbae4b9e8f7c2921ba495, type: 3}
+  - path: fluids/refrigerant.json
+    text: {fileID: 4900000, guid: 4f12a2b67a231bc478079830f642ffbc, type: 3}
+  - path: fluids/water.json
+    text: {fileID: 4900000, guid: 6b7246ba9ab79b04f8abea1462eb9faa, type: 3}
   - path: game.json
     text: {fileID: 4900000, guid: d0eb796547780f446b26ca55a2a0c09f, type: 3}
   - path: handmade/test-house.json

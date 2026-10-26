@@ -289,7 +289,7 @@ namespace HeadLoss.Unity.Interaction
             DuctNetworkState net = _session.State.Air;
             foreach (DuctNode n in net.Nodes)
             {
-                if (n.Kind != DuctNodeKind.Free || net.Degree(n.Id) < 2) continue;
+                if (n.Kind != DuctNodeKind.Free || net.Degree(n.Id) < 1) continue;
                 if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.3f) return new Target { Kind = TargetKind.Node, Id = n.Id, Anchor = "" };
             }
             int best = 0;

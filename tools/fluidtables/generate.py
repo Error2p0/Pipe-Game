@@ -10,7 +10,8 @@ Writes Assets/HeadLoss/Data/fluids/<id>.json and fluids/_sources.md
 
 Grid: temperature -30 C to 120 C in 2 K steps; absolute pressure 0.8 bar to
 50 bar on a log grid (20 points). Liquids (water) are only temperature
-dependent at 1 bar, so every pressure row of a liquid repeats the 1 bar values.
+dependent (at 1 bar, or just above saturation where 1 bar would boil them), so
+every pressure row of a liquid repeats those values.
 Arrays are indexed [pressure][temperature].
 """
 
@@ -54,9 +55,15 @@ def pressures():
 
 
 def prop(key, t_k, p, name, liquid):
-    """CoolProp property; for liquids evaluated at 1 bar. Falls back to the
-    saturated phase on the stable side when the state is two-phase."""
-    pp = 1.0e5 if liquid else p
+    """CoolProp property. Liquids are evaluated at 1 bar, or 5% above their
+    saturation pressure where 1 bar would boil them (water above 100 C), so
+    the table stays liquid. Falls back next to saturation for two-phase states."""
+    if liquid:
+        # Freezing is not modelled: below the triple point use the 0.01 C values.
+        t_k = max(t_k, PropsSI("Ttriple", name) + 0.01)
+        pp = max(1.0e5, 1.05 * PropsSI("P", "T", t_k, "Q", 0, name))
+    else:
+        pp = p
     try:
         return PropsSI(key, "T", t_k, "P", pp, name)
     except ValueError:
