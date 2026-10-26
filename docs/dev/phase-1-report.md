@@ -1,6 +1,6 @@
 # Phase 1 report · Physics core
 
-Status: **all Phase 1 tasks done, waiting for your gate playtest.** Branches `phase-1/test-house` and `phase-1/gate-fixes`, merged to `main`.
+Status: **gate passed (2026-10-26).** Branches `phase-1/test-house` and `phase-1/gate-fixes`, merged to `main`.
 
 ## Changes after your first review
 
@@ -72,6 +72,4 @@ Performance (Editor, Mono): 2,000-segment network solve takes **3.8 ms** median 
 
 ## Needs your confirmation
 
-- **D19:** cross fitting K values (run 0.4, branch 1.0, same as the sharp tee).
-
-Confirmed in review: D3, D6, D7, D11. D18 moves to Phase 2. None of the eight `[confirm]` assumptions in `00-index.md` apply to Phase 1.
+Nothing open. Confirmed in review: D3, D6, D7, D11, D19. D18 moves to Phase 2. None of the eight `[confirm]` assumptions in `00-index.md` apply to Phase 1.
