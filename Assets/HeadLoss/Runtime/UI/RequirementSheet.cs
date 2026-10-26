@@ -29,6 +29,7 @@ namespace HeadLoss.Unity.UI
             BuildingLayout l = session.Layout;
             string symbol = data.Game.CurrencySymbol;
             _panel = ui.Panel(parent, "hl-sheet");
+            _panel.style.backgroundColor = ui.P.Paper;
             var scroll = new ScrollView(ScrollViewMode.Vertical);
             scroll.style.flexGrow = 1;
             _panel.Add(scroll);

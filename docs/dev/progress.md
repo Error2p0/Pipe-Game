@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **2 · First playable building** (not started; waiting for the go-ahead) (`docs/spec/14-roadmap.md`).
+Current phase: **2 · First playable building**: built, waiting for the gate playtest (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -20,18 +20,20 @@ Current phase: **2 · First playable building** (not started; waiting for the go
 
 ## Phase 2 · First playable building
 
-Not started. Task list from `14-roadmap.md` §Phase 2 (task 10, generated fluid tables, is already done):
+Task list from `14-roadmap.md` §Phase 2:
 
-- [ ] 1. Outlets with min/ideal/code max; payout multiplier formula; building online/offline rule. Tests for every zone and both caps.
-- [ ] 2. Requirement sheet panel and outlet list with live zones.
-- [ ] 3. Economy: wallet, base pay, electricity cost (device power), income formula, money display with suffixes, income breakdown.
-- [ ] 4. Hand crank (click/hold), small axial fan, inline duct fan. VSD not yet.
-- [ ] 5. Dampers with position slider; balancing.
-- [ ] 6. Design mode, Commit/Discard, costs, refunds, budget cap rule [confirm].
-- [ ] 7. Undo/redo command stack.
-- [ ] 8. One hand-built small house (multi-room, 1 floor, 4–5 vents) plus the one-room test house.
-- [ ] 9. Save/load (format, autosave, backups, atomic write, migrations scaffold).
+- [x] 1. Outlets with min/ideal/code max; payout multiplier formula; building online/offline rule. Tests for every zone and both caps (T14, T15).
+- [x] 2. Requirement sheet panel and outlet list with live zones.
+- [x] 3. Economy: wallet, debt, base pay, electricity cost (device power), income formula at 10 Hz, money display with suffixes, income breakdown.
+- [x] 4. Hand crank (click/hold), small axial fan, inline duct fan. VSD not yet.
+- [x] 5. Dampers with position slider; balancing.
+- [x] 6. Design mode, Commit/Discard, costs, refunds, budget cap rule [confirm].
+- [x] 7. Undo/redo command stack.
+- [x] 8. One hand-built small house (multi-room with doors, 1 floor, 5 vents) plus the one-room test house (now the starter, with a hand crank).
+- [x] 9. Save/load (format, autosave, backups, atomic write, gzip, migrations scaffold, sanitising).
 - [x] 10. Generated fluid tables in use (no hand-typed air table left). Done in Phase 1 (D3).
-- [ ] 11. Calm audio first pass (airflow, fan hum, UI clicks).
-- [ ] 12. Balancing report editor window (`13-balancing.md`).
-- [ ] Carry-over: D18, small axial fan overdelivers against tier 1 vent limits.
+- [x] 11. Calm audio first pass (airflow, fan hum, UI clicks, placing tock, commit chime).
+- [x] 12. Balancing report editor window (`Head Loss/Balancing Report`; hand-made buildings until the Phase 3 generator).
+- [x] Carry-over: D18, small axial fan overdelivers against tier 1 vent limits (D22).
+- [x] Phase end: all tests green, Windows build in `Builds/phase-2/`, `docs/dev/phase-2-report.md`.
+- [ ] Gate playtest by the user.

@@ -308,7 +308,7 @@ namespace HeadLoss.Game.Session
             string symbol = Data.Game.CurrencySymbol;
             if (Game.Debt > 0) return new CommitCheck(false, "Purchases wait until the debt is repaid");
             if (!Record.EverOnline && Record.SpentTotal + net > BudgetCap + 1e-9)
-                return new CommitCheck(false, $"Over budget cap by {Units.FormatMoney(Record.SpentTotal + net - BudgetCap, symbol)}");
+                return new CommitCheck(false, $"Over budget cap by {Units.FormatMoney(Record.SpentTotal + net - BudgetCap, symbol)} · the cap lifts once the building has been online");
             if (Game.Wallet < net - 1e-9)
                 return new CommitCheck(false, $"Need {Units.FormatMoney(net - Game.Wallet, symbol)} more");
             return new CommitCheck(true, "");
