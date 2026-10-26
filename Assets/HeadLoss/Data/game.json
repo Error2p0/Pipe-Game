@@ -1,6 +1,8 @@
 {
   "displayName": "Head Loss",
-  "version": "0.1.0-phase1",
+  "version": "0.2.0-phase2",
+  "currencySymbol": "$",
+  "starterBuildings": ["test-house", "small-house"],
   "theme": {
     "paper": "#F4F1EA",
     "gridLines": "#E3DED2",
@@ -8,6 +10,7 @@
     "text": "#1F2730",
     "warning": "#C98A2E",
     "danger": "#B5483A",
+    "good": "#4E8F68",
     "roomFillAlpha": 0.08,
     "roomFills": {
       "bedroom": "#7B8FC7",

@@ -10,6 +10,8 @@ namespace HeadLoss.Game.Buildings
         Intake,
         /// <summary>Anchored at an outlet.</summary>
         Outlet,
+        /// <summary>An inline part (damper or inline fan) on a straight run, between exactly two segments.</summary>
+        Inline,
     }
 
     /// <summary>A node of the player's duct layout (one per tile at most).</summary>
@@ -23,6 +25,15 @@ namespace HeadLoss.Game.Buildings
         public string AnchorId = "";
         /// <summary>Long-radius elbow at this node instead of a sharp one.</summary>
         public bool SmoothFittings;
+        /// <summary>Inline nodes: fitting id (damper) or equipment id (inline fan).</summary>
+        public string PartId = "";
+        /// <summary>Inline nodes: unit direction along the run; fans blow this way.</summary>
+        public int DirX;
+        public int DirY;
+        /// <summary>Dampers: opening θ (minOpening–1).</summary>
+        public double Opening = 1;
+        /// <summary>Inline fans: switched on.</summary>
+        public bool On = true;
 
         public TilePos Pos => new TilePos(X, Y);
         public DuctNode Clone() => (DuctNode)MemberwiseClone();
@@ -83,7 +94,10 @@ namespace HeadLoss.Game.Buildings
         public EquipmentState Clone() => (EquipmentState)MemberwiseClone();
     }
 
-    /// <summary>Player edits and dynamic state of one building (serialisable; the layout is regenerated).</summary>
+    /// <summary>
+    /// One version of a building's player edits (serialisable; the layout is regenerated). A building keeps two:
+    /// the committed one that earns and the design draft (<see cref="BuildingRecord"/>).
+    /// </summary>
     public sealed class BuildingState
     {
         public string BuildingId = "";
@@ -97,6 +111,29 @@ namespace HeadLoss.Game.Buildings
             var c = new BuildingState { BuildingId = BuildingId, Air = Air.Clone() };
             foreach (EquipmentState e in Equipment) c.Equipment.Add(e.Clone());
             return c;
+        }
+
+        /// <summary>
+        /// A description of the physical layout and settings that ignores ids, so two states that look and run
+        /// the same compare equal even when they were reached by different edits.
+        /// </summary>
+        public string Fingerprint()
+        {
+            var parts = new List<string>();
+            foreach (DuctSegment s in Air.Segments)
+            {
+                TilePos a = Air.FindNode(s.NodeA)!.Pos, b = Air.FindNode(s.NodeB)!.Pos;
+                if (a.X > b.X || (a.X == b.X && a.Y > b.Y)) (a, b) = (b, a);
+                parts.Add($"s{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId}");
+            }
+            foreach (DuctNode n in Air.Nodes)
+            {
+                if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
+                parts.Add($"n{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On}");
+            }
+            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed}");
+            parts.Sort(System.StringComparer.Ordinal);
+            return string.Join(";", parts);
         }
 
         /// <summary>A fresh state for a layout: anchor nodes at openings and outlets, initial equipment.</summary>

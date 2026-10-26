@@ -7,6 +7,10 @@ namespace HeadLoss.Core.Data.Defs
     {
         public string DisplayName = "";
         public string Version = "";
+        /// <summary>Currency symbol shown before money amounts.</summary>
+        public string CurrencySymbol = "";
+        /// <summary>Hand-made buildings offered before the city exists (Phase 2); a new game opens the first.</summary>
+        public List<string> StarterBuildings = new List<string>();
         public ThemeDef Theme = new ThemeDef();
     }
 
@@ -19,6 +23,8 @@ namespace HeadLoss.Core.Data.Defs
         public string Text = "";
         public string Warning = "";
         public string Danger = "";
+        /// <summary>Calm positive accent (outlets in overdelivery, online).</summary>
+        public string Good = "";
         /// <summary>Room fill tint strength (0–1).</summary>
         public double RoomFillAlpha;
         /// <summary>Room fill colour per room type (hex), drawn at <see cref="RoomFillAlpha"/>.</summary>

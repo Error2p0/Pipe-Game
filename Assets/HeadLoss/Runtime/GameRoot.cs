@@ -66,10 +66,9 @@ namespace HeadLoss.Unity
             var errors = DataValidator.Validate(data);
             foreach (string e in errors) Debug.LogError("Data: " + e);
 
-            var context = new GameContext(data);
+            var context = new GameContext(data, GameContext.NewGame(data));
             _loop = new GameLoop(context);
-            _session = BuildingSession.OpenHandmade(data, buildingId);
-            context.Building = _session;
+            _session = context.Open(buildingId);
             var palette = new ViewPalette(data);
             _heatmap = new HeatmapState(data.Balancing.Heatmap);
 

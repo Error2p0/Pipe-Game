@@ -15,6 +15,8 @@ namespace HeadLoss.Game.Buildings
         SelfCrossing,
         NodeFull,
         Duplicate,
+        /// <summary>An inline part must go on a straight duct, between fittings.</summary>
+        NotOnStraightDuct,
     }
 
     /// <summary>What occupies a tile of the duct layer.</summary>
@@ -53,6 +55,7 @@ namespace HeadLoss.Game.Buildings
             DrawError.SelfCrossing => "The run crosses itself",
             DrawError.NodeFull => "No more connections fit here",
             DrawError.Duplicate => "These points are already connected",
+            DrawError.NotOnStraightDuct => "Place it on a straight duct, between fittings",
             _ => e.ToString(),
         };
 
@@ -75,7 +78,12 @@ namespace HeadLoss.Game.Buildings
             return map;
         }
 
-        static int MaxDegree(DuctNode n, int maxFreeDegree) => n.Kind == DuctNodeKind.Free ? maxFreeDegree : 1;
+        static int MaxDegree(DuctNode n, int maxFreeDegree) => n.Kind switch
+        {
+            DuctNodeKind.Free => maxFreeDegree,
+            DuctNodeKind.Inline => 2,
+            _ => 1,
+        };
 
         /// <summary>Checks whether <paramref name="path"/> (tiles from start to end, inclusive) can be placed.</summary>
         public static DrawError Validate(DuctNetworkState net, BuildingLayout layout, IReadOnlyList<TilePos> path, int maxFreeDegree)
@@ -225,6 +233,8 @@ namespace HeadLoss.Game.Buildings
                 DuctSegment? s = net.FindSegment(id);
                 if (s == null) continue;
                 net.Segments.Remove(s);
+                DropBrokenInline(net, s.NodeA);
+                DropBrokenInline(net, s.NodeB);
                 RemoveIfOrphan(net, s.NodeA);
                 RemoveIfOrphan(net, s.NodeB);
                 any = true;
@@ -247,6 +257,98 @@ namespace HeadLoss.Game.Buildings
             }
             if (any) Normalize(net);
             return any;
+        }
+
+        /// <summary>An inline part that lost one of its two ducts is removed with it (the node becomes a plain end).</summary>
+        static void DropBrokenInline(DuctNetworkState net, int nodeId)
+        {
+            DuctNode? n = net.FindNode(nodeId);
+            if (n == null || n.Kind != DuctNodeKind.Inline || net.Degree(nodeId) >= 2) return;
+            ClearInline(n);
+        }
+
+        static void ClearInline(DuctNode n)
+        {
+            n.Kind = DuctNodeKind.Free;
+            n.PartId = "";
+            n.DirX = n.DirY = 0;
+            n.Opening = 1;
+            n.On = true;
+        }
+
+        /// <summary>Checks that an inline part can go on <paramref name="tile"/>: inside a straight duct, not on a fitting.</summary>
+        public static DrawError ValidateInline(DuctNetworkState net, TilePos tile)
+        {
+            Occupancy(net).TryGetValue(tile, out TileOccupant o);
+            return o.SegmentId != 0 ? DrawError.None : DrawError.NotOnStraightDuct;
+        }
+
+        /// <summary>
+        /// Direction for a new inline part on <paramref name="tile"/>: away from the nearest intake along the
+        /// duct (the way the air flows on a tree), or from the segment's first node when no intake is connected.
+        /// </summary>
+        public static (int dx, int dy) DefaultInlineDirection(DuctNetworkState net, TilePos tile)
+        {
+            Occupancy(net).TryGetValue(tile, out TileOccupant o);
+            DuctSegment? s = net.FindSegment(o.SegmentId);
+            if (s == null) return (1, 0);
+            Dictionary<int, int> dist = HopsFromIntake(net);
+            int da = dist.TryGetValue(s.NodeA, out int a) ? a : int.MaxValue;
+            int db = dist.TryGetValue(s.NodeB, out int b) ? b : int.MaxValue;
+            TilePos from = net.FindNode(s.NodeA)!.Pos, to = net.FindNode(s.NodeB)!.Pos;
+            if (db < da) (from, to) = (to, from);
+            return from.DirectionTo(to);
+        }
+
+        /// <summary>Hop distance of every node from the nearest intake node.</summary>
+        public static Dictionary<int, int> HopsFromIntake(DuctNetworkState net)
+        {
+            var dist = new Dictionary<int, int>();
+            var queue = new Queue<int>();
+            foreach (DuctNode n in net.Nodes)
+            {
+                if (n.Kind != DuctNodeKind.Intake) continue;
+                dist[n.Id] = 0;
+                queue.Enqueue(n.Id);
+            }
+            while (queue.Count > 0)
+            {
+                int u = queue.Dequeue();
+                foreach (DuctSegment s in net.Segments)
+                {
+                    if (s.NodeA != u && s.NodeB != u) continue;
+                    int v = s.Other(u);
+                    if (dist.ContainsKey(v)) continue;
+                    dist[v] = dist[u] + 1;
+                    queue.Enqueue(v);
+                }
+            }
+            return dist;
+        }
+
+        /// <summary>Places a validated inline part (damper or inline fan) by splitting the duct at <paramref name="tile"/>.</summary>
+        /// <returns>The new node id.</returns>
+        public static int PlaceInline(DuctNetworkState net, TilePos tile, string partId, int dirX, int dirY)
+        {
+            int id = NodeOrSplit(net, tile);
+            DuctNode n = net.FindNode(id)!;
+            n.Kind = DuctNodeKind.Inline;
+            n.PartId = partId;
+            n.DirX = dirX;
+            n.DirY = dirY;
+            n.Opening = 1;
+            n.On = true;
+            return id;
+        }
+
+        /// <summary>Removes an inline part; the duct joins up again.</summary>
+        public static bool RemoveInline(DuctNetworkState net, int nodeId)
+        {
+            DuctNode? n = net.FindNode(nodeId);
+            if (n == null || n.Kind != DuctNodeKind.Inline) return false;
+            ClearInline(n);
+            Normalize(net);
+            return true;
         }
 
         static void RemoveIfOrphan(DuctNetworkState net, int nodeId)

@@ -21,6 +21,8 @@ namespace HeadLoss.Core.Data.Defs
         public double WaveSpeed;
         public List<string> Fluids = new List<string>();
         public int Tier;
+        /// <summary>Price per metre factor on the duct or pipe base price.</summary>
+        public double PriceFactor;
     }
 
     /// <summary>Entry in <c>pipes.json</c>: one size family.</summary>

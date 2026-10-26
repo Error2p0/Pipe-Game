@@ -6,6 +6,7 @@
     "measured": "flow",
     "unit": "m3/h",
     "codeMaxReason": "Noise",
+    "payFactor": 1.0,
     "grille": "vent-grille",
     "grilleFaceAreaM2": 0.04,
     "tiers": {

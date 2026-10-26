@@ -28,6 +28,8 @@ namespace HeadLoss.Core.Data.Defs
         public double MinOpening;
         /// <summary>Filter pressure drop at rated flow, Pa (proportional to Q²).</summary>
         public double RatedPressureDropPa;
+        /// <summary>Price at the reference diameter, $ (× D/D_ref above it).</summary>
+        public double Price;
         public string Notes = "";
     }
 }

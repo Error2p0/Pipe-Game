@@ -25,7 +25,8 @@
     "floorHeight": 3.0,
     "floorLayerOffset": 0.3,
     "ceilingLayerOffset": 2.7,
-    "wallCavityLayerOffset": 1.5
+    "wallCavityLayerOffset": 1.5,
+    "budgetCapFactor": 1.6
   },
   "heatmap": {
     "velocityAnchorMaxAir": 6.0,
@@ -61,5 +62,53 @@
     "zoomMax": 25,
     "zoomStep": 1.12,
     "keyPanSpeed": 1.0
+  },
+  "economy": {
+    "overdeliveryCapRatio": 5,
+    "capMultiplier": 2.0,
+    "capMultiplierRisky": 2.5,
+    "offlineBurstFactor": 0.25,
+    "inGameBurstFactor": 0,
+    "electricityPricePerKWs": 60.0,
+    "incomeCycleSeconds": 60,
+    "refundFraction": 0.5,
+    "startingWallet": 30,
+    "tickHz": 10,
+    "basePay": [0.15, 0.9, 5, 30, 180],
+    "tierFactor": [1, 5, 25, 125, 625],
+    "electricityTierFactor": [1, 1, 3, 10, 30]
+  },
+  "crank": {
+    "speedPerClick": 0.12,
+    "decaySeconds": 4,
+    "holdClicksPerSecond": 5,
+    "resolveSpeedStep": 0.01
+  },
+  "prices": {
+    "ductBasePerMetre": 1.0,
+    "ductReferenceDiameterMm": 100,
+    "pipeBasePerMetre": 2.0,
+    "pipeReferenceDiameterMm": 22,
+    "diameterExponent": 1.3
+  },
+  "save": {
+    "autosaveSeconds": 30,
+    "backupCount": 3,
+    "gzipThresholdBytes": 1048576
+  },
+  "offline": {
+    "maxHours": 72
+  },
+  "audio": {
+    "masterVolume": 0.5,
+    "airflowGain": 0.12,
+    "airflowFullM3h": 600,
+    "airflowCutoffMinHz": 250,
+    "airflowCutoffMaxHz": 1800,
+    "humMinHz": 40,
+    "humMaxHz": 120,
+    "humGain": 0.05,
+    "clickGain": 0.12,
+    "limiterCeiling": 0.5
   }
 }

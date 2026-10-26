@@ -19,6 +19,7 @@ namespace HeadLoss.Core.Data
         static readonly HashSet<string> Facings = new HashSet<string> { "north", "south", "east", "west" };
         static readonly HashSet<string> LinePatterns = new HashSet<string> { "solid", "dashed", "dotted", "double" };
         static readonly HashSet<string> Measured = new HashSet<string> { "flow", "pressure", "heat" };
+        static readonly HashSet<string> OutletUnits = new HashSet<string> { "m3/h", "bar", "mbar", "W" };
 
         public static List<string> Validate(DataRepository data)
         {
@@ -65,6 +66,11 @@ namespace HeadLoss.Core.Data
             Colour("game.json theme.text", t.Text, errors);
             Colour("game.json theme.warning", t.Warning, errors);
             Colour("game.json theme.danger", t.Danger, errors);
+            Colour("game.json theme.good", t.Good, errors);
+            if (string.IsNullOrWhiteSpace(data.Game.CurrencySymbol)) errors.Add("game.json: currencySymbol is empty");
+            if (data.Game.StarterBuildings.Count == 0) errors.Add("game.json: starterBuildings is empty");
+            foreach (string id in data.Game.StarterBuildings)
+                if (data.FindHandmadeBuilding(id) == null) errors.Add($"game.json: starter building '{id}' unknown");
             foreach (var kv in t.RoomFills) Colour($"game.json theme.roomFills.{kv.Key}", kv.Value, errors);
             if (t.RoomFillAlpha < 0 || t.RoomFillAlpha > 1) errors.Add("game.json theme.roomFillAlpha outside 0–1");
         }
@@ -108,6 +114,60 @@ namespace HeadLoss.Core.Data
             Positive(f + " particles.spacingMetres", b.Particles.SpacingMetres, errors);
             if (b.Particles.MaxParticles < 1) errors.Add(f + " particles.maxParticles must be ≥ 1");
             if (!(b.Camera.ZoomMin > 0 && b.Camera.ZoomMax > b.Camera.ZoomMin)) errors.Add(f + " camera: need 0 < zoomMin < zoomMax");
+            Positive(f + " building.budgetCapFactor", b.Building.BudgetCapFactor, errors);
+
+            EconomyDef e = b.Economy;
+            Positive(f + " economy.overdeliveryCapRatio", e.OverdeliveryCapRatio, errors);
+            if (!(e.CapMultiplier >= 1)) errors.Add(f + " economy.capMultiplier must be ≥ 1");
+            if (!(e.CapMultiplierRisky >= e.CapMultiplier)) errors.Add(f + " economy.capMultiplierRisky must be ≥ capMultiplier");
+            Fraction(f + " economy.offlineBurstFactor", e.OfflineBurstFactor, errors);
+            Fraction(f + " economy.inGameBurstFactor", e.InGameBurstFactor, errors);
+            Fraction(f + " economy.refundFraction", e.RefundFraction, errors);
+            Positive(f + " economy.electricityPricePerKWs", e.ElectricityPricePerKWs, errors);
+            Positive(f + " economy.incomeCycleSeconds", e.IncomeCycleSeconds, errors);
+            Positive(f + " economy.tickHz", e.TickHz, errors);
+            if (e.StartingWallet < 0) errors.Add(f + " economy.startingWallet negative");
+            PerTier(f + " economy.basePay", e.BasePay, errors);
+            PerTier(f + " economy.tierFactor", e.TierFactor, errors);
+            PerTier(f + " economy.electricityTierFactor", e.ElectricityTierFactor, errors);
+
+            Fraction(f + " crank.speedPerClick", b.Crank.SpeedPerClick, errors);
+            Positive(f + " crank.decaySeconds", b.Crank.DecaySeconds, errors);
+            Positive(f + " crank.holdClicksPerSecond", b.Crank.HoldClicksPerSecond, errors);
+            Positive(f + " crank.resolveSpeedStep", b.Crank.ResolveSpeedStep, errors);
+
+            Positive(f + " prices.ductBasePerMetre", b.Prices.DuctBasePerMetre, errors);
+            Positive(f + " prices.ductReferenceDiameterMm", b.Prices.DuctReferenceDiameterMm, errors);
+            Positive(f + " prices.pipeBasePerMetre", b.Prices.PipeBasePerMetre, errors);
+            Positive(f + " prices.pipeReferenceDiameterMm", b.Prices.PipeReferenceDiameterMm, errors);
+            Positive(f + " prices.diameterExponent", b.Prices.DiameterExponent, errors);
+
+            Positive(f + " save.autosaveSeconds", b.Save.AutosaveSeconds, errors);
+            if (b.Save.BackupCount < 0) errors.Add(f + " save.backupCount negative");
+            Positive(f + " save.gzipThresholdBytes", b.Save.GzipThresholdBytes, errors);
+            Positive(f + " offline.maxHours", b.Offline.MaxHours, errors);
+
+            AudioDef a = b.Audio;
+            Fraction(f + " audio.masterVolume", a.MasterVolume, errors);
+            Fraction(f + " audio.airflowGain", a.AirflowGain, errors);
+            Fraction(f + " audio.humGain", a.HumGain, errors);
+            Fraction(f + " audio.clickGain", a.ClickGain, errors);
+            Fraction(f + " audio.limiterCeiling", a.LimiterCeiling, errors);
+            Positive(f + " audio.airflowFullM3h", a.AirflowFullM3h, errors);
+            if (!(a.AirflowCutoffMinHz > 0 && a.AirflowCutoffMaxHz > a.AirflowCutoffMinHz)) errors.Add(f + " audio: need 0 < airflowCutoffMinHz < airflowCutoffMaxHz");
+            if (!(a.HumMinHz > 0 && a.HumMaxHz > a.HumMinHz)) errors.Add(f + " audio: need 0 < humMinHz < humMaxHz");
+        }
+
+        static void Fraction(string where, double value, List<string> errors)
+        {
+            if (!(value >= 0 && value <= 1)) errors.Add($"{where} must be in [0, 1] (is {value})");
+        }
+
+        static void PerTier(string where, List<double> values, List<string> errors)
+        {
+            if (values.Count != 5) { errors.Add($"{where} needs 5 values (tiers 1–5), has {values.Count}"); return; }
+            foreach (double v in values)
+                if (!(v > 0)) { errors.Add($"{where} values must be > 0"); return; }
         }
 
         static void ValidateFluids(DataRepository data, List<string> errors)
@@ -169,6 +229,7 @@ namespace HeadLoss.Core.Data
                 if (m.RoughnessMm < 0) errors.Add($"{w}: roughnessMm negative");
                 Positive(w + " ratedPressurePa", m.RatedPressurePa, errors);
                 Positive(w + " uUninsulated", m.UUninsulated, errors);
+                Positive(w + " priceFactor", m.PriceFactor, errors);
                 Tier(w, m.Tier, errors);
                 foreach (string fl in m.Fluids)
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
@@ -199,6 +260,7 @@ namespace HeadLoss.Core.Data
                 string w = $"fittings.json '{ft.Id}'";
                 Id("fittings.json", ft.Id, errors);
                 Tier(w, ft.Tier, errors);
+                if (ft.Price < 0) errors.Add($"{w}: price negative");
                 if (!FittingModels.Contains(ft.Model)) { errors.Add($"{w}: model '{ft.Model}' unknown"); continue; }
                 switch (ft.Model)
                 {
@@ -238,6 +300,7 @@ namespace HeadLoss.Core.Data
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
                 Positive(w + " connectionDiameterMm", e.ConnectionDiameterMm, errors);
                 Positive(w + " reverseK", e.ReverseK, errors);
+                if (e.Price < 0) errors.Add($"{w}: price negative");
                 ValidateCurve(w, e, errors);
             }
         }
@@ -266,6 +329,8 @@ namespace HeadLoss.Core.Data
                 Id("outlets.json", o.Id, errors);
                 if (data.FindFluid(o.Fluid) == null) errors.Add($"{w}: fluid '{o.Fluid}' unknown");
                 if (!Measured.Contains(o.Measured)) errors.Add($"{w}: measured '{o.Measured}' unknown");
+                if (!OutletUnits.Contains(o.Unit)) errors.Add($"{w}: unit '{o.Unit}' unknown");
+                Positive(w + " payFactor", o.PayFactor, errors);
                 if (!string.IsNullOrEmpty(o.Grille))
                 {
                     if (data.FindFitting(o.Grille) == null) errors.Add($"{w}: grille '{o.Grille}' unknown");
@@ -322,11 +387,63 @@ namespace HeadLoss.Core.Data
                     if (data.FindOutlet(o.Type) == null) errors.Add($"{w}: outlet '{o.Id}' type '{o.Type}' unknown");
                     if (o.X < 0 || o.Y < 0 || o.X >= b.Width || o.Y >= b.Height) errors.Add($"{w}: outlet '{o.Id}' outside the footprint");
                 }
-                foreach (EquipmentPlacementDef e in b.Equipment)
-                {
-                    if (data.FindEquipment(e.EquipmentId) == null) errors.Add($"{w}: equipment '{e.EquipmentId}' unknown");
-                    if (!openingIds.Contains(e.OpeningId)) errors.Add($"{w}: equipment '{e.EquipmentId}' opening '{e.OpeningId}' unknown");
-                }
+                foreach (EquipmentPlacementDef e in b.Equipment) Placement(w, e, data, openingIds, errors);
+                ValidateDoors(w, b, errors);
+                ValidateReference(w, b, data, openingIds, errors);
+            }
+        }
+
+        static void Placement(string w, EquipmentPlacementDef e, DataRepository data, HashSet<string> openingIds, List<string> errors)
+        {
+            EquipmentDef? def = data.FindEquipment(e.EquipmentId);
+            if (def == null) errors.Add($"{w}: equipment '{e.EquipmentId}' unknown");
+            else if (def.Placement != "intake") errors.Add($"{w}: equipment '{e.EquipmentId}' does not go at an opening");
+            if (!openingIds.Contains(e.OpeningId)) errors.Add($"{w}: equipment '{e.EquipmentId}' opening '{e.OpeningId}' unknown");
+        }
+
+        static int RoomAt(HandmadeBuildingDef b, int x, int y)
+        {
+            for (int i = 0; i < b.Rooms.Count; i++)
+            {
+                RoomDef r = b.Rooms[i];
+                if (x >= r.X && y >= r.Y && x < r.X + r.Width && y < r.Y + r.Height) return i;
+            }
+            return -1;
+        }
+
+        static void ValidateDoors(string w, HandmadeBuildingDef b, List<string> errors)
+        {
+            foreach (DoorDef d in b.Doors)
+            {
+                string where = $"{w}: door at ({d.X}, {d.Y}) {d.Side}";
+                if (!Facings.Contains(d.Side)) { errors.Add($"{where}: side unknown"); continue; }
+                int nx = d.X + (d.Side == "east" ? 1 : d.Side == "west" ? -1 : 0);
+                int ny = d.Y + (d.Side == "north" ? 1 : d.Side == "south" ? -1 : 0);
+                int ra = RoomAt(b, d.X, d.Y), rb = RoomAt(b, nx, ny);
+                if (ra < 0 || rb < 0) errors.Add($"{where}: not between two rooms");
+                else if (ra == rb) errors.Add($"{where}: both sides are the same room");
+            }
+        }
+
+        static void ValidateReference(string w, HandmadeBuildingDef b, DataRepository data, HashSet<string> openingIds, List<string> errors)
+        {
+            ReferenceLayoutDef r = b.Reference;
+            if (r.Equipment.Count == 0) errors.Add($"{w}: reference has no equipment");
+            foreach (EquipmentPlacementDef e in r.Equipment) Placement(w + " reference", e, data, openingIds, errors);
+            if (r.CrankSpeed < 0 || r.CrankSpeed > 1) errors.Add($"{w}: reference crankSpeed outside 0–1");
+            if (r.Runs.Count == 0) errors.Add($"{w}: reference has no runs");
+            foreach (ReferenceRunDef run in r.Runs)
+            {
+                if (run.Points.Count < 2) { errors.Add($"{w}: reference run needs ≥ 2 points"); continue; }
+                foreach (List<int> pt in run.Points)
+                    if (pt.Count != 2) errors.Add($"{w}: reference point must be [x, y]");
+                string mat = string.IsNullOrEmpty(run.MaterialId) ? data.Balancing.Drawing.DefaultMaterial : run.MaterialId;
+                MaterialDef? m = data.FindMaterial(mat);
+                if (m == null) { errors.Add($"{w}: reference material '{mat}' unknown"); continue; }
+                bool sized = false;
+                foreach (PipeFamilyDef fam in data.PipeFamilies)
+                    if (fam.Kind == m.Kind && fam.Sizes.Exists(s => s.DiameterMm == run.DiameterMm)) sized = true;
+                if (!sized) errors.Add($"{w}: reference size {run.DiameterMm} mm is not a {m.Kind} size");
             }
         }
     }

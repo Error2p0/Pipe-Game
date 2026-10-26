@@ -13,6 +13,8 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Display unit of min / ideal / max (m3/h, bar, mbar, W).</summary>
         public string Unit = "";
         public string CodeMaxReason = "";
+        /// <summary>Pay factor × the tier's base pay (<c>13-balancing.md</c>).</summary>
+        public double PayFactor;
         /// <summary>Grille fitting id (vent outlets).</summary>
         public string Grille = "";
         /// <summary>Grille face area, m² (the grille K is referenced to it).</summary>
