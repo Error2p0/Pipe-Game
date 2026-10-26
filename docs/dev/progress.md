@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **2 · First playable building**: built, waiting for the gate playtest (`docs/spec/14-roadmap.md`).
+Current phase: **3 · Idle city** (not started; waiting for the go-ahead) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -36,4 +36,20 @@ Task list from `14-roadmap.md` §Phase 2:
 - [x] 12. Balancing report editor window (`Head Loss/Balancing Report`; hand-made buildings until the Phase 3 generator).
 - [x] Carry-over: D18, small axial fan overdelivers against tier 1 vent limits (D22).
 - [x] Phase end: all tests green, Windows build in `Builds/phase-2/`, `docs/dev/phase-2-report.md`.
-- [ ] Gate playtest by the user.
+- [x] Gate playtest by the user: **passed 2026-10-26**.
+
+## Phase 3 · Idle city
+
+Not started. Task list from `14-roadmap.md` §Phase 3:
+
+- [ ] 1. City generation (districts, roads, rail, parks, protected and historic sites, facilities, plots, starter guarantee). Seeds and tests.
+- [ ] 2. City view rendering, plot hover difficulty hint, open building, online glow / offline grey.
+- [ ] 3. Procedural building generation for tier 1–2 single-floor buildings, air only: footprint, rooms, doors, walls, outlets by room type, air intake, occupants, heat loads.
+- [ ] 4. Auto-router + solvability check; reference layout; budget cap from it.
+- [ ] 5. Room grid CPU reference (velocity field, advection, diffusion, temperature, CO₂), Burst version, comparison test. Room heatmaps for velocity, temperature, density.
+- [ ] 6. Thermal model along ducts; outside temperature (climate), solar gain, occupants.
+- [ ] 7. Tech unlocks (tier 1 → 2), upgrade shop with compare view. Centrifugal blower, EC fan, VSD (speed slider applies without Commit, D25), duct sizes, galvanized vs flex vs spiral, duct sealing, insulation.
+- [ ] 8. Offline earnings: catch-up algorithm, "While you were away" report, offline cap (offline time is already measured, D39).
+- [ ] 9. Steamworks.NET integration (app id 480 placeholder until the user provides one), Steam Cloud for saves, playtest build.
+- [ ] 10. Settings screen (audio, palette, UI scale, theme, reduce motion, keys).
+- [ ] Carry-over: the building list (D34) gives way to the city view; tune tier 2+ prices and base pay with the balancing report on generated buildings (D23, D36); retire the hand-made reference layouts as the auto-router takes over (D28).

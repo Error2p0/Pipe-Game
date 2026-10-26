@@ -1,6 +1,6 @@
 # Phase 2 report · First playable building
 
-Status: **built, waiting for your gate playtest.** Branches `phase-2/economy` and `phase-2/gate-fixes`, merged to `main`.
+Status: **gate passed (2026-10-26).** Branches `phase-2/economy` and `phase-2/gate-fixes`, merged to `main`.
 
 ## Changes after your review
 
