@@ -1,0 +1,491 @@
+{
+  "saveVersion": 1,
+  "generatorVersion": 1,
+  "dataVersion": "53297d8d9425de9b",
+  "savedAtUtc": "2026-10-26T12:00:00.0000000Z",
+  "playTimeSeconds": 600.0,
+  "gameState": {
+    "wallet": 5.471110750099136,
+    "debt": 0.0,
+    "lifetimeIncome": 0.0,
+    "playTimeSeconds": 600.0,
+    "currentBuildingId": "test-house",
+    "buildings": [
+      {
+        "buildingId": "test-house",
+        "committed": {
+          "buildingId": "test-house",
+          "air": {
+            "fluidId": "air",
+            "nodes": [
+              {
+                "id": 1,
+                "x": 0,
+                "y": 3,
+                "kind": 1,
+                "anchorId": "air-intake",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 2,
+                "x": 3,
+                "y": 5,
+                "kind": 2,
+                "anchorId": "vent-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 3,
+                "x": 8,
+                "y": 5,
+                "kind": 2,
+                "anchorId": "vent-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 4,
+                "x": 7,
+                "y": 1,
+                "kind": 2,
+                "anchorId": "vent-3",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 5,
+                "x": 5,
+                "y": 3,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 6,
+                "x": 5,
+                "y": 5,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 7,
+                "x": 2,
+                "y": 3,
+                "kind": 3,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "damper",
+                "dirX": 1,
+                "dirY": 0,
+                "opening": 0.5,
+                "on": true
+              }
+            ],
+            "segments": [
+              {
+                "id": 2,
+                "nodeA": 5,
+                "nodeB": 6,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              },
+              {
+                "id": 3,
+                "nodeA": 6,
+                "nodeB": 2,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              },
+              {
+                "id": 4,
+                "nodeA": 1,
+                "nodeB": 7,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              },
+              {
+                "id": 5,
+                "nodeA": 7,
+                "nodeB": 5,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              }
+            ],
+            "nextNodeId": 8,
+            "nextSegmentId": 6
+          },
+          "equipment": [
+            {
+              "equipmentId": "hand-crank-fan",
+              "openingId": "air-intake",
+              "on": true,
+              "speed": 1.0
+            }
+          ]
+        },
+        "design": {
+          "buildingId": "test-house",
+          "air": {
+            "fluidId": "air",
+            "nodes": [
+              {
+                "id": 1,
+                "x": 0,
+                "y": 3,
+                "kind": 1,
+                "anchorId": "air-intake",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 2,
+                "x": 3,
+                "y": 5,
+                "kind": 2,
+                "anchorId": "vent-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 3,
+                "x": 8,
+                "y": 5,
+                "kind": 2,
+                "anchorId": "vent-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 4,
+                "x": 7,
+                "y": 1,
+                "kind": 2,
+                "anchorId": "vent-3",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 5,
+                "x": 5,
+                "y": 3,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 6,
+                "x": 5,
+                "y": 5,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 7,
+                "x": 2,
+                "y": 3,
+                "kind": 3,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "damper",
+                "dirX": 1,
+                "dirY": 0,
+                "opening": 0.5,
+                "on": true
+              }
+            ],
+            "segments": [
+              {
+                "id": 2,
+                "nodeA": 5,
+                "nodeB": 6,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              },
+              {
+                "id": 3,
+                "nodeA": 6,
+                "nodeB": 2,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              },
+              {
+                "id": 4,
+                "nodeA": 1,
+                "nodeB": 7,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              },
+              {
+                "id": 5,
+                "nodeA": 7,
+                "nodeB": 5,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct"
+              }
+            ],
+            "nextNodeId": 8,
+            "nextSegmentId": 6
+          },
+          "equipment": [
+            {
+              "equipmentId": "small-axial-fan",
+              "openingId": "air-intake",
+              "on": true,
+              "speed": 1.0
+            }
+          ]
+        },
+        "spentTotal": 24.528889249900864,
+        "everOnline": false,
+        "sheetSeen": false,
+        "lifetimeIncome": 0.0
+      },
+      {
+        "buildingId": "small-house",
+        "committed": {
+          "buildingId": "small-house",
+          "air": {
+            "fluidId": "air",
+            "nodes": [
+              {
+                "id": 1,
+                "x": 3,
+                "y": 0,
+                "kind": 1,
+                "anchorId": "air-intake",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 2,
+                "x": 1,
+                "y": 1,
+                "kind": 2,
+                "anchorId": "living-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 3,
+                "x": 4,
+                "y": 2,
+                "kind": 2,
+                "anchorId": "living-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 4,
+                "x": 8,
+                "y": 2,
+                "kind": 2,
+                "anchorId": "kitchen",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 5,
+                "x": 2,
+                "y": 6,
+                "kind": 2,
+                "anchorId": "bedroom-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 6,
+                "x": 7,
+                "y": 6,
+                "kind": 2,
+                "anchorId": "bedroom-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              }
+            ],
+            "segments": [],
+            "nextNodeId": 7,
+            "nextSegmentId": 1
+          },
+          "equipment": []
+        },
+        "design": {
+          "buildingId": "small-house",
+          "air": {
+            "fluidId": "air",
+            "nodes": [
+              {
+                "id": 1,
+                "x": 3,
+                "y": 0,
+                "kind": 1,
+                "anchorId": "air-intake",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 2,
+                "x": 1,
+                "y": 1,
+                "kind": 2,
+                "anchorId": "living-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 3,
+                "x": 4,
+                "y": 2,
+                "kind": 2,
+                "anchorId": "living-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 4,
+                "x": 8,
+                "y": 2,
+                "kind": 2,
+                "anchorId": "kitchen",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 5,
+                "x": 2,
+                "y": 6,
+                "kind": 2,
+                "anchorId": "bedroom-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              },
+              {
+                "id": 6,
+                "x": 7,
+                "y": 6,
+                "kind": 2,
+                "anchorId": "bedroom-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true
+              }
+            ],
+            "segments": [],
+            "nextNodeId": 7,
+            "nextSegmentId": 1
+          },
+          "equipment": []
+        },
+        "spentTotal": 0.0,
+        "everOnline": false,
+        "sheetSeen": false,
+        "lifetimeIncome": 0.0
+      }
+    ],
+    "settings": {
+      "masterVolume": -1.0
+    }
+  }
+}

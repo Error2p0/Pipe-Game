@@ -32,6 +32,9 @@ namespace HeadLoss.Core.Data
         /// <summary>Fluid tables by fluid id.</summary>
         public IReadOnlyDictionary<string, FluidTableDef> FluidTables => _fluidTables;
 
+        /// <summary>Hash of every data file (paths and text, line endings normalised); saved as <c>dataVersion</c>.</summary>
+        public string Version { get; private set; } = "";
+
         /// <summary>Problems found while loading (duplicate ids). The validator reports them too.</summary>
         public IReadOnlyList<string> LoadIssues => _loadIssues;
 
@@ -67,6 +70,7 @@ namespace HeadLoss.Core.Data
         public static DataRepository Load(IDataSource source)
         {
             var repo = new DataRepository();
+            repo.Version = HashAll(source);
             repo.Game = Parse<GameDef>(source, "game.json");
             repo.Balancing = Parse<BalancingDef>(source, "balancing.json");
             AddAll(repo, Parse<List<FluidDef>>(source, "fluids.json"), repo._fluids, repo._fluidById, f => f.Id, "fluids.json");
@@ -95,6 +99,27 @@ namespace HeadLoss.Core.Data
             }
             AddAll(repo, handmade, repo._handmade, repo._handmadeById, b => b.Id, HandmadeFolder);
             return repo;
+        }
+
+        /// <summary>FNV-1a 64 over every file path and its text (CRLF → LF), as 16 hex digits.</summary>
+        static string HashAll(IDataSource source)
+        {
+            ulong h = 14695981039346656037UL;
+            void Mix(string s)
+            {
+                foreach (char c in s)
+                {
+                    if (c == '\r') continue;
+                    h = (h ^ c) * 1099511628211UL;
+                }
+                h = (h ^ 0xFFFF) * 1099511628211UL;
+            }
+            foreach (string path in source.ListFiles())
+            {
+                Mix(path);
+                Mix(source.ReadText(path) ?? "");
+            }
+            return h.ToString("x16");
         }
 
         static void AddAll<T>(DataRepository repo, List<T> items, List<T> list, Dictionary<string, T> byId, Func<T, string> id, string file)
