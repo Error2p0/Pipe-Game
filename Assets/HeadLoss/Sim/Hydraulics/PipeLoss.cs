@@ -55,8 +55,7 @@ namespace HeadLoss.Sim.Hydraulics
             }
             else
             {
-                double f = friction.Factor(r.Reynolds, roughness / hydraulicDiameter);
-                double reDf = friction.ReTimesDerivative(r.Reynolds, roughness / hydraulicDiameter);
+                double f = friction.FactorAndDerivative(r.Reynolds, roughness / hydraulicDiameter, out double reDf);
                 r.FrictionFactor = f;
                 r.FrictionDp = f * lOverD * c * flow * absQ;
                 r.Derivative = c * absQ * lOverD * (2.0 * f + reDf);

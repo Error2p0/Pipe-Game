@@ -31,6 +31,24 @@ namespace HeadLoss.Sim.Hydraulics
             return f0 + (reynolds - LaminarRe) / (TurbulentRe - LaminarRe) * (f1 - f0);
         }
 
+        static readonly double Ln10 = Math.Log(10.0);
+
+        /// <summary>Friction factor and Re · df/dRe in one evaluation (one power and one logarithm).</summary>
+        public double FactorAndDerivative(double reynolds, double relativeRoughness, out double reTimesDerivative)
+        {
+            if (reynolds >= TurbulentRe)
+            {
+                double t = 5.74 * Math.Pow(reynolds, -0.9);
+                double u = relativeRoughness / 3.7 + t;
+                double lg = Math.Log10(u);
+                double f = 0.25 / (lg * lg);
+                reTimesDerivative = -2.0 * f / lg * (-0.9 * t) / (u * Ln10);
+                return f;
+            }
+            reTimesDerivative = ReTimesDerivative(reynolds, relativeRoughness);
+            return Factor(reynolds, relativeRoughness);
+        }
+
         /// <summary>Re · df/dRe (used for the exact Newton derivative of Δp).</summary>
         public double ReTimesDerivative(double reynolds, double relativeRoughness)
         {
@@ -42,7 +60,7 @@ namespace HeadLoss.Sim.Hydraulics
                 double lg = Math.Log10(u);
                 double f = 0.25 / (lg * lg);
                 // f = 0.25 lg^-2, dlg/dRe = (1/(u ln10)) · (−0.9 t / Re)
-                return -2.0 * f / lg * (-0.9 * t) / (u * Math.Log(10.0));
+                return -2.0 * f / lg * (-0.9 * t) / (u * Ln10);
             }
             double f0 = 64.0 / LaminarRe;
             double f1 = SwameeJain(TurbulentRe, relativeRoughness);

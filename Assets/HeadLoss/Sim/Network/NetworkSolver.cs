@@ -15,10 +15,17 @@ namespace HeadLoss.Sim.Network
         readonly SolverSettings _s;
         readonly ISparseSolver _linear;
 
+        // Structure cache: reused while the topology and the set of active links stay the same
+        // (drift re-solves, equipment setting changes), so the ordering/symbolic analysis runs once.
+        long _cacheKey;
+        SparseMatrix? _matrix;
+        int[] _unknown = Array.Empty<int>();
+        int[] _posII = Array.Empty<int>(), _posJJ = Array.Empty<int>(), _posIJ = Array.Empty<int>(), _posJI = Array.Empty<int>();
+
         public NetworkSolver(SolverSettings settings, ISparseSolver? linearSolver = null)
         {
             _s = settings;
-            _linear = linearSolver ?? new PcgSolver(settings.PcgTolerance, settings.PcgMaxIterations);
+            _linear = linearSolver ?? new SparseCholeskySolver();
         }
 
         /// <summary>Solves the graph.</summary>
@@ -51,50 +58,33 @@ namespace HeadLoss.Sim.Network
 
             MarkActive(graph, res);
 
-            // Unknown-pressure node numbering.
-            var unknown = new int[nodeCount];
-            int n = 0;
+            // Unknown-pressure node numbering and matrix structure (cached per topology + active set).
+            long key = res.TopologyKey;
+            unchecked
+            {
+                for (int k = 0; k < linkCount; k++) key = (key ^ (res.LinkActive[k] ? k + 1 : -(k + 1))) * 1099511628211L;
+            }
+            if (_matrix == null || key != _cacheKey || _unknown.Length != nodeCount) BuildStructure(graph, res, key);
+            int[] unknown = _unknown;
+            SparseMatrix a = _matrix!;
+            int n = a.N;
+            int[] posII = _posII, posJJ = _posJJ, posIJ = _posIJ, posJI = _posJI;
             for (int i = 0; i < nodeCount; i++)
             {
                 NetworkNode node = graph.Nodes[i];
-                unknown[i] = res.NodeActive[i] && node.Kind != NodeKind.FixedPressure ? n++ : -1;
                 res.NodePressure[i] = node.Kind == NodeKind.FixedPressure ? node.FixedPressure : 0;
-            }
-
-            // Matrix structure and per-link matrix positions.
-            var pairs = new List<(int, int)>();
-            for (int k = 0; k < linkCount; k++)
-            {
-                if (!res.LinkActive[k]) continue;
-                int ui = unknown[graph.Links[k].From], uj = unknown[graph.Links[k].To];
-                if (ui >= 0 && uj >= 0 && ui != uj) pairs.Add((ui, uj));
-            }
-            var a = new SparseMatrix(n, pairs);
-            var posII = new int[linkCount];
-            var posJJ = new int[linkCount];
-            var posIJ = new int[linkCount];
-            var posJI = new int[linkCount];
-            for (int k = 0; k < linkCount; k++)
-            {
-                posII[k] = posJJ[k] = posIJ[k] = posJI[k] = -1;
-                if (!res.LinkActive[k]) continue;
-                int ui = unknown[graph.Links[k].From], uj = unknown[graph.Links[k].To];
-                if (ui >= 0) posII[k] = a.Diagonal[ui];
-                if (uj >= 0) posJJ[k] = a.Diagonal[uj];
-                if (ui >= 0 && uj >= 0 && ui != uj)
-                {
-                    posIJ[k] = a.IndexOf(ui, uj);
-                    posJI[k] = a.IndexOf(uj, ui);
-                }
             }
 
             double[] q = res.Flow;
             double[] rho = res.Density;
+            // Viscosity depends on temperature (pressure effect negligible in the game's range): once per solve.
+            var mu = new double[linkCount];
             bool warm = initialFlows != null && initialFlows.Length == linkCount;
             for (int k = 0; k < linkCount; k++)
             {
                 NetworkLink l = graph.Links[k];
                 rho[k] = fluid.Density(_s.AtmosphericPressure, l.Temperature);
+                mu[k] = fluid.Viscosity(_s.AtmosphericPressure, l.Temperature);
                 if (!res.LinkActive[k]) continue;
                 q[k] = warm ? initialFlows![k] : _s.InitialVelocity * l.Area;
             }
@@ -118,8 +108,7 @@ namespace HeadLoss.Sim.Network
                 for (int k = 0; k < linkCount; k++)
                 {
                     if (!res.LinkActive[k]) continue;
-                    double mu = fluid.Viscosity(MeanAbsPressure(graph, res, k), graph.Links[k].Temperature);
-                    dp[k] = Evaluate(graph, k, q[k], rho[k], mu, out gk[k], out _);
+                    dp[k] = Evaluate(graph, k, q[k], rho[k], mu[k], out gk[k], out _);
                     if (iter == 1) scale = Math.Max(scale, Math.Abs(gk[k]));
                 }
                 if (iter == 1) gMin = _s.GMinFactor * (scale > 0 ? scale : 1.0);
@@ -199,8 +188,44 @@ namespace HeadLoss.Sim.Network
             }
 
             res.Unstable = !res.Converged;
-            FillResults(graph, fluid, res);
+            FillResults(graph, fluid, res, mu);
             return res;
+        }
+
+        void BuildStructure(NetworkGraph graph, SolveResult res, long key)
+        {
+            int nodeCount = graph.Nodes.Count;
+            int linkCount = graph.Links.Count;
+            _cacheKey = key;
+            _unknown = new int[nodeCount];
+            int n = 0;
+            for (int i = 0; i < nodeCount; i++)
+                _unknown[i] = res.NodeActive[i] && graph.Nodes[i].Kind != NodeKind.FixedPressure ? n++ : -1;
+            var pairs = new List<(int, int)>();
+            for (int k = 0; k < linkCount; k++)
+            {
+                if (!res.LinkActive[k]) continue;
+                int ui = _unknown[graph.Links[k].From], uj = _unknown[graph.Links[k].To];
+                if (ui >= 0 && uj >= 0 && ui != uj) pairs.Add((ui, uj));
+            }
+            _matrix = new SparseMatrix(n, pairs);
+            _posII = new int[linkCount];
+            _posJJ = new int[linkCount];
+            _posIJ = new int[linkCount];
+            _posJI = new int[linkCount];
+            for (int k = 0; k < linkCount; k++)
+            {
+                _posII[k] = _posJJ[k] = _posIJ[k] = _posJI[k] = -1;
+                if (!res.LinkActive[k]) continue;
+                int ui = _unknown[graph.Links[k].From], uj = _unknown[graph.Links[k].To];
+                if (ui >= 0) _posII[k] = _matrix.Diagonal[ui];
+                if (uj >= 0) _posJJ[k] = _matrix.Diagonal[uj];
+                if (ui >= 0 && uj >= 0 && ui != uj)
+                {
+                    _posIJ[k] = _matrix.IndexOf(ui, uj);
+                    _posJI[k] = _matrix.IndexOf(uj, ui);
+                }
+            }
         }
 
         /// <summary>Marks nodes reachable from a fixed-pressure node through open links, and the links between them.</summary>
@@ -322,7 +347,7 @@ namespace HeadLoss.Sim.Network
             }
         }
 
-        void FillResults(NetworkGraph graph, IFluidProperties fluid, SolveResult res)
+        void FillResults(NetworkGraph graph, IFluidProperties fluid, SolveResult res, double[] viscosity)
         {
             for (int k = 0; k < graph.Links.Count; k++)
             {
@@ -334,7 +359,7 @@ namespace HeadLoss.Sim.Network
                 }
                 double q = res.Flow[k];
                 double rho = res.Density[k];
-                double mu = fluid.Viscosity(MeanAbsPressure(graph, res, k), l.Temperature);
+                double mu = viscosity[k];
                 Evaluate(graph, k, q, rho, mu, out _, out PipeLossResult loss);
                 res.DpElevation[k] = rho * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
                 res.MassFlow[k] = rho * q;

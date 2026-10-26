@@ -1,0 +1,134 @@
+/* Head Loss UI. Layout only; colours come from game.json (applied in code). Reference resolution 1920×1080. */
+
+.hl-root {
+    position: absolute;
+    left: 0; top: 0; right: 0; bottom: 0;
+    font-size: 17px;
+}
+
+.hl-panel {
+    border-radius: 8px;
+    padding: 12px 14px;
+    border-width: 1px;
+}
+
+.hl-title {
+    font-size: 22px;
+    -unity-font-style: bold;
+}
+
+.hl-subtitle {
+    font-size: 15px;
+    opacity: 0.75;
+    margin-top: 2px;
+}
+
+.hl-section {
+    font-size: 14px;
+    -unity-font-style: bold;
+    margin-top: 12px;
+    margin-bottom: 4px;
+    opacity: 0.7;
+}
+
+.hl-button {
+    min-height: 44px;
+    min-width: 44px;
+    margin: 2px;
+    padding: 0 12px;
+    border-radius: 6px;
+    border-width: 1px;
+    font-size: 16px;
+    -unity-text-align: middle-center;
+}
+
+.hl-button--active {
+    -unity-font-style: bold;
+}
+
+.hl-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.hl-dropdown {
+    min-height: 44px;
+    margin: 2px;
+    font-size: 16px;
+}
+
+.hl-toolbox {
+    position: absolute;
+    left: 16px; top: 108px;
+    width: 280px;
+}
+
+.hl-titlecard {
+    position: absolute;
+    left: 16px; top: 16px;
+    min-width: 280px;
+}
+
+.hl-heatmaps {
+    position: absolute;
+    right: 16px; top: 16px;
+    flex-direction: row;
+}
+
+.hl-legend {
+    position: absolute;
+    right: 16px; bottom: 16px;
+    width: 340px;
+}
+
+.hl-legend-bar {
+    height: 18px;
+    margin-top: 8px;
+    border-radius: 3px;
+}
+
+.hl-legend-ticks {
+    flex-direction: row;
+    justify-content: space-between;
+    font-size: 14px;
+    margin-top: 2px;
+}
+
+.hl-readout {
+    position: absolute;
+    right: 16px; top: 92px;
+    width: 340px;
+}
+
+.hl-readout-line {
+    font-size: 16px;
+    margin-top: 3px;
+    white-space: normal;
+}
+
+.hl-hint {
+    position: absolute;
+    bottom: 22px;
+    left: 30%; right: 30%;
+    -unity-text-align: middle-center;
+    font-size: 17px;
+}
+
+.hl-world-label {
+    position: absolute;
+    font-size: 14px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    -unity-text-align: middle-center;
+}
+
+.hl-debug {
+    position: absolute;
+    left: 320px; top: 16px; right: 380px; bottom: 120px;
+    font-size: 13px;
+}
+
+.hl-debug-text {
+    white-space: nowrap;
+    font-size: 13px;
+}

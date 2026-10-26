@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c6621e42aded33649bb02487eaa0ce18, type: 3}
+  m_Name: _Catalog
+  m_EditorClassIdentifier: HeadLoss.Unity::HeadLoss.Unity.Data.DataCatalog
+  entries:
+  - path: balancing.json
+    text: {fileID: 4900000, guid: 5bb634cf80527f249ad0404d8206207b, type: 3}
+  - path: equipment.json
+    text: {fileID: 4900000, guid: 85df87ba1bdcff841adca549b71a7f30, type: 3}
+  - path: fittings.json
+    text: {fileID: 4900000, guid: 408c62bd3457e2d47bcd8cd0f7b2c05e, type: 3}
+  - path: fluids.json
+    text: {fileID: 4900000, guid: 96613ec3102f0bd449a830ed30fda1dc, type: 3}
+  - path: fluids/air.json
+    text: {fileID: 4900000, guid: 3d1e239d2b7298045b7ea58121a3cabe, type: 3}
+  - path: game.json
+    text: {fileID: 4900000, guid: d0eb796547780f446b26ca55a2a0c09f, type: 3}
+  - path: handmade/test-house.json
+    text: {fileID: 4900000, guid: 24e6fead3f9622f4ea7b71e17edcf271, type: 3}
+  - path: materials.json
+    text: {fileID: 4900000, guid: a42f9ff564640e1448f712dd3826effe, type: 3}
+  - path: outlets.json
+    text: {fileID: 4900000, guid: 6daba69bffbc8dc448a9afa7be2c0da2, type: 3}
+  - path: pipes.json
+    text: {fileID: 4900000, guid: 7f657b449e247334c8f2903928b4ebc2, type: 3}

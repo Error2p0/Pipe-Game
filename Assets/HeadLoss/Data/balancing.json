@@ -53,7 +53,8 @@
     "maxSpeed": 3.0,
     "minVisibleVelocity": 0.05,
     "size": 0.06,
-    "maxParticles": 4000
+    "maxParticles": 4000,
+    "fanSpinDegreesPerM3h": 0.8
   },
   "camera": {
     "zoomMin": 2.5,

@@ -62,34 +62,30 @@ namespace HeadLoss.Game.Commands
 
     public sealed class DeleteSegmentCommand : ICommand
     {
-        readonly int _segmentId;
-        public DeleteSegmentCommand(int segmentId) => _segmentId = segmentId;
-        public string Description => "Delete duct";
-        public bool Execute(BuildingSession s) => DuctEditor.DeleteSegment(s.State.Air, _segmentId);
+        readonly List<int> _segmentIds;
+        public DeleteSegmentCommand(int segmentId) => _segmentIds = new List<int> { segmentId };
+        public DeleteSegmentCommand(IEnumerable<int> segmentIds) => _segmentIds = new List<int>(segmentIds);
+        public string Description => _segmentIds.Count == 1 ? "Delete duct" : $"Delete {_segmentIds.Count} ducts";
+        public bool Execute(BuildingSession s) => DuctEditor.DeleteSegments(s.State.Air, _segmentIds);
     }
 
     public sealed class SetSegmentSizeCommand : ICommand
     {
-        readonly int _segmentId;
+        readonly List<int> _segmentIds;
         readonly double _diameterMm;
 
         /// <param name="diameterMm">mm.</param>
-        public SetSegmentSizeCommand(int segmentId, double diameterMm)
+        public SetSegmentSizeCommand(int segmentId, double diameterMm) : this(new[] { segmentId }, diameterMm) { }
+
+        /// <param name="diameterMm">mm.</param>
+        public SetSegmentSizeCommand(IEnumerable<int> segmentIds, double diameterMm)
         {
-            _segmentId = segmentId;
+            _segmentIds = new List<int>(segmentIds);
             _diameterMm = diameterMm;
         }
 
         public string Description => $"Change duct size to {_diameterMm} mm";
-
-        public bool Execute(BuildingSession s)
-        {
-            DuctSegment? seg = s.State.Air.FindSegment(_segmentId);
-            if (seg == null || seg.DiameterMm == _diameterMm) return false;
-            seg.DiameterMm = _diameterMm;
-            DuctEditor.Normalize(s.State.Air);
-            return true;
-        }
+        public bool Execute(BuildingSession s) => DuctEditor.SetSize(s.State.Air, _segmentIds, _diameterMm);
     }
 
     /// <summary>Switches one elbow between sharp and long-radius.</summary>

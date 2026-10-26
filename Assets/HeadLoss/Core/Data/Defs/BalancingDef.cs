@@ -109,6 +109,8 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Particle quad size, m.</summary>
         public double Size;
         public int MaxParticles;
+        /// <summary>Fan blade animation, degrees per second per m³/h of fan flow.</summary>
+        public double FanSpinDegreesPerM3h;
     }
 
     public sealed class CameraDef

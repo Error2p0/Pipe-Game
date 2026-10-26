@@ -183,15 +183,39 @@ namespace HeadLoss.Game.Buildings
         }
 
         /// <summary>Removes a segment and any free node left unconnected.</summary>
-        public static bool DeleteSegment(DuctNetworkState net, int segmentId)
+        public static bool DeleteSegment(DuctNetworkState net, int segmentId) => DeleteSegments(net, new[] { segmentId });
+
+        /// <summary>Removes several segments at once (ids stay valid until the final merge).</summary>
+        public static bool DeleteSegments(DuctNetworkState net, IEnumerable<int> segmentIds)
         {
-            DuctSegment? s = net.FindSegment(segmentId);
-            if (s == null) return false;
-            net.Segments.Remove(s);
-            RemoveIfOrphan(net, s.NodeA);
-            RemoveIfOrphan(net, s.NodeB);
-            Normalize(net);
-            return true;
+            bool any = false;
+            foreach (int id in segmentIds)
+            {
+                DuctSegment? s = net.FindSegment(id);
+                if (s == null) continue;
+                net.Segments.Remove(s);
+                RemoveIfOrphan(net, s.NodeA);
+                RemoveIfOrphan(net, s.NodeB);
+                any = true;
+            }
+            if (any) Normalize(net);
+            return any;
+        }
+
+        /// <summary>Changes the size of several segments, merging equal straight runs afterwards.</summary>
+        /// <param name="diameterMm">mm.</param>
+        public static bool SetSize(DuctNetworkState net, IEnumerable<int> segmentIds, double diameterMm)
+        {
+            bool any = false;
+            foreach (int id in segmentIds)
+            {
+                DuctSegment? s = net.FindSegment(id);
+                if (s == null || s.DiameterMm == diameterMm) continue;
+                s.DiameterMm = diameterMm;
+                any = true;
+            }
+            if (any) Normalize(net);
+            return any;
         }
 
         static void RemoveIfOrphan(DuctNetworkState net, int nodeId)

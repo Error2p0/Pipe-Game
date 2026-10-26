@@ -92,16 +92,20 @@ namespace HeadLoss.Sim.Tests
         }
 
         [Test]
-        public void Solver_DenseReferenceAndPcg_Agree()
+        public void Solver_DenseReference_PcgAndSparseCholesky_Agree()
         {
             for (ulong seed = 10; seed < 30; seed++)
             {
                 NetworkGraph g = RandomNetwork(seed, 30);
                 SolveResult pcg = new NetworkSolver(new SolverSettings(), new PcgSolver(1e-13, 2000)).Solve(g, Air);
                 SolveResult dense = new NetworkSolver(new SolverSettings(), new DenseLdlSolver()).Solve(g, Air);
-                Assert.IsTrue(pcg.Converged && dense.Converged, $"seed {seed}");
+                SolveResult chol = new NetworkSolver(new SolverSettings(), new SparseCholeskySolver()).Solve(g, Air);
+                Assert.IsTrue(pcg.Converged && dense.Converged && chol.Converged, $"seed {seed}");
                 for (int k = 0; k < g.Links.Count; k++)
-                    Assert.AreEqual(dense.Flow[k], pcg.Flow[k], 1e-9 + Math.Abs(dense.Flow[k]) * 1e-7, $"seed {seed} link {k}");
+                {
+                    Assert.AreEqual(dense.Flow[k], pcg.Flow[k], 1e-9 + Math.Abs(dense.Flow[k]) * 1e-7, $"seed {seed} link {k} (PCG)");
+                    Assert.AreEqual(dense.Flow[k], chol.Flow[k], 1e-12 + Math.Abs(dense.Flow[k]) * 1e-9, $"seed {seed} link {k} (sparse Cholesky)");
+                }
             }
         }
 

@@ -60,6 +60,8 @@ namespace HeadLoss.Game.Session
         public IFluidProperties Air { get; }
 
         readonly SolverSettings _settings;
+        /// <summary>Reused for the session's own solves (one in flight at a time) so the structure cache survives drift re-solves.</summary>
+        readonly NetworkSolver _solver;
         bool _dirty = true;
         double _sinceSolve;
         double _lastSolveMs;
@@ -71,6 +73,7 @@ namespace HeadLoss.Game.Session
             Layout = layout;
             State = state;
             _settings = SolverSettings.FromBalancing(data.Balancing);
+            _solver = new NetworkSolver(_settings);
             AirTemperatureK = Units.CToK(data.Balancing.Physics.DefaultAirTemperatureC);
             Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
         }
@@ -91,13 +94,13 @@ namespace HeadLoss.Game.Session
         /// <summary>Runs a command through the stack.</summary>
         public bool Execute(ICommand command) => Commands.Execute(command, this);
 
-        /// <summary>Compiles and solves a state (pure; safe on a worker thread with its own solver).</summary>
-        public NetworkSnapshot SolveState(BuildingState state, SolveResult? warmFrom)
+        /// <summary>Compiles and solves a state with the given solver (pure; safe on a worker thread).</summary>
+        NetworkSnapshot SolveState(BuildingState state, SolveResult? warmFrom, NetworkSolver solver)
         {
             CompiledNetwork compiled = NetworkCompiler.Compile(Layout, state, Data, AirTemperatureK);
             double[]? warm = warmFrom != null && warmFrom.TopologyKey == compiled.Graph.TopologyKey() ? warmFrom.Flow : null;
             var sw = Stopwatch.StartNew();
-            SolveResult result = new NetworkSolver(_settings).Solve(compiled.Graph, Air, warm);
+            SolveResult result = solver.Solve(compiled.Graph, Air, warm);
             result.SolveMilliseconds = sw.Elapsed.TotalMilliseconds;
             return new NetworkSnapshot(compiled, result, state);
         }
@@ -119,17 +122,23 @@ namespace HeadLoss.Game.Session
             BuildingState copy = State.Clone();
             SolveResult? warm = Current?.Result;
             if (_lastSolveMs <= Data.Balancing.Solver.AsyncThresholdMs)
-                Accept(SolveState(copy, warm));
+                Accept(SolveState(copy, warm, _solver));
             else
-                _pending = Task.Run(() => SolveState(copy, warm));
+                _pending = Task.Run(() => SolveState(copy, warm, _solver));
         }
 
         /// <summary>Solves immediately on the calling thread (tests, first frame).</summary>
         public void SolveNow()
         {
+            if (_pending != null)
+            {
+                _pending.Wait();
+                Accept(_pending.Result);
+                _pending = null;
+            }
             _dirty = false;
             _sinceSolve = 0;
-            Accept(SolveState(State.Clone(), Current?.Result));
+            Accept(SolveState(State.Clone(), Current?.Result, _solver));
         }
 
         void Accept(NetworkSnapshot snap)
@@ -150,7 +159,7 @@ namespace HeadLoss.Game.Session
             if (p.Error != DrawError.None) return p;
             BuildingState copy = State.Clone();
             DuctEditor.PlaceRun(copy.Air, path, diameterMm, materialId, smoothElbows);
-            p.Snapshot = SolveState(copy, null);
+            p.Snapshot = SolveState(copy, null, new NetworkSolver(_settings));
             return p;
         }
 
