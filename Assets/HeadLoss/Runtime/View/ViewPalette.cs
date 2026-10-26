@@ -8,7 +8,7 @@ namespace HeadLoss.Unity.View
     /// <summary>Theme and heatmap colours converted from data.</summary>
     public sealed class ViewPalette
     {
-        public Color Paper, GridLines, Walls, Text, Warning, Danger;
+        public Color Paper, GridLines, Walls, Text, Warning, Danger, Good;
         public float RoomFillAlpha;
         readonly Dictionary<string, Color> _roomFills = new Dictionary<string, Color>();
         readonly Dictionary<string, Color> _fluids = new Dictionary<string, Color>();
@@ -23,6 +23,7 @@ namespace HeadLoss.Unity.View
             Text = Parse(t.Text);
             Warning = Parse(t.Warning);
             Danger = Parse(t.Danger);
+            Good = Parse(t.Good);
             RoomFillAlpha = (float)t.RoomFillAlpha;
             foreach (var kv in t.RoomFills) _roomFills[kv.Key] = Parse(kv.Value);
             foreach (var f in data.Fluids) _fluids[f.Id] = Parse(f.Colour);

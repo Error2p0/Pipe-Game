@@ -70,5 +70,38 @@ namespace HeadLoss.Core
         /// <summary>Power (W) shown as W or kW.</summary>
         public static string FormatPower(double w) =>
             Math.Abs(w) < 1000 ? Number(w, 1) + " W" : Number(WToKW(w), 2) + " kW";
+
+        static readonly string[] MoneySuffixes = { "", "K", "M", "B", "T" };
+
+        /// <summary>Short-scale suffix for 1000^<paramref name="group"/>: K, M, B, T, then aa, ab, … az, ba, … for idle-scale numbers.</summary>
+        public static string MoneySuffix(int group)
+        {
+            if (group < MoneySuffixes.Length) return MoneySuffixes[group];
+            int i = group - MoneySuffixes.Length;
+            return new string(new[] { (char)('a' + i / 26 % 26), (char)('a' + i % 26) });
+        }
+
+        /// <summary>
+        /// Money ($) with a currency symbol and short-scale suffix: $0.15, $12.40, $999, $1.25K, $3.4M, $1.00aa.
+        /// Amounts under 1000 keep cents below 100; three significant digits above.
+        /// </summary>
+        public static string FormatMoney(double amount, string symbol)
+        {
+            string sign = amount < 0 ? "−" : "";
+            double a = Math.Abs(amount);
+            if (a < 100) return sign + symbol + Number(a, 2);
+            if (a < 1000) return sign + symbol + Number(Math.Floor(a), 0);
+            int group = 0;
+            while (a >= 999.5 && group < 200)
+            {
+                a /= 1000.0;
+                group++;
+            }
+            int decimals = a < 10 ? 2 : a < 100 ? 1 : 0;
+            return sign + symbol + Number(a, decimals) + MoneySuffix(group);
+        }
+
+        /// <summary>Money per second, e.g. "$0.45/s".</summary>
+        public static string FormatMoneyRate(double perSecond, string symbol) => FormatMoney(perSecond, symbol) + "/s";
     }
 }

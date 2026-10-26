@@ -1,0 +1,12 @@
+[
+  {
+    "id": "noise",
+    "displayName": "Noise",
+    "kind": "operating",
+    "tiers": [1, 2, 3, 4, 5],
+    "buildingTypes": [],
+    "parameters": { "maxFaceVelocityBedroom": 2.5, "maxFaceVelocityOffice": 3.5 },
+    "reason": "Air vents above their code maximum pay nothing and show a quiet warning.",
+    "why": "Duct noise rises sharply with air speed."
+  }
+]

@@ -12,6 +12,24 @@ namespace HeadLoss.Core.Data.Defs
         public DrawingDef Drawing = new DrawingDef();
         public ParticlesDef Particles = new ParticlesDef();
         public CameraDef Camera = new CameraDef();
+        public EconomyDef Economy = new EconomyDef();
+        public CrankDef Crank = new CrankDef();
+        public PricesDef Prices = new PricesDef();
+        public SaveDef Save = new SaveDef();
+        public OfflineDef Offline = new OfflineDef();
+        public AudioDef Audio = new AudioDef();
+        public TargetsDef Targets = new TargetsDef();
+    }
+
+    /// <summary>Tuning targets the balancing report checks (<c>13-balancing.md</c> §Targets).</summary>
+    public sealed class TargetsDef
+    {
+        /// <summary>Starter house: minutes of cranking to pay a small axial fan plus ducts [low, high].</summary>
+        public List<double> StarterCrankPaysFanMinutes = new List<double>();
+        /// <summary>First building payback per tier, minutes.</summary>
+        public List<double> PaybackMinutes = new List<double>();
+        /// <summary>Electricity share of gross at the reference layout [low, high].</summary>
+        public List<double> ElectricityShare = new List<double>();
     }
 
     /// <summary>Physical constants (SI).</summary>
@@ -68,6 +86,8 @@ namespace HeadLoss.Core.Data.Defs
         public double CeilingLayerOffset;
         /// <summary>Elevation of the wall cavity layer above the floor, m.</summary>
         public double WallCavityLayerOffset;
+        /// <summary>Budget cap = factor × reference layout cost (<c>04-buildings.md</c>).</summary>
+        public double BudgetCapFactor;
     }
 
     public sealed class HeatmapDef
@@ -122,5 +142,104 @@ namespace HeadLoss.Core.Data.Defs
         public double ZoomStep;
         /// <summary>Keyboard pan speed, multiples of the orthographic size per second.</summary>
         public double KeyPanSpeed;
+    }
+
+    /// <summary>Money rules (<c>02-economy.md</c>). Arrays indexed by tier − 1.</summary>
+    public sealed class EconomyDef
+    {
+        /// <summary>Delivery ratio d/min at which overdelivery reaches the cap [doc].</summary>
+        public double OverdeliveryCapRatio;
+        /// <summary>Payout multiplier at the cap [doc].</summary>
+        public double CapMultiplier;
+        /// <summary>Payout multiplier at the cap for risky fluids [doc].</summary>
+        public double CapMultiplierRisky;
+        /// <summary>Income factor for a building with an unrepaired burst while offline [doc].</summary>
+        public double OfflineBurstFactor;
+        /// <summary>Income factor for a building with an unrepaired burst in game [doc].</summary>
+        public double InGameBurstFactor;
+        /// <summary>Electricity price, $ per kW·s (× the building's electricity tier factor).</summary>
+        public double ElectricityPricePerKWs;
+        /// <summary>Recurring fines and premiums are quoted per cycle, s.</summary>
+        public double IncomeCycleSeconds;
+        /// <summary>Share of the price refunded when committed parts are removed.</summary>
+        public double RefundFraction;
+        /// <summary>Wallet of a new game, $.</summary>
+        public double StartingWallet;
+        /// <summary>Economy tick rate, Hz.</summary>
+        public double TickHz;
+        /// <summary>Base pay of an air supply vent per tier, $/s (other outlets × their pay factor).</summary>
+        public List<double> BasePay = new List<double>();
+        /// <summary>Fines, repairs and renewals scale per tier.</summary>
+        public List<double> TierFactor = new List<double>();
+        /// <summary>Electricity price multiplier per tier.</summary>
+        public List<double> ElectricityTierFactor = new List<double>();
+    }
+
+    /// <summary>Hand-crank fan (<c>02-economy.md</c> §Hand crank).</summary>
+    public sealed class CrankDef
+    {
+        /// <summary>Speed fraction added per click.</summary>
+        public double SpeedPerClick;
+        /// <summary>Exponential decay time constant of the crank speed, s.</summary>
+        public double DecaySeconds;
+        /// <summary>Holding the crank button or key counts as this many clicks per second.</summary>
+        public double HoldClicksPerSecond;
+        /// <summary>The network re-solves when the crank speed has moved by this much since the last solve.</summary>
+        public double ResolveSpeedStep;
+    }
+
+    /// <summary>Price rules (<c>13-balancing.md</c> §Prices). Item prices live in their own files.</summary>
+    public sealed class PricesDef
+    {
+        /// <summary>Duct price per metre at the reference diameter, $ (× material price factor).</summary>
+        public double DuctBasePerMetre;
+        /// <summary>Duct reference diameter, mm.</summary>
+        public double DuctReferenceDiameterMm;
+        /// <summary>Pipe price per metre at the reference diameter, $ (× material price factor).</summary>
+        public double PipeBasePerMetre;
+        /// <summary>Pipe reference diameter, mm.</summary>
+        public double PipeReferenceDiameterMm;
+        /// <summary>Price per metre scales with (D / D_ref)^exponent.</summary>
+        public double DiameterExponent;
+    }
+
+    /// <summary>Save files (<c>12-save-offline.md</c>).</summary>
+    public sealed class SaveDef
+    {
+        /// <summary>Autosave interval, s.</summary>
+        public double AutosaveSeconds;
+        /// <summary>Rolling backups kept (.bak1 … .bakN).</summary>
+        public int BackupCount;
+        /// <summary>Saves larger than this are gzip-compressed, bytes.</summary>
+        public int GzipThresholdBytes;
+    }
+
+    public sealed class OfflineDef
+    {
+        /// <summary>Offline progress cap, h [confirm].</summary>
+        public double MaxHours;
+    }
+
+    /// <summary>Procedural audio levels and ranges (<c>11-ui-visuals-audio.md</c> §Procedural audio).</summary>
+    public sealed class AudioDef
+    {
+        /// <summary>Default master volume, 0–1.</summary>
+        public double MasterVolume;
+        /// <summary>Airflow noise gain at full throughput, 0–1.</summary>
+        public double AirflowGain;
+        /// <summary>Total air throughput that gives the full airflow level, m³/h (log scale below it).</summary>
+        public double AirflowFullM3h;
+        /// <summary>Airflow low-pass cutoff range, Hz.</summary>
+        public double AirflowCutoffMinHz;
+        public double AirflowCutoffMaxHz;
+        /// <summary>Fan hum frequency at speed 0 and 1, Hz.</summary>
+        public double HumMinHz;
+        public double HumMaxHz;
+        /// <summary>Fan hum gain per running fan at full speed, 0–1.</summary>
+        public double HumGain;
+        /// <summary>UI click gain, 0–1.</summary>
+        public double ClickGain;
+        /// <summary>Limiter ceiling, 0–1.</summary>
+        public double LimiterCeiling;
     }
 }

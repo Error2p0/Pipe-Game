@@ -5,6 +5,7 @@ using HeadLoss.Core.Data;
 using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Commands;
+using HeadLoss.Game.Economy;
 using HeadLoss.Game.Networks;
 using HeadLoss.Game.Session;
 using HeadLoss.Sim.Network;
@@ -16,25 +17,33 @@ using UnityEngine.UIElements;
 namespace HeadLoss.Unity.UI
 {
     /// <summary>
-    /// Building-view HUD (UI Toolkit): title, toolbox, heatmap selector, legend, readout/selection panel,
-    /// world labels (vent deliveries, fitting K and Δp while drawing), hint line and the dev debug overlay.
-    /// Text is rebuilt only when its inputs change; label positions follow the camera every frame.
+    /// Building-view HUD (UI Toolkit): title and status line, design bar (Commit / Discard, undo / redo),
+    /// toolbox (duct size, elbows, parts, hand crank), outlet list with live zones, requirement sheet, heatmap
+    /// selector and legend, readout/selection panel with actions, world labels (vent deliveries, open ends,
+    /// fitting K and Δp while drawing), hint line and the dev debug overlay. Text is rebuilt only when its
+    /// inputs change; label positions follow the camera every frame.
     /// </summary>
     public sealed class BuildingHud
     {
         const int ReadoutLines = 10;
 
-        readonly VisualElement _root;
+        readonly VisualElement _root, _layer;
+        readonly UiKit _ui;
         readonly ViewPalette _p;
         readonly BuildingSession _s;
         readonly BuildingInteraction _ix;
         readonly HeatmapState _hm;
         readonly CameraController _cam;
         readonly DataRepository _data;
+        readonly string _symbol;
 
         Label _title = null!, _status = null!, _hint = null!;
+        Label _designText = null!, _designReason = null!;
+        Button _commit = null!, _discard = null!, _undo = null!, _redo = null!;
         DropdownField _size = null!;
-        Button _sharp = null!, _smooth = null!, _upgrade = null!, _fanToggle = null!;
+        Button _sharp = null!, _smooth = null!, _upgrade = null!;
+        readonly List<(string id, Button button)> _partButtons = new List<(string, Button)>();
+        VisualElement _crankBox = null!, _crankFill = null!, _crankButton = null!;
         readonly Button[] _modeButtons = new Button[8];
         Label _legendTitle = null!, _legendMin = null!, _legendMid = null!, _legendMax = null!;
         VisualElement _legendBar = null!, _legendTicks = null!;
@@ -44,6 +53,8 @@ namespace HeadLoss.Unity.UI
         VisualElement _readout = null!, _readoutActions = null!;
         Label _readoutTitle = null!;
         readonly Label[] _lines = new Label[ReadoutLines];
+        OutletList _outlets = null!;
+        RequirementSheet _sheet = null!;
         VisualElement _labelLayer = null!;
         readonly List<Label> _ventLabels = new List<Label>();
         readonly List<Label> _openLabels = new List<Label>();
@@ -57,159 +68,124 @@ namespace HeadLoss.Unity.UI
         VisualElement _debugRows = null!;
         readonly List<Label[]> _debugCells = new List<Label[]>();
         static readonly string[] DebugHeader = { "link", "kind", "Q m³/h", "v m/s", "Re", "f", "ΣK", "Δp fr Pa", "Δp fit Pa", "p from Pa", "p to Pa" };
-        static readonly float[] DebugWidths = { 130, 50, 70, 60, 70, 64, 50, 76, 76, 80, 76 };
+        static readonly float[] DebugWidths = { 150, 50, 70, 60, 70, 64, 50, 76, 76, 80, 76 };
         public bool DebugAvailable { get; set; }
         bool _debugVisible;
 
         int _solveRev = -1, _ixRev = -1, _hmRev = -1, _stateRev = -1;
-        Target _shownTarget = Target.None;
-        bool _shownActions;
-        int _shownSelectionCount;
+        float _nextMoneyRefresh;
+        string _shownActionsKey = "";
+        Slider? _damperSlider;
         readonly List<double> _sizes = new List<double>();
         readonly StringBuilder _sb = new StringBuilder(4096);
 
-        public BuildingHud(VisualElement root, StyleSheet style, ViewPalette palette, BuildingSession session,
-            BuildingInteraction interaction, HeatmapState heatmap, CameraController camera)
+        /// <summary>The on-screen crank button is held down.</summary>
+        public bool CrankHeld { get; private set; }
+        /// <summary>The Buildings (back) button was pressed.</summary>
+        public bool BackRequested;
+
+        public BuildingHud(VisualElement root, UiKit ui, BuildingSession session, BuildingInteraction interaction,
+            HeatmapState heatmap, CameraController camera)
         {
             _root = root;
-            _p = palette;
+            _ui = ui;
+            _p = ui.P;
             _s = session;
             _ix = interaction;
             _hm = heatmap;
             _cam = camera;
             _data = session.Data;
-            root.styleSheets.Add(style);
-            root.AddToClassList("hl-root");
-            root.pickingMode = PickingMode.Ignore;
-            root.style.color = palette.Text;
+            _symbol = _data.Game.CurrencySymbol;
+            _layer = new VisualElement { pickingMode = PickingMode.Ignore };
+            _layer.AddToClassList("hl-root");
+            root.Add(_layer);
             Build();
+            if (!session.Record.SheetSeen) _sheet.Show(true);
+        }
+
+        /// <summary>Removes the HUD (leaving the building).</summary>
+        public void Dispose()
+        {
+            _layer.RemoveFromHierarchy();
+            if (_legendTexture != null) Object.Destroy(_legendTexture);
         }
 
         // ---------- construction ----------
-
-        VisualElement Panel(string cls)
-        {
-            var v = new VisualElement();
-            v.AddToClassList("hl-panel");
-            v.AddToClassList(cls);
-            Color bg = _p.Paper;
-            bg.a = 0.94f;
-            v.style.backgroundColor = bg;
-            v.style.borderTopColor = v.style.borderBottomColor = v.style.borderLeftColor = v.style.borderRightColor = _p.GridLines;
-            _root.Add(v);
-            return v;
-        }
-
-        Button MakeButton(string text, System.Action onClick)
-        {
-            var b = new Button(onClick) { text = text };
-            b.AddToClassList("hl-button");
-            StyleButton(b, false);
-            return b;
-        }
-
-        void StyleButton(Button b, bool active)
-        {
-            Color bg = active ? _p.Walls : _p.Paper;
-            Color fg = active ? _p.Paper : _p.Text;
-            b.style.backgroundColor = bg;
-            b.style.color = fg;
-            b.style.borderTopColor = b.style.borderBottomColor = b.style.borderLeftColor = b.style.borderRightColor = _p.Walls;
-            b.EnableInClassList("hl-button--active", active);
-        }
-
-        static Label Text(VisualElement parent, string text, string cls)
-        {
-            var l = new Label(text);
-            l.AddToClassList(cls);
-            parent.Add(l);
-            return l;
-        }
 
         void Build()
         {
             _labelLayer = new VisualElement { pickingMode = PickingMode.Ignore };
             _labelLayer.style.position = Position.Absolute;
             _labelLayer.style.left = _labelLayer.style.top = _labelLayer.style.right = _labelLayer.style.bottom = 0;
-            _root.Add(_labelLayer);
+            _layer.Add(_labelLayer);
 
-            VisualElement card = Panel("hl-titlecard");
-            _title = Text(card, _s.Layout.DisplayName, "hl-title");
-            _status = Text(card, "", "hl-subtitle");
+            var left = new VisualElement { pickingMode = PickingMode.Ignore };
+            left.AddToClassList("hl-leftcolumn");
+            _layer.Add(left);
+            VisualElement card = _ui.Panel(left, "hl-titlecard");
+            _title = UiKit.Text(card, _s.Layout.DisplayName, "hl-title");
+            _status = UiKit.Text(card, "", "hl-subtitle");
+            _status.style.whiteSpace = WhiteSpace.Normal;
+            VisualElement cardRow = UiKit.Row(card);
+            _ui.Button(cardRow, "Requirements (Tab)", () => _sheet.Toggle());
+            _ui.Button(cardRow, "Buildings (Esc)", () => BackRequested = true);
 
-            VisualElement tools = Panel("hl-toolbox");
-            Text(tools, "Duct size", "hl-section");
-            var choices = new List<string>();
-            PipeFamilyDef family = _data.PipeFamily(_data.Balancing.Drawing.DefaultDuctFamily);
-            foreach (PipeSizeDef sz in family.Sizes)
-            {
-                _sizes.Add(sz.DiameterMm);
-                choices.Add($"{sz.DiameterMm:0} mm");
-            }
-            _size = new DropdownField(choices, _sizes.IndexOf(_ix.DrawDiameterMm));
-            _size.AddToClassList("hl-dropdown");
-            _size.RegisterValueChangedCallback(_ => _ix.DrawDiameterMm = _sizes[_size.index]);
-            tools.Add(_size);
+            VisualElement design = _ui.Panel(_layer, "hl-designbar");
+            _designText = UiKit.Text(design, "", "hl-design-text");
+            VisualElement designRow = UiKit.Row(design);
+            designRow.style.justifyContent = Justify.Center;
+            _commit = _ui.Button(designRow, "Commit (Enter)", () => _s.Execute(new CommitDesignCommand()));
+            _discard = _ui.Button(designRow, "Discard", () => _s.Execute(new DiscardDesignCommand()));
+            _undo = _ui.Button(designRow, "Undo", () => _s.Undo());
+            _redo = _ui.Button(designRow, "Redo", () => _s.Redo());
+            _designReason = UiKit.Text(design, "", "hl-design-reason");
+            _designReason.style.color = _p.Warning;
 
-            Text(tools, "Elbows", "hl-section");
-            var row = new VisualElement();
-            row.AddToClassList("hl-row");
-            _sharp = MakeButton("Sharp", () => SetSmooth(false));
-            _smooth = MakeButton("Long-radius", () => SetSmooth(true));
-            row.Add(_sharp);
-            row.Add(_smooth);
-            tools.Add(row);
-            _upgrade = MakeButton("Upgrade all bends", () => _s.Execute(new UpgradeAllBendsCommand()));
-            tools.Add(_upgrade);
-
-            Text(tools, "Fan", "hl-section");
-            _fanToggle = MakeButton("", ToggleFan);
-            tools.Add(_fanToggle);
+            BuildToolbox(left);
 
             VisualElement modes = new VisualElement();
             modes.AddToClassList("hl-heatmaps");
-            _root.Add(modes);
+            _layer.Add(modes);
             for (int i = 0; i < 8; i++)
             {
                 var mode = (HeatmapMode)i;
-                Button b = MakeButton($"{i} {HeatmapState.DisplayName(mode)}", () => _hm.SetMode(mode));
+                Button b = _ui.Button(modes, $"{i} {HeatmapState.DisplayName(mode)}", () => _hm.SetMode(mode));
                 b.SetEnabled(HeatmapState.IsAvailable(mode));
-                if (!HeatmapState.IsAvailable(mode)) b.tooltip = "Arrives in a later phase";
                 _modeButtons[i] = b;
-                modes.Add(b);
             }
 
-            VisualElement legend = Panel("hl-legend");
-            var legendHead = new VisualElement();
-            legendHead.AddToClassList("hl-row");
+            VisualElement legend = _ui.Panel(_layer, "hl-legend");
+            var legendHead = UiKit.Row(legend);
             legendHead.style.justifyContent = Justify.SpaceBetween;
             legendHead.style.alignItems = Align.Center;
-            _legendTitle = Text(legendHead, "", "hl-section");
-            _lock = MakeButton("Lock range", () => _hm.SetLocked(!_hm.Locked));
-            legendHead.Add(_lock);
-            legend.Add(legendHead);
+            _legendTitle = UiKit.Text(legendHead, "", "hl-section");
+            _lock = _ui.Button(legendHead, "Lock range", () => _hm.SetLocked(!_hm.Locked));
             _legendBar = new VisualElement();
             _legendBar.AddToClassList("hl-legend-bar");
             legend.Add(_legendBar);
             _legendTicks = new VisualElement();
             _legendTicks.AddToClassList("hl-legend-ticks");
-            _legendMin = Text(_legendTicks, "", "hl-subtitle");
-            _legendMid = Text(_legendTicks, "", "hl-subtitle");
-            _legendMax = Text(_legendTicks, "", "hl-subtitle");
+            _legendMin = UiKit.Text(_legendTicks, "", "hl-subtitle");
+            _legendMid = UiKit.Text(_legendTicks, "", "hl-subtitle");
+            _legendMax = UiKit.Text(_legendTicks, "", "hl-subtitle");
             legend.Add(_legendTicks);
 
-            _readout = Panel("hl-readout");
-            _readoutTitle = Text(_readout, "", "hl-readout-title");
-            for (int i = 0; i < ReadoutLines; i++) _lines[i] = Text(_readout, "", "hl-readout-line");
-            _readoutActions = new VisualElement();
-            _readoutActions.AddToClassList("hl-row");
+            var right = new VisualElement { pickingMode = PickingMode.Ignore };
+            right.AddToClassList("hl-rightcolumn");
+            _layer.Add(right);
+            _outlets = new OutletList(right, _ui, _s);
+            _readout = _ui.Panel(right, "hl-readout");
+            _readoutTitle = UiKit.Text(_readout, "", "hl-readout-title");
+            for (int i = 0; i < ReadoutLines; i++) _lines[i] = UiKit.Text(_readout, "", "hl-readout-line");
+            _readoutActions = UiKit.Row(_readout);
             _readoutActions.style.marginTop = 8;
-            _readout.Add(_readoutActions);
 
-            _hint = Text(_root, "", "hl-hint");
+            _hint = UiKit.Text(_layer, "", "hl-hint");
             _hint.pickingMode = PickingMode.Ignore;
 
-            _debug = Panel("hl-debug");
+            _sheet = new RequirementSheet(_layer, _ui, _s);
+
+            _debug = _ui.Panel(_layer, "hl-debug");
             _debugText = new Label();
             _debugText.AddToClassList("hl-debug-text");
             _debug.Add(_debugText);
@@ -221,6 +197,77 @@ namespace HeadLoss.Unity.UI
             _debug.style.display = DisplayStyle.None;
 
             foreach (OutletPlacementDef _ in _s.Layout.Outlets) _ventLabels.Add(WorldLabel());
+        }
+
+        void BuildToolbox(VisualElement parent)
+        {
+            VisualElement tools = _ui.Panel(parent, "hl-toolbox");
+            UiKit.Text(tools, "Duct size", "hl-section");
+            var choices = new List<string>();
+            PipeFamilyDef family = _data.PipeFamily(_data.Balancing.Drawing.DefaultDuctFamily);
+            foreach (PipeSizeDef sz in family.Sizes)
+            {
+                _sizes.Add(sz.DiameterMm);
+                choices.Add($"{sz.DiameterMm:0} mm · {Units.FormatMoney(Pricing.PerMetre(_data, _ix.DrawMaterialId, sz.DiameterMm), _symbol)}/m");
+            }
+            _size = new DropdownField(choices, _sizes.IndexOf(_ix.DrawDiameterMm));
+            _size.AddToClassList("hl-dropdown");
+            _size.RegisterValueChangedCallback(_ => _ix.DrawDiameterMm = _sizes[_size.index]);
+            tools.Add(_size);
+
+            UiKit.Text(tools, "Elbows", "hl-section");
+            VisualElement row = UiKit.Row(tools);
+            _sharp = _ui.Button(row, "Sharp", () => SetSmooth(false));
+            _smooth = _ui.Button(row, "Long-radius", () => SetSmooth(true));
+            _upgrade = _ui.Button(tools, "Upgrade all bends", () => _s.Execute(new UpgradeAllBendsCommand()));
+
+            UiKit.Text(tools, "Parts (click a straight duct)", "hl-section");
+            foreach (string id in _data.Game.Toolbox.Parts)
+            {
+                string label = PartLabel(id);
+                string part = id;
+                Button b = _ui.Button(tools, label, () => _ix.SetPlaceTool(part));
+                _partButtons.Add((id, b));
+            }
+
+            _crankBox = new VisualElement();
+            tools.Add(_crankBox);
+            UiKit.Text(_crankBox, "Hand crank", "hl-section");
+            _crankButton = new VisualElement();
+            _crankButton.AddToClassList("hl-button");
+            _crankButton.AddToClassList("hl-crank");
+            _crankButton.style.backgroundColor = _p.Paper;
+            UiKit.Border(_crankButton, _p.Walls);
+            _crankFill = new VisualElement { pickingMode = PickingMode.Ignore };
+            _crankFill.AddToClassList("hl-crank-fill");
+            Color fill = _p.Good;
+            fill.a = 0.35f;
+            _crankFill.style.backgroundColor = fill;
+            _crankButton.Add(_crankFill);
+            var crankLabel = new Label("Crank (hold C)") { pickingMode = PickingMode.Ignore };
+            crankLabel.AddToClassList("hl-crank-label");
+            _crankButton.Add(crankLabel);
+            _crankButton.RegisterCallback<PointerDownEvent>(e =>
+            {
+                _s.Crank();
+                CrankHeld = true;
+                _crankButton.CapturePointer(e.pointerId);
+            });
+            _crankButton.RegisterCallback<PointerUpEvent>(e =>
+            {
+                CrankHeld = false;
+                _crankButton.ReleasePointer(e.pointerId);
+            });
+            _crankButton.RegisterCallback<PointerCaptureOutEvent>(_ => CrankHeld = false);
+            _crankBox.Add(_crankButton);
+        }
+
+        string PartLabel(string id)
+        {
+            EquipmentDef? eq = _data.FindEquipment(id);
+            if (eq != null) return $"{eq.DisplayName} · {Units.FormatMoney(eq.Price, _symbol)}";
+            FittingDef f = _data.Fitting(id);
+            return $"{f.DisplayName} · from {Units.FormatMoney(f.Price, _symbol)}";
         }
 
         Label WorldLabel()
@@ -239,15 +286,6 @@ namespace HeadLoss.Unity.UI
         {
             _ix.DrawSmoothElbows = smooth;
             _hmRev = -1;
-        }
-
-        void ToggleFan()
-        {
-            foreach (EquipmentState e in _s.State.Equipment)
-            {
-                _s.Execute(new SetEquipmentOnCommand(e.OpeningId, !e.On));
-                break;
-            }
         }
 
         // ---------- per frame ----------
@@ -270,7 +308,10 @@ namespace HeadLoss.Unity.UI
             _solveRev = -1;
         }
 
-        public void Update()
+        public void ToggleSheet() => _sheet.Toggle();
+        public bool SheetVisible => _sheet.Visible;
+
+        public void Update(float time)
         {
             bool solveChanged = _s.SolveRevision != _solveRev;
             bool ixChanged = _ix.Revision != _ixRev;
@@ -281,30 +322,89 @@ namespace HeadLoss.Unity.UI
             _hmRev = _hm.Revision;
             _stateRev = _s.StateRevision;
 
-            if (solveChanged || stateChanged || hmChanged) RefreshTools();
+            if (_outlets.Clicked.Length > 0)
+            {
+                _ix.Select(new Target { Kind = TargetKind.Outlet, Anchor = _outlets.Clicked });
+                _outlets.Clicked = "";
+            }
+            if (solveChanged || stateChanged || hmChanged || ixChanged) RefreshTools();
             if (solveChanged || hmChanged) RefreshLegend();
             if (solveChanged || ixChanged || stateChanged) RefreshReadout(stateChanged);
             if (solveChanged || ixChanged) RefreshFittingLabels();
             if (solveChanged || ixChanged || stateChanged) RefreshHint();
-            if (solveChanged) RefreshVentLabels();
+            if (solveChanged)
+            {
+                RefreshVentLabels();
+                _outlets.Refresh();
+            }
             if (solveChanged && _debugVisible) RefreshDebug();
+            if (stateChanged || solveChanged || time >= _nextMoneyRefresh)
+            {
+                _nextMoneyRefresh = time + 0.1f;
+                RefreshDesignBar();
+                RefreshStatus();
+            }
+            _crankFill.style.width = Length.Percent((float)(_s.CrankSpeed * 100));
             PositionLabels();
         }
 
         void RefreshTools()
         {
-            int connected = 0;
-            foreach (OutletPlacementDef o in _s.Layout.Outlets)
-                if (_s.Current != null && _s.Current.Compiled.OutletLink.ContainsKey(o.Id)) connected++;
-            string settle = _s.Settling ? " · Network still settling" : "";
-            _status.text = $"Air · {connected} of {_s.Layout.Outlets.Count} vents connected{settle}";
             StyleButton(_sharp, !_ix.DrawSmoothElbows);
             StyleButton(_smooth, _ix.DrawSmoothElbows);
-            EquipmentState? fan = _s.State.Equipment.Count > 0 ? _s.State.Equipment[0] : null;
-            _fanToggle.SetEnabled(fan != null);
-            _fanToggle.text = fan == null ? "No fan" : (fan.On ? "Fan on" : "Fan off");
-            StyleButton(_fanToggle, fan != null && fan.On);
+            foreach ((string id, Button b) in _partButtons) StyleButton(b, _ix.PlaceTool == id);
             for (int i = 0; i < 8; i++) StyleButton(_modeButtons[i], (int)_hm.Mode == i);
+            _crankBox.style.display = _s.HasCrank ? DisplayStyle.Flex : DisplayStyle.None;
+        }
+
+        void StyleButton(Button b, bool active) => _ui.Style(b, active);
+
+        void RefreshStatus()
+        {
+            BuildingEvaluation ev = _s.CommittedEvaluation;
+            bool anyBuilt = _s.Committed.Air.Segments.Count > 0;
+            string settle = _s.Settling ? " · network still settling" : "";
+            if (ev.Online)
+            {
+                string over = ev.AboveCodeMax > 0 ? $" · {ev.AboveCodeMax} above code max" : "";
+                _status.text = $"Online · earning {Units.FormatMoneyRate(ev.Net, _symbol)}{over}{settle}";
+                _status.style.color = _p.Good;
+            }
+            else if (!anyBuilt && !_s.Record.EverOnline)
+            {
+                _status.text = "Not built yet · draw ducts from the intake to every vent, then Commit";
+                _status.style.color = _p.Text;
+            }
+            else
+            {
+                string power = ev.PowerW > 0 ? $" · equipment still drawing {Units.FormatPower(ev.PowerW)}" : "";
+                string crank = _s.HasCrank && _s.CrankSpeed < 0.05 ? " · crank to move air" : "";
+                _status.text = $"Offline · {ev.BelowMinimum} of {ev.Outlets.Count} outlets below minimum{power}{crank}{settle}";
+                _status.style.color = _p.Warning;
+            }
+        }
+
+        void RefreshDesignBar()
+        {
+            BuildingEvaluation projected = _s.DesignEvaluation;
+            if (_s.HasPendingDesign)
+            {
+                double net = _s.PendingCost.Net;
+                string cost = net >= 0 ? $"cost {Units.FormatMoney(net, _symbol)}" : $"refund {Units.FormatMoney(-net, _symbol)}";
+                string online = projected.Online ? "" : " (offline)";
+                _designText.text = $"Design · not committed · {cost} · projected income {Units.FormatMoneyRate(projected.Net, _symbol)}{online}";
+            }
+            else
+            {
+                _designText.text = $"Design matches what is built · income {Units.FormatMoneyRate(_s.CommittedEvaluation.Net, _symbol)}";
+            }
+            CommitCheck check = _s.CheckCommit();
+            _commit.SetEnabled(check.Allowed);
+            _discard.SetEnabled(_s.HasPendingDesign);
+            _undo.SetEnabled(_s.Commands.CanUndo);
+            _redo.SetEnabled(_s.Commands.CanRedo);
+            _designReason.text = _s.HasPendingDesign && !check.Allowed ? check.Reason : "";
+            _designReason.style.display = _designReason.text.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
         }
 
         void RefreshLegend()
@@ -340,10 +440,15 @@ namespace HeadLoss.Unity.UI
 
         void RefreshHint()
         {
-            if (!string.IsNullOrEmpty(_ix.Hint)) _hint.text = _ix.Hint;
-            else if (_s.State.Air.Segments.Count == 0) _hint.text = "Drag from the fan to a vent to draw a duct";
-            else _hint.text = "";
-            _hint.style.color = string.IsNullOrEmpty(_ix.Hint) ? _p.Text : _p.Warning;
+            string hint = _ix.Hint;
+            bool warn = hint.Length > 0 && _ix.PlaceTool.Length == 0;
+            if (_ix.PlaceTool.Length > 0 && _ix.PlaceHovering && !_ix.PlaceValid) warn = true;
+            if (hint.Length == 0 && _s.State.Air.Segments.Count == 0)
+                hint = _s.State.Equipment.Count == 0
+                    ? "Click the intake to place a fan, then drag from it to a vent to draw a duct"
+                    : "Drag from the intake to a vent to draw a duct";
+            _hint.text = hint;
+            _hint.style.color = warn ? _p.Warning : _p.Text;
         }
 
         // ---------- readout ----------
@@ -365,19 +470,45 @@ namespace HeadLoss.Unity.UI
                     else lines = SegmentReadout(t.Id, snap, lines);
                     break;
                 case TargetKind.Node: lines = NodeReadout(t.Id, snap, lines); break;
-                case TargetKind.Fan: lines = FanReadout(t.Anchor, snap, lines); break;
-                case TargetKind.Outlet: lines = OutletReadout(t.Anchor, snap, lines); break;
+                case TargetKind.Intake: lines = IntakeReadout(t.Anchor, snap, lines); break;
+                case TargetKind.Outlet: lines = OutletReadout(t.Anchor, lines); break;
+                case TargetKind.Inline: lines = InlineReadout(t.Id, snap, lines); break;
             }
             for (int i = lines; i < ReadoutLines; i++) _lines[i].style.display = DisplayStyle.None;
             _readout.style.display = t.Kind == TargetKind.None ? DisplayStyle.None : DisplayStyle.Flex;
 
-            if (!t.Same(_shownTarget) || actions != _shownActions || _ix.SelectedSegments.Count != _shownSelectionCount || stateChanged)
+            string key = actions ? ActionsKey(t) : "";
+            if (key != _shownActionsKey)
             {
-                _shownTarget = t;
-                _shownActions = actions;
-                _shownSelectionCount = _ix.SelectedSegments.Count;
+                _shownActionsKey = key;
                 BuildActions(actions ? t : Target.None);
             }
+            else if (_damperSlider != null && t.Kind == TargetKind.Inline && _s.State.Air.FindNode(t.Id) is DuctNode d)
+                _damperSlider.SetValueWithoutNotify((float)d.Opening * 100);
+        }
+
+        /// <summary>What the action buttons depend on; they are rebuilt only when it changes (a slider keeps its drag).</summary>
+        string ActionsKey(Target t)
+        {
+            _sb.Clear();
+            _sb.Append((int)t.Kind).Append('/').Append(t.Id).Append('/').Append(t.Anchor).Append('/');
+            switch (t.Kind)
+            {
+                case TargetKind.Segment:
+                    foreach (int id in _ix.SelectedSegments) _sb.Append(id).Append(',');
+                    _sb.Append(_ix.SelectedTile.X).Append(',').Append(_ix.SelectedTile.Y).Append('/').Append(_s.StateRevision);
+                    break;
+                case TargetKind.Node:
+                    if (_s.State.Air.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(_s.State.Air.Degree(n.Id));
+                    break;
+                case TargetKind.Intake:
+                    if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On);
+                    break;
+                case TargetKind.Inline:
+                    if (_s.State.Air.FindNode(t.Id) is DuctNode p) _sb.Append(p.PartId).Append(p.On);
+                    break;
+            }
+            return _sb.ToString();
         }
 
         int Line(int i, string text)
@@ -405,7 +536,7 @@ namespace HeadLoss.Unity.UI
             i = Line(i, $"Loss  friction {Units.FormatPa(System.Math.Abs(r.DpFriction[k]))} · fittings {Units.FormatPa(System.Math.Abs(r.DpFittings[k]))} · elevation {Units.FormatPa(r.DpElevation[k])}");
             string regime = r.Reynolds[k] <= _data.Balancing.Physics.LaminarReynolds ? "laminar" : r.Reynolds[k] >= _data.Balancing.Physics.TurbulentReynolds ? "turbulent" : "transitional";
             i = Line(i, $"Re  {r.Reynolds[k]:0} ({regime}) · f {r.FrictionFactor[k]:0.0000}");
-            i = Line(i, $"Length  {l.Length:0} m · ΣK {l.SumK:0.00}");
+            i = Line(i, $"Length  {l.Length:0} m · ΣK {l.SumK:0.00} · {Units.FormatMoney(Pricing.PerMetre(_data, seg.MaterialId, seg.DiameterMm), _symbol)}/m");
             i = Line(i, $"Temperature  {Units.FormatTemperatureK(l.Temperature)}");
             i = Line(i, "Stress  — (from Phase 4)");
             return i;
@@ -452,44 +583,86 @@ namespace HeadLoss.Unity.UI
             return f.K * 0.5 * snap.Result.Density[f.LinkIndex] * v * v;
         }
 
-        int FanReadout(string openingId, NetworkSnapshot? snap, int i)
+        int IntakeReadout(string openingId, NetworkSnapshot? snap, int i)
         {
             EquipmentState? e = _s.State.EquipmentAt(openingId);
-            if (e == null) return i;
+            if (e == null)
+            {
+                _readoutTitle.text = "Air intake · empty";
+                i = Line(i, "An open louvre. Place a fan here to move air, or put an inline fan on the duct.");
+                return i;
+            }
             EquipmentDef def = _data.EquipmentItem(e.EquipmentId);
             _readoutTitle.text = def.DisplayName;
-            if (!e.On) return Line(i, "Switched off");
+            bool crank = def.SpeedControl == "crank";
+            if (!crank && !e.On) return Line(i, "Switched off");
+            if (crank) i = Line(i, $"Crank speed  {_s.CrankSpeed * 100:0} % · click or hold C (no electricity, nothing offline)");
             if (snap == null || !snap.Compiled.FanLink.TryGetValue(openingId, out int k)) return Line(i, "Solving…");
+            return DeviceLines(snap, k, def, i);
+        }
+
+        int DeviceLines(NetworkSnapshot snap, int k, EquipmentDef def, int i)
+        {
             SolveResult r = snap.Result;
             i = Line(i, $"Flow  {Units.FormatAirFlow(r.Flow[k])}");
             i = Line(i, $"Pressure rise  {Units.FormatPa(r.DpDevice[k])} (shutoff {def.Curve[0].PressurePa:0} Pa)");
-            i = Line(i, $"Efficiency  {r.Efficiency[k] * 100:0} %");
-            i = Line(i, $"Power  {Units.FormatPower(r.Power[k])}");
-            i = Line(i, $"Speed  {e.Speed * 100:0} %");
+            if (def.PowerModel != "none")
+            {
+                double cost = r.Power[k] / 1000 * _data.Balancing.Economy.ElectricityPricePerKWs * _data.Balancing.Economy.ElectricityTierFactor[_s.Layout.Tier - 1];
+                i = Line(i, $"Efficiency  {r.Efficiency[k] * 100:0} %");
+                i = Line(i, $"Power  {Units.FormatPower(r.Power[k])} · electricity {Units.FormatMoneyRate(cost, _symbol)}");
+            }
             return i;
         }
 
-        int OutletReadout(string outletId, NetworkSnapshot? snap, int i)
+        int InlineReadout(int nodeId, NetworkSnapshot? snap, int i)
+        {
+            DuctNode? n = _s.State.Air.FindNode(nodeId);
+            if (n == null) return i;
+            EquipmentDef? fan = _data.FindEquipment(n.PartId);
+            int k = -1;
+            bool solved = snap != null && snap.Compiled.InlineLink.TryGetValue(nodeId, out k);
+            if (fan != null)
+            {
+                _readoutTitle.text = fan.DisplayName;
+                if (!n.On) return Line(i, "Switched off (closed to air)");
+                if (!solved) return Line(i, "Solving…");
+                return DeviceLines(snap!, k, fan, i);
+            }
+            FittingDef valve = _data.Fitting(n.PartId);
+            _readoutTitle.text = valve.DisplayName;
+            i = Line(i, $"Open  {n.Opening * 100:0} % · K {valve.K / (n.Opening * n.Opening):0.0#}");
+            if (!solved) return Line(i, "Solving…");
+            SolveResult r = snap!.Result;
+            i = Line(i, $"Flow  {Units.FormatAirFlow(System.Math.Abs(r.Flow[k]))}");
+            i = Line(i, $"Pressure lost  {Units.FormatPa(System.Math.Abs(r.DpFittings[k]))}");
+            return Line(i, "Close it to send air to other branches. Balancing is free and takes effect at once.");
+        }
+
+        int OutletReadout(string outletId, int i)
         {
             OutletPlacementDef o = _s.Layout.FindOutlet(outletId)!;
             OutletDef def = _data.Outlet(o.Type);
-            _readoutTitle.text = def.DisplayName;
-            if (snap == null || !snap.Compiled.OutletLink.TryGetValue(outletId, out int k)) i = Line(i, "Not connected");
+            _readoutTitle.text = $"{OutletList.NiceName(outletId)} · {def.DisplayName.ToLowerInvariant()}";
+            OutletStatus? st = _s.DesignEvaluation.Find(outletId);
+            if (st == null || !st.Connected) i = Line(i, "Not connected");
             else
             {
-                SolveResult r = snap.Result;
-                i = Line(i, $"Delivery  {Units.FormatAirFlow(r.Flow[k])}");
-                i = Line(i, $"Pressure at grille  {Units.FormatPa(r.PressureFrom(snap.Compiled.Graph, k))}");
-                i = Line(i, $"Face velocity  {Units.FormatVelocity(System.Math.Abs(r.Velocity[k]))}");
+                i = Line(i, $"Delivery  {Units.FormatAirFlow(st.Delivery)}");
+                i = Line(i, $"Zone  {UiKit.ZoneWord(st.Zone)} · ×{st.Multiplier:0.00} · {Units.FormatMoneyRate(st.BaseRate * st.Multiplier, _symbol)}");
+                if (st.Zone == OutletZone.AboveCodeMax) i = Line(i, $"Above code maximum: {def.CodeMaxReason.ToLowerInvariant()}. It pays nothing until the flow comes down.");
+                if (_s.Current != null && _s.Current.Compiled.OutletLink.TryGetValue(outletId, out int k) && _s.Current.Result.Flow[k] < 0)
+                    i = Line(i, "Air is flowing backwards into the duct here.");
             }
             if (def.Tiers.TryGetValue(_s.Layout.Tier.ToString(), out OutletRequirementDef req))
-                i = Line(i, $"Tier {_s.Layout.Tier} requirement  min {req.Min:0} · ideal {req.Ideal:0} · max {req.Max:0} m³/h ({def.CodeMaxReason.ToLowerInvariant()})");
+                i = Line(i, $"Needs  min {req.Min:0} · ideal {req.Ideal:0} · code max {req.Max:0} m³/h ({def.CodeMaxReason.ToLowerInvariant()})");
             return i;
         }
 
         void BuildActions(Target t)
         {
             _readoutActions.Clear();
+            _damperSlider = null;
             switch (t.Kind)
             {
                 case TargetKind.Segment:
@@ -507,7 +680,14 @@ namespace HeadLoss.Unity.UI
                         _ix.ClearSelection();
                     });
                     _readoutActions.Add(dd);
-                    _readoutActions.Add(MakeButton("Delete", _ix.DeleteSelection));
+                    _ui.Button(_readoutActions, "Delete", _ix.DeleteSelection);
+                    TilePos tile = _ix.SelectedTile;
+                    if (ids.Count == 1 && DuctEditor.ValidateInline(_s.State.Air, tile) == DrawError.None)
+                        foreach (string part in _data.Game.Toolbox.Parts)
+                        {
+                            string p = part;
+                            _ui.Button(_readoutActions, "Add " + PartLabel(part).ToLowerInvariant(), () => _s.Execute(new PlaceInlineCommand(tile, p)));
+                        }
                     break;
                 }
                 case TargetKind.Node:
@@ -515,21 +695,53 @@ namespace HeadLoss.Unity.UI
                     DuctNode? n = _s.State.Air.FindNode(t.Id);
                     if (n == null || !DuctEditor.IsElbow(_s.State.Air, n)) break;
                     int id = t.Id;
-                    Button sharp = MakeButton("Sharp", () => _s.Execute(new SetElbowCommand(id, false)));
-                    Button smooth = MakeButton("Long-radius", () => _s.Execute(new SetElbowCommand(id, true)));
-                    StyleButton(sharp, !n.SmoothFittings);
-                    StyleButton(smooth, n.SmoothFittings);
-                    _readoutActions.Add(sharp);
-                    _readoutActions.Add(smooth);
+                    StyleButton(_ui.Button(_readoutActions, "Sharp", () => _s.Execute(new SetElbowCommand(id, false))), !n.SmoothFittings);
+                    StyleButton(_ui.Button(_readoutActions, "Long-radius", () => _s.Execute(new SetElbowCommand(id, true))), n.SmoothFittings);
                     break;
                 }
-                case TargetKind.Fan:
+                case TargetKind.Intake:
                 {
-                    EquipmentState? e = _s.State.EquipmentAt(t.Anchor);
-                    if (e == null) break;
                     string opening = t.Anchor;
-                    Button b = MakeButton(e.On ? "Switch off" : "Switch on", () => _s.Execute(new SetEquipmentOnCommand(opening, !e.On)));
-                    _readoutActions.Add(b);
+                    EquipmentState? e = _s.State.EquipmentAt(opening);
+                    foreach (string eqId in _data.Game.Toolbox.IntakeEquipment)
+                    {
+                        EquipmentDef def = _data.EquipmentItem(eqId);
+                        bool here = e != null && e.EquipmentId == eqId;
+                        bool preplaced = false;
+                        foreach (EquipmentPlacementDef p in _s.Layout.InitialEquipment)
+                            if (p.OpeningId == opening && p.EquipmentId == eqId) preplaced = true;
+                        string price = preplaced ? "free" : Units.FormatMoney(def.Price, _symbol);
+                        string id = eqId;
+                        StyleButton(_ui.Button(_readoutActions, $"{def.DisplayName} · {price}", () => _s.Execute(new SetIntakeEquipmentCommand(opening, id))), here);
+                    }
+                    if (e == null) break;
+                    if (_data.EquipmentItem(e.EquipmentId).SpeedControl != "crank")
+                        _ui.Button(_readoutActions, e.On ? "Switch off" : "Switch on", () => _s.Execute(new SetEquipmentOnCommand(opening, !e.On)));
+                    _ui.Button(_readoutActions, "Remove", () => _s.Execute(new SetIntakeEquipmentCommand(opening, "")));
+                    break;
+                }
+                case TargetKind.Inline:
+                {
+                    DuctNode? n = _s.State.Air.FindNode(t.Id);
+                    if (n == null) break;
+                    int id = n.Id;
+                    TilePos tile = n.Pos;
+                    if (_data.FindEquipment(n.PartId) != null)
+                    {
+                        bool on = n.On;
+                        _ui.Button(_readoutActions, on ? "Switch off" : "Switch on", () => _s.Execute(new SetInlineOnCommand(tile, !on)));
+                        _ui.Button(_readoutActions, "Turn around (R)", () => _s.Execute(new FlipInlineCommand(id)));
+                    }
+                    else
+                    {
+                        FittingDef valve = _data.Fitting(n.PartId);
+                        var slider = new Slider("Open", (float)valve.MinOpening * 100, 100) { value = (float)n.Opening * 100 };
+                        slider.AddToClassList("hl-slider");
+                        slider.RegisterValueChangedCallback(ev => _s.Execute(new SetDamperOpeningCommand(tile, Mathf.Round(ev.newValue) / 100.0)));
+                        _readoutActions.Add(slider);
+                        _damperSlider = slider;
+                    }
+                    _ui.Button(_readoutActions, "Remove", () => _s.Execute(new RemoveInlineCommand(id)));
                     break;
                 }
             }
@@ -547,7 +759,7 @@ namespace HeadLoss.Unity.UI
                 foreach (var kv in snap.Compiled.OpenEndLink)
                 {
                     DuctNode? n = snap.State.Air.FindNode(kv.Key);
-                    if (n == null) continue;
+                    if (n == null || Units.M3sToM3h(snap.Result.Flow[kv.Value]) < 0.5) continue;
                     if (_openLabelCount == _openLabels.Count)
                     {
                         Label l = WorldLabel();
@@ -560,11 +772,19 @@ namespace HeadLoss.Unity.UI
             }
             for (int i = 0; i < _openLabels.Count; i++)
                 _openLabels[i].style.display = i < _openLabelCount ? DisplayStyle.Flex : DisplayStyle.None;
+            BuildingEvaluation ev = _s.DesignEvaluation;
             for (int i = 0; i < _s.Layout.Outlets.Count; i++)
             {
-                OutletPlacementDef o = _s.Layout.Outlets[i];
-                bool connected = snap != null && snap.Compiled.OutletLink.ContainsKey(o.Id);
-                _ventLabels[i].text = connected ? Units.FormatAirFlow(snap!.Result.Flow[snap.Compiled.OutletLink[o.Id]]) : "—";
+                OutletStatus? st = ev.Find(_s.Layout.Outlets[i].Id);
+                Label l = _ventLabels[i];
+                if (st == null || !st.Connected)
+                {
+                    l.text = "—";
+                    UiKit.Border(l, _p.GridLines);
+                    continue;
+                }
+                l.text = $"{Units.FormatAirFlow(st.Delivery)} · {UiKit.ZoneWord(st.Zone)}";
+                UiKit.Border(l, _ui.ZoneColour(st.Zone));
             }
         }
 

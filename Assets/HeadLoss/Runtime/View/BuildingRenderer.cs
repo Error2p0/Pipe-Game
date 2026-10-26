@@ -45,11 +45,53 @@ namespace HeadLoss.Unity.View
                 if (!HasOpening(layout, layout.Width - 1, y, "east")) m.Rect(layout.Width, y, layout.Width + t, y + 1, 3f, palette.Walls);
             }
 
+            DrawInteriorWalls(m, layout, palette);
             foreach (EntryOpeningDef o in layout.EntryOpenings) DrawIntake(m, layout, o, palette);
             m.Upload();
             _overlay.Clear();
             foreach (OutletPlacementDef o in layout.Outlets) DrawVent(_overlay, o, palette);
             _overlay.Upload();
+        }
+
+        public const float InteriorWall = 0.1f;
+
+        /// <summary>Walls between tiles of different rooms; a door leaves a gap with two short jambs.</summary>
+        static void DrawInteriorWalls(MeshBuilder m, BuildingLayout layout, ViewPalette p)
+        {
+            float h = InteriorWall * 0.5f;
+            Color jamb = p.Walls;
+            jamb.a = 0.6f;
+            for (int x = 0; x < layout.Width; x++)
+                for (int y = 0; y < layout.Height; y++)
+                {
+                    var t = new TilePos(x, y);
+                    int r = layout.RoomIndexAt(t);
+                    if (r < 0) continue;
+                    var east = new TilePos(x + 1, y);
+                    int re = layout.RoomIndexAt(east);
+                    if (re >= 0 && re != r)
+                    {
+                        if (!layout.HasDoor(t, east)) m.Rect(x + 1 - h, y - h, x + 1 + h, y + 1 + h, 3f, p.Walls);
+                        else
+                        {
+                            m.Rect(x + 1 - h, y - h, x + 1 + h, y + 0.12f, 3f, p.Walls);
+                            m.Rect(x + 1 - h, y + 0.88f, x + 1 + h, y + 1 + h, 3f, p.Walls);
+                            m.Rect(x + 1 - 0.02f, y + 0.12f, x + 1 + 0.02f, y + 0.88f, 3.1f, jamb);
+                        }
+                    }
+                    var north = new TilePos(x, y + 1);
+                    int rn = layout.RoomIndexAt(north);
+                    if (rn >= 0 && rn != r)
+                    {
+                        if (!layout.HasDoor(t, north)) m.Rect(x - h, y + 1 - h, x + 1 + h, y + 1 + h, 3f, p.Walls);
+                        else
+                        {
+                            m.Rect(x - h, y + 1 - h, x + 0.12f, y + 1 + h, 3f, p.Walls);
+                            m.Rect(x + 0.88f, y + 1 - h, x + 1 + h, y + 1 + h, 3f, p.Walls);
+                            m.Rect(x + 0.12f, y + 1 - 0.02f, x + 0.88f, y + 1 + 0.02f, 3.1f, jamb);
+                        }
+                    }
+                }
         }
 
         static bool HasOpening(BuildingLayout layout, int x, int y, string facing)

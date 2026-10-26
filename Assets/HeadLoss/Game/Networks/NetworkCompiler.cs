@@ -36,17 +36,22 @@ namespace HeadLoss.Game.Networks
         public Dictionary<string, int> FanLink = new Dictionary<string, int>();
         /// <summary>Duct node id of an open end (or a bare intake) → discharge link index.</summary>
         public Dictionary<int, int> OpenEndLink = new Dictionary<int, int>();
+        /// <summary>Inline node id (damper or inline fan) → valve or fan link index.</summary>
+        public Dictionary<int, int> InlineLink = new Dictionary<int, int>();
         public List<CompiledFitting> Fittings = new List<CompiledFitting>();
     }
 
     /// <summary>
     /// Turns the player's duct layout into a solver graph (<c>05-simulation.md</c> §1.1): one Pipe link per
     /// segment, a Fan link from the outside at each intake with equipment, a Vent link to the room at each
-    /// connected outlet, and every auto fitting's K added to the segment whose velocity it is referenced to.
+    /// connected outlet, a Valve or Fan link across each inline part, and every auto fitting's K added to the
+    /// segment whose velocity it is referenced to.
     /// </summary>
     public static class NetworkCompiler
     {
-        public static CompiledNetwork Compile(BuildingLayout layout, BuildingState state, DataRepository data, double airTemperatureK)
+        /// <param name="airTemperatureK">Air temperature in the ducts, K.</param>
+        /// <param name="crankSpeed">Hand-crank speed fraction (0–1) for crank equipment.</param>
+        public static CompiledNetwork Compile(BuildingLayout layout, BuildingState state, DataRepository data, double airTemperatureK, double crankSpeed = 0)
         {
             DuctNetworkState net = state.Air;
             var c = new CompiledNetwork();
@@ -54,33 +59,79 @@ namespace HeadLoss.Game.Networks
             BalancingDef bal = data.Balancing;
             double z = bal.Building.CeilingLayerOffset;
 
-            foreach (DuctNode n in net.Nodes) c.NodeIndex[n.Id] = g.AddJunction(z, $"n{n.Id}");
+            // Inline parts sit between two graph nodes: NodeIndex is the upstream ("in") side, inlineOut the other.
+            var inlineOut = new Dictionary<int, int>();
+            foreach (DuctNode n in net.Nodes)
+            {
+                c.NodeIndex[n.Id] = g.AddJunction(z, $"n{n.Id}");
+                if (n.Kind == DuctNodeKind.Inline) inlineOut[n.Id] = g.AddJunction(z, $"n{n.Id}-out");
+            }
+
+            int Endpoint(DuctNode n, TilePos other)
+            {
+                if (n.Kind != DuctNodeKind.Inline) return c.NodeIndex[n.Id];
+                int along = (other.X - n.X) * n.DirX + (other.Y - n.Y) * n.DirY;
+                return along < 0 ? c.NodeIndex[n.Id] : inlineOut[n.Id];
+            }
 
             // Segments → pipes.
             var segLink = new Dictionary<int, int>();
             foreach (DuctSegment s in net.Segments)
             {
                 MaterialDef mat = data.Material(s.MaterialId);
-                TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
-                int link = g.AddPipe(c.NodeIndex[s.NodeA], c.NodeIndex[s.NodeB], a.ManhattanTo(b), Units.MmToM(s.DiameterMm),
+                DuctNode na = net.FindNode(s.NodeA)!, nb = net.FindNode(s.NodeB)!;
+                TilePos a = na.Pos, b = nb.Pos;
+                int link = g.AddPipe(Endpoint(na, b), Endpoint(nb, a), a.ManhattanTo(b), Units.MmToM(s.DiameterMm),
                     Units.MmToM(mat.RoughnessMm), 0, $"s{s.Id}");
                 g.Links[link].Temperature = airTemperatureK;
                 segLink[s.Id] = link;
                 c.SegmentLink[s.Id] = link;
             }
 
-            // Intakes: outside (fixed 0 Pa) → fan → intake node.
+            // Intakes: outside (fixed 0 Pa) → fan → intake node. An intake with no equipment is an open louvre:
+            // the intake node itself is at outside pressure, so an inline fan further on can draw through it.
             foreach (DuctNode n in net.Nodes)
             {
                 if (n.Kind != DuctNodeKind.Intake) continue;
                 EquipmentState? eq = state.EquipmentAt(n.AnchorId);
-                if (eq == null) continue;
+                if (eq == null)
+                {
+                    NetworkNode node = g.Nodes[c.NodeIndex[n.Id]];
+                    node.Kind = NodeKind.FixedPressure;
+                    node.FixedPressure = 0;
+                    continue;
+                }
                 EquipmentDef def = data.EquipmentItem(eq.EquipmentId);
                 int outside = g.AddFixed(0, z, $"outside-{n.AnchorId}");
+                double speed = def.SpeedControl == "crank" ? crankSpeed : eq.On ? eq.Speed : 0;
                 int fan = g.AddFan(outside, c.NodeIndex[n.Id], FanCurve.FromDef(def), Units.MmToM(def.ConnectionDiameterMm),
-                    eq.On ? eq.Speed : 0, eq.EquipmentId);
+                    speed, eq.EquipmentId);
                 g.Links[fan].Temperature = airTemperatureK;
                 c.FanLink[n.AnchorId] = fan;
+            }
+
+            // Inline parts: a damper is a valve K(θ) = K_open/θ², an inline fan a fan link in its direction.
+            foreach (DuctNode n in net.Nodes)
+            {
+                if (n.Kind != DuctNodeKind.Inline || net.Degree(n.Id) != 2) continue;
+                double d = double.MaxValue;
+                foreach (DuctSegment s in net.Segments)
+                    if (s.NodeA == n.Id || s.NodeB == n.Id) d = Math.Min(d, s.DiameterMm);
+                int from = c.NodeIndex[n.Id], to = inlineOut[n.Id];
+                int link;
+                EquipmentDef? fanDef = data.FindEquipment(n.PartId);
+                if (fanDef != null)
+                {
+                    link = g.AddFan(from, to, FanCurve.FromDef(fanDef), Units.MmToM(fanDef.ConnectionDiameterMm), n.On ? 1 : 0, $"{n.PartId}-n{n.Id}");
+                }
+                else
+                {
+                    FittingDef valve = data.Fitting(n.PartId);
+                    double theta = Math.Max(valve.MinOpening, Math.Min(1, n.Opening));
+                    link = g.AddValve(from, to, valve.K, Units.MmToM(d), theta, $"{n.PartId}-n{n.Id}");
+                }
+                g.Links[link].Temperature = airTemperatureK;
+                c.InlineLink[n.Id] = link;
             }
 
             // Outlets: vent grille → room (fixed 0 Pa), only when a duct reaches the outlet.
@@ -125,35 +176,10 @@ namespace HeadLoss.Game.Networks
             return c;
         }
 
-        /// <summary>Hop distance of every node from the nearest intake (flow direction for fitting K).</summary>
-        static Dictionary<int, int> DistanceFromIntake(DuctNetworkState net)
-        {
-            var dist = new Dictionary<int, int>();
-            var queue = new Queue<int>();
-            foreach (DuctNode n in net.Nodes)
-            {
-                if (n.Kind != DuctNodeKind.Intake) continue;
-                dist[n.Id] = 0;
-                queue.Enqueue(n.Id);
-            }
-            while (queue.Count > 0)
-            {
-                int u = queue.Dequeue();
-                foreach (DuctSegment s in net.Segments)
-                {
-                    if (s.NodeA != u && s.NodeB != u) continue;
-                    int v = s.Other(u);
-                    if (dist.ContainsKey(v)) continue;
-                    dist[v] = dist[u] + 1;
-                    queue.Enqueue(v);
-                }
-            }
-            return dist;
-        }
-
         static void AssignFittings(DuctNetworkState net, DataRepository data, CompiledNetwork c, Dictionary<int, int> segLink)
         {
-            Dictionary<int, int> dist = DistanceFromIntake(net);
+            // Flow direction for fitting K comes from hop distance to the intake (D9).
+            Dictionary<int, int> dist = DuctEditor.HopsFromIntake(net);
             FittingDef entry = data.Fitting("intake-entry");
             FittingDef sharp = data.Fitting("elbow-90-sharp");
             FittingDef smooth = data.Fitting("elbow-90-long-radius");
@@ -173,7 +199,7 @@ namespace HeadLoss.Game.Networks
                     Add(c, n.Id, FittingKind.Entry, entry.Id, entry.K, segLink[segs[0].Id]);
                     continue;
                 }
-                if (n.Kind != DuctNodeKind.Free || segs.Count < 2) continue;
+                if ((n.Kind != DuctNodeKind.Free && n.Kind != DuctNodeKind.Inline) || segs.Count < 2) continue;
 
                 // Upstream = the segment toward the intake (smallest distance at its far end; ties by id).
                 segs.Sort((p, q) =>
@@ -185,6 +211,11 @@ namespace HeadLoss.Game.Networks
                 TilePos pos = n.Pos;
                 TilePos upPos = net.FindNode(up.Other(n.Id))!.Pos;
 
+                if (n.Kind == DuctNodeKind.Inline)
+                {
+                    AddReducer(c, n.Id, reducer, up, segs[1], segLink);
+                    continue;
+                }
                 if (segs.Count == 2)
                 {
                     DuctSegment down = segs[1];

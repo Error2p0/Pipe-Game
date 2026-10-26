@@ -1,0 +1,219 @@
+{
+  "id": "small-house",
+  "displayName": "Small house",
+  "tier": 1,
+  "width": 10,
+  "height": 8,
+  "rooms": [
+    {
+      "id": "living",
+      "type": "living",
+      "x": 0,
+      "y": 0,
+      "width": 6,
+      "height": 4
+    },
+    {
+      "id": "kitchen",
+      "type": "kitchen",
+      "x": 6,
+      "y": 0,
+      "width": 4,
+      "height": 4
+    },
+    {
+      "id": "hall",
+      "type": "hall",
+      "x": 0,
+      "y": 4,
+      "width": 10,
+      "height": 1
+    },
+    {
+      "id": "bedroom-1",
+      "type": "bedroom",
+      "x": 0,
+      "y": 5,
+      "width": 5,
+      "height": 3
+    },
+    {
+      "id": "bedroom-2",
+      "type": "bedroom",
+      "x": 5,
+      "y": 5,
+      "width": 5,
+      "height": 3
+    }
+  ],
+  "doors": [
+    {
+      "x": 2,
+      "y": 3,
+      "side": "north"
+    },
+    {
+      "x": 7,
+      "y": 3,
+      "side": "north"
+    },
+    {
+      "x": 2,
+      "y": 4,
+      "side": "north"
+    },
+    {
+      "x": 7,
+      "y": 4,
+      "side": "north"
+    },
+    {
+      "x": 5,
+      "y": 1,
+      "side": "east"
+    }
+  ],
+  "entryOpenings": [
+    {
+      "id": "air-intake",
+      "utility": "air",
+      "x": 3,
+      "y": 0,
+      "facing": "south"
+    }
+  ],
+  "outlets": [
+    {
+      "id": "living-1",
+      "type": "air-supply-vent",
+      "x": 1,
+      "y": 1
+    },
+    {
+      "id": "living-2",
+      "type": "air-supply-vent",
+      "x": 4,
+      "y": 2
+    },
+    {
+      "id": "kitchen",
+      "type": "air-supply-vent",
+      "x": 8,
+      "y": 2
+    },
+    {
+      "id": "bedroom-1",
+      "type": "air-supply-vent",
+      "x": 2,
+      "y": 6
+    },
+    {
+      "id": "bedroom-2",
+      "type": "air-supply-vent",
+      "x": 7,
+      "y": 6
+    }
+  ],
+  "equipment": [],
+  "reference": {
+    "equipment": [
+      {
+        "equipmentId": "small-axial-fan",
+        "openingId": "air-intake",
+        "on": true
+      }
+    ],
+    "crankSpeed": 0,
+    "runs": [
+      {
+        "points": [
+          [
+            3,
+            0
+          ],
+          [
+            3,
+            2
+          ],
+          [
+            2,
+            2
+          ],
+          [
+            2,
+            4
+          ],
+          [
+            7,
+            4
+          ],
+          [
+            7,
+            6
+          ]
+        ],
+        "diameterMm": 160
+      },
+      {
+        "points": [
+          [
+            2,
+            4
+          ],
+          [
+            2,
+            6
+          ]
+        ],
+        "diameterMm": 100
+      },
+      {
+        "points": [
+          [
+            7,
+            4
+          ],
+          [
+            7,
+            3
+          ],
+          [
+            8,
+            3
+          ],
+          [
+            8,
+            2
+          ]
+        ],
+        "diameterMm": 160
+      },
+      {
+        "points": [
+          [
+            3,
+            1
+          ],
+          [
+            1,
+            1
+          ]
+        ],
+        "diameterMm": 80
+      },
+      {
+        "points": [
+          [
+            3,
+            2
+          ],
+          [
+            4,
+            2
+          ]
+        ],
+        "diameterMm": 80
+      }
+    ]
+  }
+}

@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace HeadLoss.Unity.Interaction
 {
-    public enum TargetKind { None, Segment, Node, Fan, Outlet }
+    public enum TargetKind { None, Segment, Node, Intake, Outlet, Inline }
 
     /// <summary>Something under the pointer or selected.</summary>
     public struct Target
@@ -16,7 +16,7 @@ namespace HeadLoss.Unity.Interaction
         public TargetKind Kind;
         /// <summary>Segment or node id.</summary>
         public int Id;
-        /// <summary>Opening id (fan) or outlet id.</summary>
+        /// <summary>Opening id (intake) or outlet id.</summary>
         public string Anchor;
 
         public static Target None => new Target { Kind = TargetKind.None, Anchor = "" };
@@ -25,8 +25,9 @@ namespace HeadLoss.Unity.Interaction
 
     /// <summary>
     /// Building-view pointer and keyboard logic: left-drag from the network draws an orthogonal run with a
-    /// live preview solve, a click selects, a drag on empty space box-selects, right/middle drag pans.
-    /// Everything that changes the building goes through commands.
+    /// live preview solve, a click selects, a drag on empty space box-selects, right/middle drag pans, and with
+    /// a part tool active a click on a straight duct places a damper or inline fan. Everything that changes the
+    /// building goes through commands.
     /// </summary>
     public sealed class BuildingInteraction
     {
@@ -49,6 +50,15 @@ namespace HeadLoss.Unity.Interaction
         public string DrawMaterialId;
         public bool DrawSmoothElbows;
 
+        /// <summary>Part being placed (fitting or equipment id), or "" when no part tool is active.</summary>
+        public string PlaceTool { get; private set; } = "";
+        /// <summary>Place the part (an inline fan) pointing toward the intake instead of away from it (R).</summary>
+        public bool PlaceReversed { get; private set; }
+        /// <summary>Tile under the pointer while a part tool is active, and whether the part fits there.</summary>
+        public TilePos PlaceTile { get; private set; }
+        public bool PlaceValid { get; private set; }
+        public bool PlaceHovering { get; private set; }
+
         /// <summary>Preview of the run being drawn (null when not drawing).</summary>
         public DrawPreview? Preview { get; private set; }
         public IReadOnlyList<TilePos> Path => _path;
@@ -59,8 +69,13 @@ namespace HeadLoss.Unity.Interaction
         public Target Hover { get; private set; } = Target.None;
         public Target Selected { get; private set; } = Target.None;
         public readonly HashSet<int> SelectedSegments = new HashSet<int>();
+        /// <summary>Tile where the selected segment was clicked ("add a part here").</summary>
+        public TilePos SelectedTile { get; private set; }
 
-        /// <summary>Bumped when hover, selection, the path or the preview change (the duct mesh rebuilds).</summary>
+        /// <summary>Esc with nothing to cancel: the player wants to leave the building.</summary>
+        public bool BackRequested;
+
+        /// <summary>Bumped when hover, selection, the path, the tool or the preview change (the duct mesh rebuilds).</summary>
         public int Revision { get; private set; }
 
         /// <summary>A short calm message for the hint line (empty = none).</summary>
@@ -79,6 +94,18 @@ namespace HeadLoss.Unity.Interaction
 
         static TilePos TileAt(Vector2 world) => new TilePos(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y));
 
+        /// <summary>Starts (or with the same id, stops) placing a part.</summary>
+        public void SetPlaceTool(string partId)
+        {
+            CancelGesture();
+            PlaceTool = PlaceTool == partId ? "" : partId;
+            PlaceReversed = false;
+            PlaceHovering = false;
+            if (PlaceTool.Length > 0) ClearSelection();
+            Hint = "";
+            Revision++;
+        }
+
         /// <summary>Per-frame update. <paramref name="pointerOverUi"/> blocks world interaction.</summary>
         public void Update(bool pointerOverUi, float dt)
         {
@@ -89,7 +116,8 @@ namespace HeadLoss.Unity.Interaction
             float scroll = _input.Scroll.ReadValue<Vector2>().y;
             if (!pointerOverUi && Mathf.Abs(scroll) > 0.01f) _camera.Zoom(Mathf.Sign(scroll), screen);
             _camera.KeyPan(_input.Pan.ReadValue<Vector2>(), dt);
-            bool panPress = (_input.Secondary.WasPressedThisFrame() && _mode != Mode.Drawing) || _input.Middle.WasPressedThisFrame();
+            bool secondaryCancels = _mode == Mode.Drawing || PlaceTool.Length > 0;
+            bool panPress = (_input.Secondary.WasPressedThisFrame() && !secondaryCancels) || _input.Middle.WasPressedThisFrame();
             if (panPress && !pointerOverUi)
             {
                 _panning = true;
@@ -105,14 +133,27 @@ namespace HeadLoss.Unity.Interaction
                 }
             }
 
-            // Cancel / delete.
+            // Cancel chain: gesture → part tool → selection → leave the building.
             if (_input.Cancel.WasPressedThisFrame())
             {
                 if (_mode == Mode.Drawing || _mode == Mode.BoxSelect) CancelGesture();
-                else ClearSelection();
+                else if (PlaceTool.Length > 0) SetPlaceTool(PlaceTool);
+                else if (Selected.Kind != TargetKind.None) ClearSelection();
+                else BackRequested = true;
             }
-            if (_mode == Mode.Drawing && _input.Secondary.WasPressedThisFrame()) CancelGesture();
+            if (_input.Secondary.WasPressedThisFrame())
+            {
+                if (_mode == Mode.Drawing) CancelGesture();
+                else if (PlaceTool.Length > 0) SetPlaceTool(PlaceTool);
+            }
             if (_input.Delete.WasPressedThisFrame()) DeleteSelection();
+            if (_input.Rotate.WasPressedThisFrame()) Rotate();
+
+            if (PlaceTool.Length > 0)
+            {
+                UpdatePlacing(pointerOverUi, world);
+                return;
+            }
 
             switch (_mode)
             {
@@ -131,6 +172,7 @@ namespace HeadLoss.Unity.Interaction
                     if (!_input.Primary.IsPressed())
                     {
                         Select(Pick(world));
+                        SelectedTile = TileAt(world);
                         _mode = Mode.Idle;
                         break;
                     }
@@ -171,6 +213,45 @@ namespace HeadLoss.Unity.Interaction
                     }
                     break;
             }
+        }
+
+        void UpdatePlacing(bool pointerOverUi, Vector2 world)
+        {
+            SetHover(Target.None);
+            TilePos tile = TileAt(world);
+            bool hovering = !pointerOverUi && _session.Layout.InFootprint(tile);
+            bool valid = hovering && DuctEditor.ValidateInline(_session.State.Air, tile) == DrawError.None;
+            if (hovering != PlaceHovering || tile != PlaceTile || valid != PlaceValid)
+            {
+                PlaceHovering = hovering;
+                PlaceTile = tile;
+                PlaceValid = valid;
+                Revision++;
+            }
+            string name = PartName(PlaceTool);
+            Hint = hovering && !valid ? DuctEditor.Describe(DrawError.NotOnStraightDuct)
+                : _session.Data.FindEquipment(PlaceTool) != null ? $"Click a straight duct to place the {name} · R turns it · Esc to stop"
+                : $"Click a straight duct to place a {name} · Esc to stop";
+            if (hovering && _input.Primary.WasPressedThisFrame())
+            {
+                var cmd = new PlaceInlineCommand(tile, PlaceTool, PlaceReversed);
+                if (_session.Execute(cmd)) Revision++;
+            }
+        }
+
+        string PartName(string id) =>
+            (_session.Data.FindEquipment(id)?.DisplayName ?? _session.Data.FindFitting(id)?.DisplayName ?? id).ToLowerInvariant();
+
+        void Rotate()
+        {
+            if (PlaceTool.Length > 0)
+            {
+                PlaceReversed = !PlaceReversed;
+                Revision++;
+                return;
+            }
+            if (Selected.Kind == TargetKind.Inline && _session.State.Air.FindNode(Selected.Id) is DuctNode n && _session.Data.FindEquipment(n.PartId) != null)
+                _session.Execute(new FlipInlineCommand(n.Id));
         }
 
         bool StartsOnNetwork(TilePos t) => DuctEditor.Occupancy(_session.State.Air).TryGetValue(t, out TileOccupant o) && !o.IsEmpty;
@@ -257,25 +338,37 @@ namespace HeadLoss.Unity.Interaction
 
         public void DeleteSelection()
         {
+            if (Selected.Kind == TargetKind.Inline)
+            {
+                _session.Execute(new RemoveInlineCommand(Selected.Id));
+                ClearSelection();
+                return;
+            }
             if (SelectedSegments.Count == 0) return;
             _session.Execute(new DeleteSegmentCommand(SelectedSegments));
             ClearSelection();
         }
 
-        /// <summary>Drops selection and hover that no longer exist after an edit.</summary>
+        /// <summary>Drops selection and hover that no longer exist after an edit (including undo).</summary>
         public void Validate()
         {
             DuctNetworkState net = _session.State.Air;
             int before = SelectedSegments.Count;
             SelectedSegments.RemoveWhere(id => net.FindSegment(id) == null);
             if (Selected.Kind == TargetKind.Segment && SelectedSegments.Count == 0 && before > 0) Selected = Target.None;
-            if (Selected.Kind == TargetKind.Node && net.FindNode(Selected.Id) == null) Selected = Target.None;
+            if ((Selected.Kind == TargetKind.Node || Selected.Kind == TargetKind.Inline) && !NodeIs(net, Selected)) Selected = Target.None;
             if (Hover.Kind == TargetKind.Segment && net.FindSegment(Hover.Id) == null) Hover = Target.None;
-            if (Hover.Kind == TargetKind.Node && net.FindNode(Hover.Id) == null) Hover = Target.None;
+            if ((Hover.Kind == TargetKind.Node || Hover.Kind == TargetKind.Inline) && !NodeIs(net, Hover)) Hover = Target.None;
             Revision++;
         }
 
-        /// <summary>What is under a world point: outlet or intake tile, then fittings, then ducts.</summary>
+        static bool NodeIs(DuctNetworkState net, Target t)
+        {
+            DuctNode? n = net.FindNode(t.Id);
+            return n != null && (t.Kind == TargetKind.Inline) == (n.Kind == DuctNodeKind.Inline);
+        }
+
+        /// <summary>What is under a world point: outlet or intake tile, then inline parts and fittings, then ducts.</summary>
         public Target Pick(Vector2 world)
         {
             TilePos tile = TileAt(world);
@@ -283,10 +376,15 @@ namespace HeadLoss.Unity.Interaction
                 if (o.X == tile.X && o.Y == tile.Y && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.4f)
                     return new Target { Kind = TargetKind.Outlet, Anchor = o.Id };
             foreach (EntryOpeningDef o in _session.Layout.EntryOpenings)
-                if (o.X == tile.X && o.Y == tile.Y && _session.State.EquipmentAt(o.Id) != null && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.45f)
-                    return new Target { Kind = TargetKind.Fan, Anchor = o.Id };
+                if (o.X == tile.X && o.Y == tile.Y && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.45f)
+                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id };
 
             DuctNetworkState net = _session.State.Air;
+            foreach (DuctNode n in net.Nodes)
+            {
+                if (n.Kind != DuctNodeKind.Inline) continue;
+                if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.38f) return new Target { Kind = TargetKind.Inline, Id = n.Id, Anchor = "" };
+            }
             foreach (DuctNode n in net.Nodes)
             {
                 if (n.Kind != DuctNodeKind.Free || net.Degree(n.Id) < 1) continue;

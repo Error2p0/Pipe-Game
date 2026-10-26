@@ -25,6 +25,8 @@ namespace HeadLoss.Core.Data.Defs
         public double ReverseK;
         /// <summary>Connection diameter used for the reverse-flow K and the initial guess, mm.</summary>
         public double ConnectionDiameterMm;
+        /// <summary>Purchase price, $.</summary>
+        public double Price;
         public string Notes = "";
     }
 

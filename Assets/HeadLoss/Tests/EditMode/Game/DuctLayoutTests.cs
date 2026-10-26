@@ -15,7 +15,8 @@ namespace HeadLoss.Game.Tests
         static DataRepository? _data;
         static DataRepository Data => _data ??= DataRepository.Load(new FileDataSource(System.IO.Path.Combine(Directory.GetCurrentDirectory(), "Assets", "HeadLoss", "Data")));
 
-        static BuildingSession TestHouse() => BuildingSession.OpenHandmade(Data, "test-house");
+        /// <summary>The test house with the Phase 1 small axial fan in place of the starter's hand crank.</summary>
+        static BuildingSession TestHouse() => GameTestUtil.TestHouseWithFan();
 
         /// <summary>Tiles from a to b through the given corners (orthogonal legs).</summary>
         static List<TilePos> Path(params (int x, int y)[] points)

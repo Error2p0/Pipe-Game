@@ -14,6 +14,7 @@ namespace HeadLoss.Unity.Interaction
         public readonly InputActionMap Touch = new InputActionMap("Touch");
 
         public readonly InputAction Point, Primary, Secondary, Middle, Scroll, Pan, Cancel, Delete, DebugOverlay, Plain;
+        public readonly InputAction Undo, Redo, Commit, Sheet, Crank, Rotate;
         public readonly InputAction[] HeatmapKeys = new InputAction[7];
 
         public BuildingInput()
@@ -30,6 +31,15 @@ namespace HeadLoss.Unity.Interaction
             Delete = MouseKeyboard.AddAction("Delete", InputActionType.Button, "<Keyboard>/delete");
             Delete.AddBinding("<Keyboard>/backspace");
             DebugOverlay = MouseKeyboard.AddAction("DebugOverlay", InputActionType.Button, "<Keyboard>/f3");
+            Undo = MouseKeyboard.AddAction("Undo", InputActionType.Button);
+            Undo.AddCompositeBinding("ButtonWithOneModifier").With("Modifier", "<Keyboard>/ctrl").With("Button", "<Keyboard>/z");
+            Redo = MouseKeyboard.AddAction("Redo", InputActionType.Button);
+            Redo.AddCompositeBinding("ButtonWithOneModifier").With("Modifier", "<Keyboard>/ctrl").With("Button", "<Keyboard>/y");
+            Commit = MouseKeyboard.AddAction("Commit", InputActionType.Button, "<Keyboard>/enter");
+            Commit.AddBinding("<Keyboard>/numpadEnter");
+            Sheet = MouseKeyboard.AddAction("RequirementSheet", InputActionType.Button, "<Keyboard>/tab");
+            Crank = MouseKeyboard.AddAction("Crank", InputActionType.Button, "<Keyboard>/c");
+            Rotate = MouseKeyboard.AddAction("Rotate", InputActionType.Button, "<Keyboard>/r");
             Plain = MouseKeyboard.AddAction("HeatmapPlain", InputActionType.Button, "<Keyboard>/0");
             Plain.AddBinding("<Keyboard>/backquote");
             Plain.AddBinding("<Keyboard>/numpad0");
