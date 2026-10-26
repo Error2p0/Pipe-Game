@@ -51,6 +51,10 @@ namespace HeadLoss.Unity.UI
         int _fittingLabelCount;
         VisualElement _debug = null!;
         Label _debugText = null!;
+        VisualElement _debugRows = null!;
+        readonly List<Label[]> _debugCells = new List<Label[]>();
+        static readonly string[] DebugHeader = { "link", "kind", "Q m³/h", "v m/s", "Re", "f", "ΣK", "Δp fr Pa", "Δp fit Pa", "p from Pa", "p to Pa" };
+        static readonly float[] DebugWidths = { 130, 50, 70, 60, 70, 64, 50, 76, 76, 80, 76 };
         public bool DebugAvailable { get; set; }
         bool _debugVisible;
 
@@ -192,7 +196,7 @@ namespace HeadLoss.Unity.UI
             legend.Add(_legendTicks);
 
             _readout = Panel("hl-readout");
-            _readoutTitle = Text(_readout, "", "hl-title");
+            _readoutTitle = Text(_readout, "", "hl-readout-title");
             for (int i = 0; i < ReadoutLines; i++) _lines[i] = Text(_readout, "", "hl-readout-line");
             _readoutActions = new VisualElement();
             _readoutActions.AddToClassList("hl-row");
@@ -203,11 +207,13 @@ namespace HeadLoss.Unity.UI
             _hint.pickingMode = PickingMode.Ignore;
 
             _debug = Panel("hl-debug");
-            var scroll = new ScrollView(ScrollViewMode.VerticalAndHorizontal);
-            scroll.style.flexGrow = 1;
             _debugText = new Label();
             _debugText.AddToClassList("hl-debug-text");
-            scroll.Add(_debugText);
+            _debug.Add(_debugText);
+            var scroll = new ScrollView(ScrollViewMode.VerticalAndHorizontal);
+            scroll.style.flexGrow = 1;
+            scroll.style.marginTop = 6;
+            _debugRows = scroll;
             _debug.Add(scroll);
             _debug.style.display = DisplayStyle.None;
 
@@ -585,7 +591,6 @@ namespace HeadLoss.Unity.UI
         void RefreshDebug()
         {
             NetworkSnapshot? snap = _s.Current;
-            _sb.Clear();
             if (snap == null)
             {
                 _debugText.text = "No solve yet";
@@ -593,19 +598,54 @@ namespace HeadLoss.Unity.UI
             }
             SolveResult r = snap.Result;
             NetworkGraph g = snap.Compiled.Graph;
+            _sb.Clear();
             _sb.Append($"Solver  converged {r.Converged} · iterations {r.Iterations} · residual {r.Residual:E2} · max imbalance {r.MaxImbalance:E2} m³/s\n");
-            _sb.Append($"        linear iterations {r.LinearIterations} · {r.SolveMilliseconds:0.000} ms · nodes {g.Nodes.Count} · links {g.Links.Count}{(_s.Settling ? " · SETTLING" : "")}\n\n");
-            _sb.Append(string.Format("{0,-22}{1,-6}{2,10}{3,8}{4,9}{5,8}{6,6}{7,9}{8,9}{9,9}{10,9}\n",
-                "link", "kind", "Q m³/h", "v m/s", "Re", "f", "ΣK", "Δp fr", "Δp fit", "p from", "p to"));
+            _sb.Append($"linear iterations {r.LinearIterations} · {r.SolveMilliseconds:0.000} ms · nodes {g.Nodes.Count} · links {g.Links.Count}{(_s.Settling ? " · SETTLING" : "")}");
+            _debugText.text = _sb.ToString();
+            DebugRow(0, DebugHeader);
+            var cells = new string[DebugHeader.Length];
             for (int k = 0; k < g.Links.Count; k++)
             {
                 NetworkLink l = g.Links[k];
-                if (!r.LinkActive[k]) { _sb.Append($"{l.Label,-22}{l.Kind,-6}  inactive\n"); continue; }
-                _sb.Append(string.Format("{0,-22}{1,-6}{2,10:0.0}{3,8:0.00}{4,9:0}{5,8:0.0000}{6,6:0.00}{7,9:0.00}{8,9:0.00}{9,9:0.00}{10,9:0.00}\n",
-                    l.Label, l.Kind, Units.M3sToM3h(r.Flow[k]), r.Velocity[k], r.Reynolds[k], r.FrictionFactor[k], l.SumK,
-                    r.DpFriction[k], l.Kind == LinkKind.Fan ? -r.DpDevice[k] : r.DpFittings[k], r.NodePressure[l.From], r.NodePressure[l.To]));
+                cells[0] = l.Label;
+                cells[1] = l.Kind.ToString();
+                bool on = r.LinkActive[k];
+                cells[2] = on ? Units.Number(Units.M3sToM3h(r.Flow[k]), 1) : "off";
+                cells[3] = on ? Units.Number(r.Velocity[k], 2) : "";
+                cells[4] = on ? Units.Number(r.Reynolds[k], 0) : "";
+                cells[5] = on ? Units.Number(r.FrictionFactor[k], 4) : "";
+                cells[6] = Units.Number(l.SumK, 2);
+                cells[7] = on ? Units.Number(r.DpFriction[k], 2) : "";
+                cells[8] = on ? Units.Number(l.Kind == LinkKind.Fan ? -r.DpDevice[k] : r.DpFittings[k], 2) : "";
+                cells[9] = Units.Number(r.NodePressure[l.From], 2);
+                cells[10] = Units.Number(r.NodePressure[l.To], 2);
+                DebugRow(k + 1, cells);
             }
-            _debugText.text = _sb.ToString();
+            for (int i = g.Links.Count + 1; i < _debugCells.Count; i++) _debugCells[i][0].parent.style.display = DisplayStyle.None;
+        }
+
+        void DebugRow(int index, string[] values)
+        {
+            if (index == _debugCells.Count)
+            {
+                var row = new VisualElement();
+                row.AddToClassList("hl-debug-row");
+                var labels = new Label[DebugHeader.Length];
+                for (int c = 0; c < labels.Length; c++)
+                {
+                    labels[c] = new Label();
+                    labels[c].AddToClassList("hl-debug-cell");
+                    labels[c].style.width = DebugWidths[c];
+                    if (c < 2) labels[c].style.unityTextAlign = TextAnchor.MiddleLeft;
+                    row.Add(labels[c]);
+                }
+                _debugRows.Add(row);
+                _debugCells.Add(labels);
+            }
+            Label[] cells = _debugCells[index];
+            cells[0].parent.style.display = DisplayStyle.Flex;
+            for (int c = 0; c < cells.Length; c++) cells[c].text = values[c];
+            if (index == 0) foreach (Label l in cells) l.style.unityFontStyleAndWeight = FontStyle.Bold;
         }
     }
 }

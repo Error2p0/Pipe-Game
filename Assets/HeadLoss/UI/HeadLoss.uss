@@ -124,11 +124,27 @@
 
 .hl-debug {
     position: absolute;
-    left: 320px; top: 16px; right: 380px; bottom: 120px;
+    left: 320px; top: 76px; right: 380px; bottom: 120px;
     font-size: 13px;
 }
 
 .hl-debug-text {
     white-space: nowrap;
     font-size: 13px;
+}
+
+.hl-debug-row {
+    flex-direction: row;
+}
+
+.hl-debug-cell {
+    font-size: 13px;
+    -unity-text-align: middle-right;
+    padding: 0 4px;
+}
+
+.hl-readout-title {
+    font-size: 19px;
+    -unity-font-style: bold;
+    white-space: normal;
 }

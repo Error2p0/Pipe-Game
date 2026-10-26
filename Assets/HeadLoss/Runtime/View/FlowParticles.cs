@@ -33,6 +33,7 @@ namespace HeadLoss.Unity.View
                 worldBounds = new Bounds(Vector3.zero, new Vector3(10000, 10000, 100)),
                 shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off,
                 receiveShadows = false,
+                sortingOrder = RenderLayers.Particles,
             };
             if (_matrices.Capacity < def.MaxParticles) _matrices.Capacity = def.MaxParticles;
         }

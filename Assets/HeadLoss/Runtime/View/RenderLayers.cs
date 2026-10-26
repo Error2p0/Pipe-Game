@@ -3,19 +3,20 @@ using UnityEngine;
 namespace HeadLoss.Unity.View
 {
     /// <summary>
-    /// Draw order of the flat layers. All layers use ZTest Always, so order comes from the material render
-    /// queue and the renderer sorting order, never from depth.
+    /// Draw order of the flat layers. All layers use ZTest Always, so order comes from the renderer sorting
+    /// order and the material render queue, never from depth. Mesh layers use negative orders because the 2D
+    /// renderer draws instanced particles at sorting order 0; that keeps particles on top.
     /// </summary>
     public static class RenderLayers
     {
-        public const int Building = 0;
-        public const int Ducts = 10;
-        public const int Overlay = 20;
-        public const int Equipment = 30;
-        public const int Particles = 40;
+        public const int Building = -40;
+        public const int Ducts = -30;
+        public const int Overlay = -20;
+        public const int Equipment = -10;
+        public const int Particles = 0;
 
-        /// <summary>Render queue for a layer (transparent range).</summary>
-        public static int Queue(int layer) => 3000 + layer;
+        /// <summary>Render queue for a layer (transparent range, increasing with the layer).</summary>
+        public static int Queue(int layer) => 3050 + layer;
 
         /// <summary>Adds a mesh renderer for <paramref name="mesh"/> on <paramref name="go"/> at the given layer.</summary>
         public static MeshRenderer Attach(GameObject go, Mesh mesh, Material material, int layer)

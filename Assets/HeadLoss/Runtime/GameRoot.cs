@@ -47,6 +47,13 @@ namespace HeadLoss.Unity
         /// <summary>Session solve revision the duct layer last rebuilt for.</summary>
         public int RenderedSolveRevision => _solveRev;
 
+        void Awake()
+        {
+            // UI text is English-only for now; format every number the same way as Core.Units (invariant).
+            System.Globalization.CultureInfo.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+            System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+        }
+
         void Start()
         {
             if (catalog == null || panelSettings == null || styleSheet == null || unlitShader == null)
