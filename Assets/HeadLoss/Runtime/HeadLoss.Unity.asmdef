@@ -1,0 +1,21 @@
+{
+  "name": "HeadLoss.Unity",
+  "rootNamespace": "HeadLoss.Unity",
+  "references": [
+    "HeadLoss.Core",
+    "HeadLoss.Sim",
+    "HeadLoss.Game",
+    "Unity.InputSystem",
+    "Unity.RenderPipelines.Core.Runtime",
+    "Unity.RenderPipelines.Universal.Runtime"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

@@ -1,0 +1,23 @@
+{
+  "displayName": "Head Loss",
+  "version": "0.1.0-phase1",
+  "theme": {
+    "paper": "#F4F1EA",
+    "gridLines": "#E3DED2",
+    "walls": "#3E4A57",
+    "text": "#1F2730",
+    "warning": "#C98A2E",
+    "danger": "#B5483A",
+    "roomFillAlpha": 0.08,
+    "roomFills": {
+      "bedroom": "#7B8FC7",
+      "living": "#5B9BB0",
+      "kitchen": "#C7A35B",
+      "bathroom": "#5BB0A2",
+      "hall": "#9A9A8A",
+      "corridor": "#9A9A8A",
+      "office": "#8A7BC7",
+      "storage": "#A08A6E"
+    }
+  }
+}

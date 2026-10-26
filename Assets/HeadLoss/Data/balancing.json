@@ -1,0 +1,64 @@
+{
+  "physics": {
+    "gravity": 9.80665,
+    "gasConstant": 8.314462618,
+    "atmosphericPressurePa": 101325,
+    "defaultAirTemperatureC": 20,
+    "laminarReynolds": 2300,
+    "turbulentReynolds": 4000
+  },
+  "solver": {
+    "maxIterations": 60,
+    "flowTolerance": 1e-6,
+    "massImbalanceTolerance": 1e-9,
+    "gMinFactor": 1e-6,
+    "zeroFlowThreshold": 1e-9,
+    "relaxation": 0.5,
+    "divergenceIterations": 3,
+    "initialVelocity": 1.0,
+    "resolveIntervalSeconds": 1.0,
+    "asyncThresholdMs": 1.0,
+    "pcgTolerance": 1e-13,
+    "pcgMaxIterations": 2000
+  },
+  "building": {
+    "floorHeight": 3.0,
+    "floorLayerOffset": 0.3,
+    "ceilingLayerOffset": 2.7,
+    "wallCavityLayerOffset": 1.5
+  },
+  "heatmap": {
+    "velocityAnchorMaxAir": 6.0,
+    "velocityAnchorMaxWater": 3.0,
+    "autoRangeStep": 1.0,
+    "defaultPalette": "viridis",
+    "palettes": {
+      "viridis": ["#440154", "#472D7B", "#3B528B", "#2C728E", "#21918C", "#28AE80", "#5EC962", "#ADDC30", "#FDE725"],
+      "cividis": ["#00224E", "#123570", "#3B496C", "#575D6D", "#707173", "#8A8779", "#A69D75", "#C4B56C", "#E4CF5B", "#FEE838"],
+      "magma": ["#000004", "#1C1033", "#4F127B", "#812581", "#B5367A", "#E55064", "#FB8761", "#FEC287", "#FCFDBF"]
+    }
+  },
+  "drawing": {
+    "defaultMaterial": "galvanized-duct",
+    "defaultDuctFamily": "round-duct",
+    "defaultDuctSizeMm": 125,
+    "maxNodeDegree": 3,
+    "ductDisplayWidthBase": 0.1,
+    "ductDisplayWidthFactor": 0.6
+  },
+  "particles": {
+    "spacingMetres": 0.5,
+    "speedFactor": 0.5,
+    "minSpeed": 0.15,
+    "maxSpeed": 3.0,
+    "minVisibleVelocity": 0.05,
+    "size": 0.06,
+    "maxParticles": 4000
+  },
+  "camera": {
+    "zoomMin": 2.5,
+    "zoomMax": 25,
+    "zoomStep": 1.12,
+    "keyPanSpeed": 1.0
+  }
+}

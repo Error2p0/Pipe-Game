@@ -1,0 +1,20 @@
+[
+  { "id": "elbow-90-sharp", "displayName": "Sharp 90° elbow", "model": "elbow", "tier": 1, "kDuct": 1.2, "kPipe": 0.9, "angleDegrees": 90, "smooth": false, "notes": "Auto-placed at every 90° turn by default" },
+  { "id": "elbow-90-long-radius", "displayName": "Long-radius 90° elbow", "model": "elbow", "tier": 2, "kDuct": 0.3, "kPipe": 0.3, "angleDegrees": 90, "smooth": true, "notes": "Drawing option once unlocked; Upgrade all bends button per network" },
+  { "id": "elbow-45-sharp", "displayName": "Sharp 45° elbow", "model": "elbow", "tier": 1, "kDuct": 0.4, "kPipe": 0.4, "angleDegrees": 45, "smooth": false, "notes": "Diagonal runs (tier 2+, 45° drawing mode)" },
+  { "id": "elbow-45-long", "displayName": "Long-radius 45° elbow", "model": "elbow", "tier": 2, "kDuct": 0.15, "kPipe": 0.15, "angleDegrees": 45, "smooth": true, "notes": "Diagonal runs (tier 2+, 45° drawing mode)" },
+  { "id": "tee-sharp", "displayName": "Sharp tee", "model": "tee", "tier": 1, "kRun": 0.4, "kBranch": 1.0, "smooth": false },
+  { "id": "tee-smooth", "displayName": "Smooth tee", "model": "tee", "tier": 2, "kRun": 0.2, "kBranch": 0.6, "smooth": true },
+  { "id": "reducer", "displayName": "Reducer", "model": "reducer", "tier": 1, "kContraction": 0.2, "notes": "Auto-placed at size changes; expansion K = (1 - A1/A2)^2" },
+  { "id": "intake-entry", "displayName": "Intake entry", "model": "fixed", "tier": 1, "k": 0.5, "notes": "At the air intake" },
+  { "id": "vent-grille", "displayName": "Vent grille", "model": "fixed", "tier": 1, "k": 2.0, "notes": "Outlet grille, referenced to the grille face" },
+  { "id": "shutoff-valve", "displayName": "Shutoff valve", "model": "valve", "tier": 2, "k": 0.2, "minOpening": 1.0 },
+  { "id": "ball-valve", "displayName": "Ball valve", "model": "valve", "tier": 3, "k": 0.05, "minOpening": 1.0 },
+  { "id": "balancing-valve", "displayName": "Balancing valve", "model": "valve", "tier": 2, "k": 6.0, "minOpening": 0.05, "notes": "K(θ) = K_open / θ²" },
+  { "id": "damper", "displayName": "Damper", "model": "valve", "tier": 1, "k": 0.3, "minOpening": 0.05, "notes": "K(θ) = K_open / θ²" },
+  { "id": "check-valve", "displayName": "Check valve", "model": "fixed", "tier": 2, "k": 2.0, "notes": "Blocks reverse flow" },
+  { "id": "fire-damper", "displayName": "Fire damper", "model": "fixed", "tier": 3, "k": 0.5, "notes": "Required where ducts cross fire walls" },
+  { "id": "backflow-preventer", "displayName": "Backflow preventer", "model": "fixed", "tier": 5, "k": 10.0, "notes": "Required by code at some connections" },
+  { "id": "filter-basic", "displayName": "Basic filter", "model": "filter", "tier": 3, "ratedPressureDropPa": 50 },
+  { "id": "filter-hepa", "displayName": "HEPA filter", "model": "filter", "tier": 5, "ratedPressureDropPa": 250, "notes": "Required for clean-air outlets" }
+]

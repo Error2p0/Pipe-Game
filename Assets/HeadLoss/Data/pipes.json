@@ -1,0 +1,33 @@
+[
+  {
+    "id": "round-duct",
+    "displayName": "Round duct",
+    "kind": "duct",
+    "sizes": [
+      { "diameterMm": 80, "capacityUnits": 1 },
+      { "diameterMm": 100, "capacityUnits": 1 },
+      { "diameterMm": 125, "capacityUnits": 2 },
+      { "diameterMm": 160, "capacityUnits": 2 },
+      { "diameterMm": 200, "capacityUnits": 2 },
+      { "diameterMm": 250, "capacityUnits": 3 },
+      { "diameterMm": 315, "capacityUnits": 3 },
+      { "diameterMm": 400, "capacityUnits": 4 },
+      { "diameterMm": 500, "capacityUnits": 4 }
+    ]
+  },
+  {
+    "id": "pipe",
+    "displayName": "Pipe",
+    "kind": "pipe",
+    "sizes": [
+      { "diameterMm": 15, "capacityUnits": 1 },
+      { "diameterMm": 22, "capacityUnits": 1 },
+      { "diameterMm": 28, "capacityUnits": 1 },
+      { "diameterMm": 35, "capacityUnits": 1 },
+      { "diameterMm": 42, "capacityUnits": 1 },
+      { "diameterMm": 54, "capacityUnits": 2 },
+      { "diameterMm": 76, "capacityUnits": 2 },
+      { "diameterMm": 108, "capacityUnits": 3 }
+    ]
+  }
+]

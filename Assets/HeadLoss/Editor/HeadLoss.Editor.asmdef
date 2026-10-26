@@ -1,0 +1,20 @@
+{
+  "name": "HeadLoss.Editor",
+  "rootNamespace": "HeadLoss.Editor",
+  "references": [
+    "HeadLoss.Core",
+    "HeadLoss.Sim",
+    "HeadLoss.Game",
+    "HeadLoss.Unity",
+    "HeadLoss.Unity.Jobs"
+  ],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

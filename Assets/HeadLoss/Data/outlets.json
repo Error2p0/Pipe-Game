@@ -1,0 +1,19 @@
+[
+  {
+    "id": "air-supply-vent",
+    "displayName": "Air supply vent",
+    "fluid": "air",
+    "measured": "flow",
+    "unit": "m3/h",
+    "codeMaxReason": "Noise",
+    "grille": "vent-grille",
+    "grilleFaceAreaM2": 0.04,
+    "tiers": {
+      "1": { "min": 25, "ideal": 35, "max": 60 },
+      "2": { "min": 30, "ideal": 45, "max": 75 },
+      "3": { "min": 40, "ideal": 60, "max": 90 },
+      "4": { "min": 60, "ideal": 90, "max": 140 },
+      "5": { "min": 80, "ideal": 120, "max": 180 }
+    }
+  }
+]

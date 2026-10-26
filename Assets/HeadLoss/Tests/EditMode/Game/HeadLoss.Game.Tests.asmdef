@@ -1,0 +1,14 @@
+{
+  "name": "HeadLoss.Game.Tests",
+  "rootNamespace": "HeadLoss.Game.Tests",
+  "references": ["HeadLoss.Core", "HeadLoss.Sim", "HeadLoss.Game", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll", "Newtonsoft.Json.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

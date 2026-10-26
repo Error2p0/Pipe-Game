@@ -1,0 +1,20 @@
+{
+  "name": "HeadLoss.Unity.Jobs",
+  "rootNamespace": "HeadLoss.Unity.Jobs",
+  "references": [
+    "HeadLoss.Core",
+    "HeadLoss.Sim",
+    "Unity.Burst",
+    "Unity.Collections",
+    "Unity.Mathematics"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": true,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
