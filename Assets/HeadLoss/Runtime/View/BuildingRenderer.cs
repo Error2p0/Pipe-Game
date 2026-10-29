@@ -5,19 +5,24 @@ using UnityEngine;
 namespace HeadLoss.Unity.View
 {
     /// <summary>
-    /// Static blueprint of the building, built once per building: a base mesh under the ducts (room fills,
-    /// grid, walls, intake louvres) and an overlay mesh above them (outlet grilles).
+    /// Static blueprint of the building, built once per building: a base mesh (room fills, grid) under the room
+    /// heatmap, a wall mesh above it (walls, doors, windows, intake louvres), and an overlay mesh above the ducts
+    /// (outlet grilles).
     /// </summary>
     public sealed class BuildingRenderer : MonoBehaviour
     {
         public const float WallThickness = 0.16f;
-        MeshBuilder? _mesh, _overlay;
+        MeshBuilder? _mesh, _walls, _overlay;
 
-        public void Build(BuildingLayout layout, ViewPalette palette, Material baseMaterial, Material overlayMaterial)
+        public void Build(BuildingLayout layout, ViewPalette palette, Material baseMaterial, Material wallMaterial, Material overlayMaterial)
         {
             _mesh ??= new MeshBuilder("Building");
+            _walls ??= new MeshBuilder("BuildingWalls");
             _overlay ??= new MeshBuilder("BuildingOverlay");
             RenderLayers.Attach(gameObject, _mesh.Mesh, baseMaterial, RenderLayers.Building);
+            var wallsGo = new GameObject("Walls");
+            wallsGo.transform.SetParent(transform, false);
+            RenderLayers.Attach(wallsGo, _walls.Mesh, wallMaterial, RenderLayers.Walls);
             var top = new GameObject("Grilles");
             top.transform.SetParent(transform, false);
             RenderLayers.Attach(top, _overlay.Mesh, overlayMaterial, RenderLayers.Overlay);
@@ -31,6 +36,9 @@ namespace HeadLoss.Unity.View
             const float g = 0.02f;
             for (int x = 1; x < layout.Width; x++) m.Rect(x - g, 0, x + g, layout.Height, 3.5f, palette.GridLines);
             for (int y = 1; y < layout.Height; y++) m.Rect(0, y - g, layout.Width, y + g, 3.5f, palette.GridLines);
+            m.Upload();
+            m = _walls;
+            m.Clear();
 
             // Exterior walls with a gap at each air intake.
             float t = WallThickness;

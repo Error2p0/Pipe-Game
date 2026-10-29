@@ -14,7 +14,7 @@ namespace HeadLoss.Unity.Interaction
         public readonly InputActionMap Touch = new InputActionMap("Touch");
 
         public readonly InputAction Point, Primary, Secondary, Middle, Scroll, Pan, Cancel, Delete, DebugOverlay, Plain;
-        public readonly InputAction Undo, Redo, Commit, Sheet, Crank, Rotate;
+        public readonly InputAction Undo, Redo, Commit, Sheet, Crank, Rotate, RoomLayer;
         public readonly InputAction[] HeatmapKeys = new InputAction[7];
 
         public BuildingInput()
@@ -40,6 +40,7 @@ namespace HeadLoss.Unity.Interaction
             Sheet = MouseKeyboard.AddAction("RequirementSheet", InputActionType.Button, "<Keyboard>/tab");
             Crank = MouseKeyboard.AddAction("Crank", InputActionType.Button, "<Keyboard>/c");
             Rotate = MouseKeyboard.AddAction("Rotate", InputActionType.Button, "<Keyboard>/r");
+            RoomLayer = MouseKeyboard.AddAction("RoomLayer", InputActionType.Button, "<Keyboard>/h");
             Plain = MouseKeyboard.AddAction("HeatmapPlain", InputActionType.Button, "<Keyboard>/0");
             Plain.AddBinding("<Keyboard>/backquote");
             Plain.AddBinding("<Keyboard>/numpad0");

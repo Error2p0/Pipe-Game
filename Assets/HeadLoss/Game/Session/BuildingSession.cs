@@ -9,6 +9,7 @@ using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Commands;
 using HeadLoss.Game.Economy;
 using HeadLoss.Game.Networks;
+using HeadLoss.Game.Thermal;
 using HeadLoss.Sim.Fluids;
 using HeadLoss.Sim.Network;
 
@@ -100,9 +101,15 @@ namespace HeadLoss.Game.Session
         /// <summary>Set each frame while the crank button or key is held.</summary>
         public bool CrankHeld { get; set; }
 
-        /// <summary>Air temperature in the ducts, K (until the thermal model exists).</summary>
-        public double AirTemperatureK { get; }
+        /// <summary>Outside air temperature now (the air the intake draws), K.</summary>
+        public double AirTemperatureK => Units.CToK(Climate.OutsideTemperatureC);
         public IFluidProperties Air { get; }
+        /// <summary>Outside conditions (shared by the city's buildings).</summary>
+        public Climate Climate { get; }
+        /// <summary>Rooms and duct temperatures (<c>05-simulation.md</c> §3–4).</summary>
+        public BuildingClimate Rooms { get; }
+        /// <summary>The building is open in the building view (full room grid rate, the design drives the rooms).</summary>
+        public bool IsOpen { get; set; }
 
         readonly SolverSettings _settings;
         /// <summary>One solver per state so each keeps its structure cache across drift re-solves.</summary>
@@ -114,7 +121,8 @@ namespace HeadLoss.Game.Session
         Task<(NetworkSnapshot design, NetworkSnapshot? committed)>? _pending;
 
         /// <param name="budgetCap">Budget cap when already known (generated buildings), $; else the auto-router computes it.</param>
-        public BuildingSession(DataRepository data, BuildingLayout layout, BuildingRecord record, GameState game, double? budgetCap = null)
+        /// <param name="climate">Outside conditions (a fixed default temperature when null: tests and tools).</param>
+        public BuildingSession(DataRepository data, BuildingLayout layout, BuildingRecord record, GameState game, double? budgetCap = null, Climate? climate = null)
         {
             Data = data;
             Layout = layout;
@@ -123,7 +131,8 @@ namespace HeadLoss.Game.Session
             _settings = SolverSettings.FromBalancing(data.Balancing);
             _designSolver = new NetworkSolver(_settings);
             _committedSolver = new NetworkSolver(_settings);
-            AirTemperatureK = Units.CToK(data.Balancing.Physics.DefaultAirTemperatureC);
+            Climate = climate ?? Climate.Fixed(data, data.Balancing.Physics.DefaultAirTemperatureC);
+            Rooms = new BuildingClimate(data, layout, Climate);
             Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, null, null);
@@ -210,8 +219,12 @@ namespace HeadLoss.Game.Session
 
         /// <summary>Compiles and solves a state with the given solver (pure; safe on a worker thread).</summary>
         NetworkSnapshot SolveState(BuildingState state, SolveResult? warmFrom, NetworkSolver solver, double crank)
+            => SolveState(state, warmFrom, solver, crank, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK);
+
+        NetworkSnapshot SolveState(BuildingState state, SolveResult? warmFrom, NetworkSolver solver, double crank, double outsideK,
+            IReadOnlyDictionary<int, double> segmentK, IReadOnlyDictionary<int, double> nodeK)
         {
-            CompiledNetwork compiled = NetworkCompiler.Compile(Layout, state, Data, AirTemperatureK, crank);
+            CompiledNetwork compiled = NetworkCompiler.Compile(Layout, state, Data, outsideK, crank, segmentK, nodeK);
             double[]? warm = warmFrom != null && warmFrom.TopologyKey == compiled.Graph.TopologyKey() ? warmFrom.Flow : null;
             var sw = Stopwatch.StartNew();
             SolveResult result = solver.Solve(compiled.Graph, Air, warm);
@@ -219,10 +232,11 @@ namespace HeadLoss.Game.Session
             return new NetworkSnapshot(compiled, result, state);
         }
 
-        (NetworkSnapshot, NetworkSnapshot?) SolveBoth(BuildingState design, BuildingState? committed, SolveResult? warmD, SolveResult? warmC, double crank)
+        (NetworkSnapshot, NetworkSnapshot?) SolveBoth(BuildingState design, BuildingState? committed, SolveResult? warmD, SolveResult? warmC, double crank,
+            double outsideK, IReadOnlyDictionary<int, double> segmentK, IReadOnlyDictionary<int, double> nodeK)
         {
-            NetworkSnapshot d = SolveState(design, warmD, _designSolver, crank);
-            NetworkSnapshot? c = committed != null ? SolveState(committed, warmC, _committedSolver, crank) : null;
+            NetworkSnapshot d = SolveState(design, warmD, _designSolver, crank, outsideK, segmentK, nodeK);
+            NetworkSnapshot? c = committed != null ? SolveState(committed, warmC, _committedSolver, crank, outsideK, segmentK, nodeK) : null;
             return (d, c);
         }
 
@@ -231,6 +245,7 @@ namespace HeadLoss.Game.Session
         public void Tick(double dt)
         {
             UpdateCrank(dt);
+            TickRooms(dt);
             _sinceSolve += dt;
             if (_pending != null)
             {
@@ -244,6 +259,14 @@ namespace HeadLoss.Game.Session
             StartSolve(async: _lastSolveMs > Data.Balancing.Solver.AsyncThresholdMs);
         }
 
+        /// <summary>Rooms and duct temperatures follow the design while the building is open, else what is built.</summary>
+        void TickRooms(double dt)
+        {
+            NetworkSnapshot? snap = IsOpen ? Current : CommittedSnapshot;
+            if (snap != null) Rooms.Index(snap.Compiled, snap.State.Air);
+            Rooms.Tick(dt, IsOpen, snap?.Compiled, snap?.Result);
+        }
+
         void StartSolve(bool async)
         {
             _dirty = false;
@@ -252,9 +275,11 @@ namespace HeadLoss.Game.Session
             BuildingState design = State.Clone();
             BuildingState? committed = HasPendingDesign ? Committed.Clone() : null;
             SolveResult? warmD = Current?.Result, warmC = CommittedSnapshot?.Result;
-            double crank = CrankSpeed;
-            if (async) _pending = Task.Run(() => SolveBoth(design, committed, warmD, warmC, crank));
-            else Accept(SolveBoth(design, committed, warmD, warmC, crank));
+            double crank = CrankSpeed, outsideK = AirTemperatureK;
+            // The thermal solve replaces these dictionaries rather than changing them, so a worker can read them.
+            IReadOnlyDictionary<int, double> segK = Rooms.SegmentTemperatureK, nodeK = Rooms.NodeTemperatureK;
+            if (async) _pending = Task.Run(() => SolveBoth(design, committed, warmD, warmC, crank, outsideK, segK, nodeK));
+            else Accept(SolveBoth(design, committed, warmD, warmC, crank, outsideK, segK, nodeK));
         }
 
         /// <summary>Solves immediately on the calling thread (tests, first frame).</summary>

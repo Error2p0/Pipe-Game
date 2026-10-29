@@ -46,10 +46,15 @@ Task list from `14-roadmap.md` §Phase 3:
 - [x] 2. City view rendering, plot hover difficulty hint, open building, online glow / offline grey.
 - [x] 3. Procedural building generation for tier 1–2 single-floor buildings, air only: footprint, rooms, doors, walls, outlets by room type, air intake, occupants, heat loads.
 - [x] 4. Auto-router + solvability check; reference layout; budget cap from it.
-- [ ] 5. Room grid CPU reference (velocity field, advection, diffusion, temperature, CO₂), Burst version, comparison test. Room heatmaps for velocity, temperature, density.
-- [ ] 6. Thermal model along ducts; outside temperature (climate), solar gain, occupants.
+- [x] 5. Room grid CPU reference (velocity field, advection, diffusion, temperature, CO₂), Burst version, comparison test. Room heatmaps for velocity, temperature, density.
+- [x] 6. Thermal model along ducts; outside temperature (climate), solar gain, occupants.
 - [x] 7. Tech unlocks (tier 1 → 2), upgrade shop with compare view. Centrifugal blower, EC fan, VSD (speed slider applies without Commit, D25), duct sizes, galvanized vs flex vs spiral, duct sealing, insulation.
 - [ ] 8. Offline earnings: catch-up algorithm, "While you were away" report, offline cap (offline time is already measured, D39).
 - [ ] 9. Steamworks.NET integration (app id 480 placeholder until the user provides one), Steam Cloud for saves, playtest build.
 - [ ] 10. Settings screen (audio, palette, UI scale, theme, reduce motion, keys).
-- [ ] Carry-over: the building list (D34) gives way to the city view; tune tier 2+ prices and base pay with the balancing report on generated buildings (D23, D36); retire the hand-made reference layouts as the auto-router takes over (D28).
+- [x] Carry-over (done: city view replaces the building list; tier 2 tuned with the report, D61; hand-made references retired, D45): the building list (D34) gives way to the city view; tune tier 2+ prices and base pay with the balancing report on generated buildings (D23, D36); retire the hand-made reference layouts as the auto-router takes over (D28).
+
+### Session notes (2026-10-29)
+
+- Done and merged: tasks 1–4 and 7; tasks 5–6 on branch `phase-3/room-grid` (committed, merge pending).
+- Next: task 8 (offline earnings), task 10 (settings), task 9 (Steamworks.NET, app id 480), then the phase end (10-minute session, build, report).

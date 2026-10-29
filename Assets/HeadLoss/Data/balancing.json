@@ -33,6 +33,16 @@
     "velocityAnchorMaxWater": 3.0,
     "autoRangeStep": 1.0,
     "defaultPalette": "viridis",
+    "roomVelocityAnchorMax": 1.0,
+    "pressureAnchorMaxAirPa": 20,
+    "pressureStepPa": 10,
+    "flowAnchorMaxM3h": 100,
+    "flowStepM3h": 50,
+    "temperatureAnchorC": [10, 30],
+    "temperatureStepK": 2,
+    "densityAnchor": [1.15, 1.25],
+    "densityStep": 0.01,
+    "roomAlpha": 0.55,
     "palettes": {
       "viridis": ["#440154", "#472D7B", "#3B528B", "#2C728E", "#21918C", "#28AE80", "#5EC962", "#ADDC30", "#FDE725"],
       "cividis": ["#00224E", "#123570", "#3B496C", "#575D6D", "#707173", "#8A8779", "#A69D75", "#C4B56C", "#E4CF5B", "#FEE838"],
@@ -136,5 +146,38 @@
   },
   "progression": {
     "unlockOnline": [2, 3, 3, 2]
+  },
+  "climate": {
+    "meanTemperatureC": 15,
+    "dailyAmplitudeK": 6,
+    "warmestHour": 15,
+    "solarPeakWm2": 300,
+    "facadeFactors": { "south": 1.0, "west": 0.8, "east": 0.6, "north": 0.2 },
+    "sunriseHour": 6,
+    "sunsetHour": 20,
+    "wallU": 0.6,
+    "occupantSensibleW": 70,
+    "occupantCo2Lps": 0.005,
+    "outdoorCo2Ppm": 420,
+    "outdoorO2": 0.209
+  },
+  "roomGrid": {
+    "cellSize": 0.5,
+    "eddyDiffusivity": 0.02,
+    "jetLength": 2.0,
+    "stratification": 0.5,
+    "layerMixing": 0.02,
+    "floorExchange": 0.1,
+    "thermalMassFactor": 5,
+    "sorIterations": 20,
+    "sorOmega": 1.6,
+    "layerSplitHeight": 1.5,
+    "roomHeight": 2.7,
+    "doorConductance": 0.05,
+    "facadeConductancePerM2": 0.0004,
+    "openHz": 10,
+    "backgroundHz": 0.2,
+    "backgroundStepFactor": 4,
+    "thermalHz": 1
   }
 }

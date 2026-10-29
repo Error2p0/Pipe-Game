@@ -5,6 +5,7 @@
     "HeadLoss.Core",
     "HeadLoss.Sim",
     "HeadLoss.Game",
+    "HeadLoss.Unity.Jobs",
     "Unity.InputSystem",
     "Unity.RenderPipelines.Core.Runtime",
     "Unity.RenderPipelines.Universal.Runtime"

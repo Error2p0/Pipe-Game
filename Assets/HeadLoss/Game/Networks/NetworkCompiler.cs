@@ -53,10 +53,15 @@ namespace HeadLoss.Game.Networks
     /// </summary>
     public static class NetworkCompiler
     {
-        /// <param name="airTemperatureK">Air temperature in the ducts, K.</param>
+        /// <param name="airTemperatureK">Outside air temperature (at the intake, and in ducts without a thermal result), K.</param>
         /// <param name="crankSpeed">Hand-crank speed fraction (0–1) for crank equipment.</param>
-        public static CompiledNetwork Compile(BuildingLayout layout, BuildingState state, DataRepository data, double airTemperatureK, double crankSpeed = 0)
+        /// <param name="segmentTemperatureK">Air temperature per duct segment from the thermal solve, K (density and viscosity).</param>
+        /// <param name="nodeTemperatureK">Air temperature per duct node from the thermal solve, K (vents, leaks, inline parts).</param>
+        public static CompiledNetwork Compile(BuildingLayout layout, BuildingState state, DataRepository data, double airTemperatureK, double crankSpeed = 0,
+            IReadOnlyDictionary<int, double>? segmentTemperatureK = null, IReadOnlyDictionary<int, double>? nodeTemperatureK = null)
         {
+            double SegT(int id) => segmentTemperatureK != null && segmentTemperatureK.TryGetValue(id, out double t) ? t : airTemperatureK;
+            double NodeT(int id) => nodeTemperatureK != null && nodeTemperatureK.TryGetValue(id, out double t) ? t : airTemperatureK;
             DuctNetworkState net = state.Air;
             var c = new CompiledNetwork();
             NetworkGraph g = c.Graph;
@@ -87,7 +92,7 @@ namespace HeadLoss.Game.Networks
                 TilePos a = na.Pos, b = nb.Pos;
                 int link = g.AddPipe(Endpoint(na, b), Endpoint(nb, a), a.ManhattanTo(b), Units.MmToM(s.DiameterMm),
                     Units.MmToM(mat.RoughnessMm), 0, $"s{s.Id}");
-                g.Links[link].Temperature = airTemperatureK;
+                g.Links[link].Temperature = SegT(s.Id);
                 segLink[s.Id] = link;
                 c.SegmentLink[s.Id] = link;
             }
@@ -138,7 +143,7 @@ namespace HeadLoss.Game.Networks
                     double theta = Math.Max(valve.MinOpening, Math.Min(1, n.Opening));
                     link = g.AddValve(from, to, valve.K, Units.MmToM(d), theta, $"{n.PartId}-n{n.Id}");
                 }
-                g.Links[link].Temperature = airTemperatureK;
+                g.Links[link].Temperature = NodeT(n.Id);
                 c.InlineLink[n.Id] = link;
             }
 
@@ -151,7 +156,7 @@ namespace HeadLoss.Game.Networks
                 FittingDef grille = data.Fitting(outlet.Grille);
                 int room = g.AddFixed(0, z, $"room-{n.AnchorId}");
                 int vent = g.AddVent(c.NodeIndex[n.Id], room, grille.K, outlet.GrilleFaceAreaM2, n.AnchorId);
-                g.Links[vent].Temperature = airTemperatureK;
+                g.Links[vent].Temperature = NodeT(n.Id);
                 c.OutletLink[n.AnchorId] = vent;
             }
 
@@ -175,7 +180,7 @@ namespace HeadLoss.Game.Networks
                 else continue;
                 int room = g.AddFixed(0, z, $"room-open-{n.Id}");
                 int link = g.AddVent(c.NodeIndex[n.Id], room, openEnd.K, area, $"open-n{n.Id}");
-                g.Links[link].Temperature = airTemperatureK;
+                g.Links[link].Temperature = NodeT(n.Id);
                 c.OpenEndLink[n.Id] = link;
             }
 
@@ -189,7 +194,8 @@ namespace HeadLoss.Game.Networks
                 int roomA = g.AddFixed(0, z, $"room-leak-{s.Id}a"), roomB = g.AddFixed(0, z, $"room-leak-{s.Id}b");
                 int la = g.AddLeak(g.Links[link].From, roomA, half, exponent, $"leak-s{s.Id}a");
                 int lb = g.AddLeak(g.Links[link].To, roomB, half, exponent, $"leak-s{s.Id}b");
-                g.Links[la].Temperature = g.Links[lb].Temperature = airTemperatureK;
+                g.Links[la].Temperature = NodeT(s.NodeA);
+                g.Links[lb].Temperature = NodeT(s.NodeB);
                 c.SegmentLeaks[s.Id] = (la, lb);
             }
 

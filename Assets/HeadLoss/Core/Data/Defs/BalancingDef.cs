@@ -22,6 +22,73 @@ namespace HeadLoss.Core.Data.Defs
         public AutoRouterDef AutoRouter = new AutoRouterDef();
         public DifficultyDef Difficulty = new DifficultyDef();
         public ProgressionDef Progression = new ProgressionDef();
+        public ClimateDef Climate = new ClimateDef();
+        public RoomGridDef RoomGrid = new RoomGridDef();
+    }
+
+    /// <summary>Outside conditions (<c>13-balancing.md</c> §Climate).</summary>
+    public sealed class ClimateDef
+    {
+        /// <summary>Mean outside temperature, °C.</summary>
+        public double MeanTemperatureC;
+        /// <summary>Daily swing (± around the mean), K.</summary>
+        public double DailyAmplitudeK;
+        /// <summary>Local hour of the warmest moment.</summary>
+        public double WarmestHour;
+        /// <summary>Solar gain at its peak, W per m² of window.</summary>
+        public double SolarPeakWm2;
+        /// <summary>Solar factor per facade (north, south, east, west).</summary>
+        public Dictionary<string, double> FacadeFactors = new Dictionary<string, double>();
+        /// <summary>Sun up between these local hours (solar gain follows a half sine in between).</summary>
+        public double SunriseHour;
+        public double SunsetHour;
+        /// <summary>Exterior wall U-value, W/(m²·K) (old buildings 1.2).</summary>
+        public double WallU;
+        /// <summary>Sensible heat per occupant, W (of 100 W total).</summary>
+        public double OccupantSensibleW;
+        /// <summary>CO₂ breathed out per occupant, L/s.</summary>
+        public double OccupantCo2Lps;
+        public double OutdoorCo2Ppm;
+        /// <summary>Oxygen volume fraction of fresh air.</summary>
+        public double OutdoorO2;
+    }
+
+    /// <summary>Room grid (<c>05-simulation.md</c> §3, <c>13-balancing.md</c> §Room grid).</summary>
+    public sealed class RoomGridDef
+    {
+        /// <summary>Cell size, m.</summary>
+        public double CellSize;
+        /// <summary>Eddy diffusivity D_t, m²/s.</summary>
+        public double EddyDiffusivity;
+        /// <summary>Vent jet decay length L_jet, m.</summary>
+        public double JetLength;
+        /// <summary>Buoyancy transfer k_b, 1/s.</summary>
+        public double Stratification;
+        /// <summary>Slow mixing between the two layers, 1/s.</summary>
+        public double LayerMixing;
+        /// <summary>Exchange between floors through stairwells and shafts k_v, 1/s.</summary>
+        public double FloorExchange;
+        /// <summary>Room heat capacity as a multiple of the air's (thermal mass).</summary>
+        public double ThermalMassFactor;
+        /// <summary>SOR iterations per step for the velocity potential.</summary>
+        public int SorIterations;
+        public double SorOmega;
+        /// <summary>Height of the lower layer, m (the upper one reaches the ceiling layer).</summary>
+        public double LayerSplitHeight;
+        /// <summary>Room air height (floor to ceiling layer), m.</summary>
+        public double RoomHeight;
+        /// <summary>Door opening conductance for the room balance, m³/s per Pa.</summary>
+        public double DoorConductance;
+        /// <summary>Exterior-wall leakage conductance, m³/s per Pa per m² of wall.</summary>
+        public double FacadeConductancePerM2;
+        /// <summary>Step rate in the open building, Hz.</summary>
+        public double OpenHz;
+        /// <summary>Step rate in buildings that are not open, Hz.</summary>
+        public double BackgroundHz;
+        /// <summary>Background steps use sub-steps this many times the open building's step.</summary>
+        public double BackgroundStepFactor;
+        /// <summary>Thermal (duct temperature) solve rate, Hz.</summary>
+        public double ThermalHz;
     }
 
     /// <summary>Tech unlocks (<c>03-city.md</c> §Progression).</summary>
@@ -144,6 +211,22 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>When values exceed the anchor, the range rounds up to this step, m/s.</summary>
         public double AutoRangeStep;
         public string DefaultPalette = "";
+        /// <summary>Room velocity scale (rooms move far slower than ducts), m/s.</summary>
+        public double RoomVelocityAnchorMax;
+        /// <summary>Pressure scale 0 → anchor, extended in steps, Pa.</summary>
+        public double PressureAnchorMaxAirPa;
+        public double PressureStepPa;
+        /// <summary>Flow rate scale 0 → anchor, extended in steps, m³/h.</summary>
+        public double FlowAnchorMaxM3h;
+        public double FlowStepM3h;
+        /// <summary>Temperature scale [min, max] widened in steps, °C.</summary>
+        public List<double> TemperatureAnchorC = new List<double>();
+        public double TemperatureStepK;
+        /// <summary>Density scale [min, max] widened in steps, kg/m³.</summary>
+        public List<double> DensityAnchor = new List<double>();
+        public double DensityStep;
+        /// <summary>Opacity of the room heatmap over the room fills.</summary>
+        public double RoomAlpha;
         /// <summary>Palette ramps as hex colour stops, evenly spaced.</summary>
         public Dictionary<string, List<string>> Palettes = new Dictionary<string, List<string>>();
     }

@@ -221,10 +221,16 @@ namespace HeadLoss.PlayMode.Tests
             Release(_keyboard.digit0Key);
             yield return null;
             Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode);
+            Press(_keyboard.digit7Key);
+            yield return null;
+            Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode, "unbuilt modes (stress, Phase 4) stay greyed out");
+            Release(_keyboard.digit7Key);
+            yield return null;
             Press(_keyboard.digit3Key);
             yield return null;
-            Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode, "unbuilt modes stay greyed out");
+            Assert.AreEqual(HeatmapMode.Flow, root.Heatmap.Mode, "flow rate is built");
             Release(_keyboard.digit3Key);
+            yield return null;
             Press(_keyboard.digit1Key);
             yield return null;
             Release(_keyboard.digit1Key);

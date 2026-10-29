@@ -16,6 +16,7 @@ namespace HeadLoss.Editor
         const string PanelPath = "Assets/HeadLoss/UI/HeadLossPanelSettings.asset";
         const string StylePath = "Assets/HeadLoss/UI/HeadLoss.uss";
         const string ShaderPath = "Assets/HeadLoss/Shaders/VertexColorUnlit.shader";
+        const string HeatmapShaderPath = "Assets/HeadLoss/Shaders/RoomHeatmap.shader";
         const string BootScene = "Assets/HeadLoss/Scenes/Boot.unity";
         const string MainScene = "Assets/HeadLoss/Scenes/Main.unity";
 
@@ -57,6 +58,7 @@ namespace HeadLoss.Editor
             so.FindProperty("panelSettings").objectReferenceValue = AssetDatabase.LoadAssetAtPath<PanelSettings>(PanelPath);
             so.FindProperty("styleSheet").objectReferenceValue = AssetDatabase.LoadAssetAtPath<StyleSheet>(StylePath);
             so.FindProperty("unlitShader").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Shader>(ShaderPath);
+            so.FindProperty("heatmapShader").objectReferenceValue = AssetDatabase.LoadAssetAtPath<Shader>(HeatmapShaderPath);
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorSceneManager.SaveScene(main, MainScene);
 

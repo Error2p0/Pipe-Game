@@ -29,6 +29,7 @@ namespace HeadLoss.Unity
         [SerializeField] PanelSettings? panelSettings;
         [SerializeField] StyleSheet? styleSheet;
         [SerializeField] Shader? unlitShader;
+        [SerializeField] Shader? heatmapShader;
 
         public const int Profile = 1;
 
@@ -51,6 +52,7 @@ namespace HeadLoss.Unity
         BuildingListScreen? _list;
         CityScene? _city;
         BuildingScene? _scene;
+        Jobs.BurstRoomGridStepper? _burstRooms;
         ShopScreen? _shop;
         Notice? _notice;
         readonly System.Collections.Generic.HashSet<BuildingSession> _online = new System.Collections.Generic.HashSet<BuildingSession>();
@@ -103,6 +105,10 @@ namespace HeadLoss.Unity
                 return m;
             }
             _materials.Building = Layer(RenderLayers.Building, "HeadLoss Building");
+            _materials.Walls = Layer(RenderLayers.Walls, "HeadLoss Walls");
+            Shader heat = heatmapShader != null ? heatmapShader : Shader.Find("HeadLoss/RoomHeatmap");
+            _materials.RoomHeat = new Material(heat) { name = "HeadLoss RoomHeat", renderQueue = RenderLayers.Queue(RenderLayers.RoomHeat) };
+            _ownedMaterials.Add(_materials.RoomHeat);
             _materials.Overlay = Layer(RenderLayers.Overlay, "HeadLoss Overlay");
             _materials.Ducts = Layer(RenderLayers.Ducts, "HeadLoss Ducts");
             _materials.Equipment = Layer(RenderLayers.Equipment, "HeadLoss Equipment");
@@ -237,7 +243,8 @@ namespace HeadLoss.Unity
             _city = null;
             _scene?.Dispose();
             BuildingSession s = _ctx!.Open(id);
-            _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild);
+            _burstRooms ??= new Jobs.BurstRoomGridStepper();
+            _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild, _burstRooms);
             GameContext ctx = _ctx;
             _scene.Hud.UnlockCondition = tier => Game.Progression.Tech.Condition(ctx.Data, ctx, tier);
             _topBar!.BringToFront();
@@ -347,6 +354,9 @@ namespace HeadLoss.Unity
         {
             if (_loop == null || _ctx == null) return;
             float dt = Time.deltaTime;
+            // Outside temperature and the sun follow the player's local clock (13-balancing.md §Climate).
+            DateTime now = DateTime.Now;
+            _ctx.Climate.LocalHour = now.Hour + now.Minute / 60.0 + now.Second / 3600.0;
             _loop.Tick(dt);
             if (_saving)
             {
@@ -440,6 +450,7 @@ namespace HeadLoss.Unity
         {
             _scene?.Dispose();
             _city?.Dispose();
+            _burstRooms?.Dispose();
             _input?.Dispose();
             foreach (Material m in _ownedMaterials) Destroy(m);
         }

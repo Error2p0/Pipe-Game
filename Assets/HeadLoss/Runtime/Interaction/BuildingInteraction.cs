@@ -77,6 +77,10 @@ namespace HeadLoss.Unity.Interaction
 
         /// <summary>Bumped when hover, selection, the path, the tool or the preview change (the duct mesh rebuilds).</summary>
         public int Revision { get; private set; }
+        /// <summary>Tile under the pointer (the room readout uses it when nothing else is hovered).</summary>
+        public TilePos PointerTile { get; private set; }
+        /// <summary>The pointer is over the HUD.</summary>
+        public bool PointerOverUi { get; private set; }
 
         /// <summary>A short calm message for the hint line (empty = none).</summary>
         public string Hint { get; private set; } = "";
@@ -111,6 +115,13 @@ namespace HeadLoss.Unity.Interaction
         {
             Vector2 screen = _input.PointerPosition;
             Vector2 world = _camera.ScreenToWorld(screen);
+            TilePos pointer = TileAt(world);
+            if (pointer != PointerTile || pointerOverUi != PointerOverUi)
+            {
+                PointerTile = pointer;
+                PointerOverUi = pointerOverUi;
+                Revision++;
+            }
 
             // Camera.
             float scroll = _input.Scroll.ReadValue<Vector2>().y;

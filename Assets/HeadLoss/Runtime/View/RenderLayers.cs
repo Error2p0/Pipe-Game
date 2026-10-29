@@ -10,6 +10,9 @@ namespace HeadLoss.Unity.View
     public static class RenderLayers
     {
         public const int Building = -40;
+        /// <summary>Room heatmap: over the room fills, under the walls.</summary>
+        public const int RoomHeat = -36;
+        public const int Walls = -33;
         public const int Ducts = -30;
         public const int Overlay = -20;
         public const int Equipment = -10;

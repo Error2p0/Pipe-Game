@@ -26,6 +26,8 @@ namespace HeadLoss.Game
         public BuildingSession? Building { get; private set; }
         /// <summary>What loading had to drop or repair (for the log).</summary>
         public IReadOnlyList<string> Notes => _notes;
+        /// <summary>Outside conditions for every building (the Unity layer sets the local hour).</summary>
+        public Thermal.Climate Climate { get; }
 
         readonly List<BuildingSession> _sessions = new List<BuildingSession>();
         readonly List<string> _notes = new List<string>();
@@ -40,6 +42,7 @@ namespace HeadLoss.Game
                 StarterSolvable = ok;
                 CityBuildings = new CityBuildings(data, City);
             }
+            Climate = City != null ? new Thermal.Climate(data, City.Modifiers) : Thermal.Climate.Fixed(data, data.Balancing.Physics.DefaultAirTemperatureC);
             SaveStore.Sanitize(game, data, _notes, FindLayout);
             foreach (BuildingRecord r in game.Buildings) _sessions.Add(CreateSession(r));
             if (game.CurrentBuildingId.Length > 0 && CanOpen(game.CurrentBuildingId)) Open(game.CurrentBuildingId);
@@ -78,7 +81,7 @@ namespace HeadLoss.Game
         {
             GeneratedBuilding? g = CityBuildings != null ? CityBuildings.Get(r.BuildingId) : null;
             BuildingLayout layout = g?.Layout ?? FindLayout(r.BuildingId)!;
-            return new BuildingSession(Data, layout, r, Game, g?.BudgetCap);
+            return new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate);
         }
 
         public BuildingSession? FindSession(string buildingId) => _sessions.Find(s => s.Record.BuildingId == buildingId);
@@ -111,7 +114,9 @@ namespace HeadLoss.Game
                 SessionCreated?.Invoke(s);
             }
             if (Building != null && Building != s) Building.Leave();
+            if (Building != null) Building.IsOpen = false;
             Building = s;
+            s.IsOpen = true;
             Game.CurrentBuildingId = buildingId;
             return s;
         }
@@ -120,6 +125,7 @@ namespace HeadLoss.Game
         public void Leave()
         {
             Building?.Leave();
+            if (Building != null) Building.IsOpen = false;
             Building = null;
             Game.CurrentBuildingId = "";
         }

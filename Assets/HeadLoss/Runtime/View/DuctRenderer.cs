@@ -65,7 +65,22 @@ namespace HeadLoss.Unity.View
                 neutral.a = 0.35f;
                 return neutral;
             }
-            return _palette!.Ramp(_heatmap.Palette, _heatmap.Normalise(snap.Result.Velocity[link]));
+            return _palette!.Ramp(_heatmap.Palette, _heatmap.Normalise(Value(_heatmap.Mode, snap, link)));
+        }
+
+        /// <summary>A duct link's value for a heatmap mode, in display units (m/s, Pa, m³/h, °C, kg/m³).</summary>
+        public static double Value(HeatmapMode mode, NetworkSnapshot snap, int link)
+        {
+            var r = snap.Result;
+            var g = snap.Compiled.Graph;
+            return mode switch
+            {
+                HeatmapMode.Pressure => 0.5 * (r.PressureFrom(g, link) + r.PressureTo(g, link)),
+                HeatmapMode.Flow => System.Math.Abs(Core.Units.M3sToM3h(r.Flow[link])),
+                HeatmapMode.Temperature => Core.Units.KToC(g.Links[link].Temperature),
+                HeatmapMode.Density => r.Density[link],
+                _ => System.Math.Abs(r.Velocity[link]),
+            };
         }
 
         /// <summary>Square ring just inside a tile (the symbol on the tile stays readable).</summary>

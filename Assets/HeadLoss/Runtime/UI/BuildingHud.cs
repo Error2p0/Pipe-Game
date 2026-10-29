@@ -77,7 +77,7 @@ namespace HeadLoss.Unity.UI
         public bool DebugAvailable { get; set; }
         bool _debugVisible;
 
-        int _solveRev = -1, _ixRev = -1, _hmRev = -1, _stateRev = -1;
+        int _solveRev = -1, _ixRev = -1, _hmRev = -1, _stateRev = -1, _roomsRev = -1;
         float _nextMoneyRefresh;
         string _shownActionsKey = "";
         Slider? _damperSlider;
@@ -360,6 +360,8 @@ namespace HeadLoss.Unity.UI
             bool ixChanged = _ix.Revision != _ixRev;
             bool hmChanged = _hm.Revision != _hmRev;
             bool stateChanged = _s.StateRevision != _stateRev;
+            bool roomsChanged = _s.Rooms.Revision != _roomsRev;
+            _roomsRev = _s.Rooms.Revision;
             _solveRev = _s.SolveRevision;
             _ixRev = _ix.Revision;
             _hmRev = _hm.Revision;
@@ -372,7 +374,7 @@ namespace HeadLoss.Unity.UI
             }
             if (solveChanged || stateChanged || hmChanged || ixChanged) RefreshTools();
             if (solveChanged || hmChanged) RefreshLegend();
-            if (solveChanged || ixChanged || stateChanged) RefreshReadout(stateChanged);
+            if (solveChanged || ixChanged || stateChanged || (roomsChanged && _ix.Hover.Kind == TargetKind.None)) RefreshReadout(stateChanged);
             if (solveChanged || ixChanged) RefreshFittingLabels();
             if (solveChanged || ixChanged || stateChanged) RefreshHint();
             if (solveChanged)
@@ -489,14 +491,24 @@ namespace HeadLoss.Unity.UI
                 _legendTexture.Apply();
                 _legendPalette = _hm.Palette;
             }
-            _legendTitle.text = "Velocity in ducts (m/s)";
+            string unit = HeatmapState.Unit(_hm.Mode);
+            string layer = HeatmapState.ColoursRooms(_hm.Mode) && _hm.Mode != HeatmapMode.Velocity
+                ? $" · rooms: {(_hm.Layer == RoomLayer.Max ? "warmer layer" : _hm.Layer == RoomLayer.Upper ? "upper layer" : "lower layer")} (H)" : "";
+            _legendTitle.text = _hm.Mode switch
+            {
+                HeatmapMode.Velocity => $"Velocity (m/s) · rooms 0–{Units.Number(_hm.RoomMax, 1)} m/s",
+                HeatmapMode.Pressure => "Pressure in ducts (Pa)",
+                HeatmapMode.Flow => "Flow rate in ducts (m³/h)",
+                _ => $"{HeatmapState.DisplayName(_hm.Mode)} ({unit}){layer}",
+            };
             _legendBar.style.backgroundColor = StyleKeyword.None;
             _legendBar.style.backgroundImage = new StyleBackground(_legendTexture);
             _legendTicks.style.display = DisplayStyle.Flex;
             _lock.style.display = DisplayStyle.Flex;
-            _legendMin.text = "0";
-            _legendMid.text = Units.Number(_hm.RangeMax / 2, 1);
-            _legendMax.text = Units.Number(_hm.RangeMax, 1) + " m/s";
+            int digits = _hm.Mode == HeatmapMode.Density ? 3 : _hm.Mode == HeatmapMode.Flow || _hm.Mode == HeatmapMode.Pressure ? 0 : 1;
+            _legendMin.text = Units.Number(_hm.RangeMin, digits);
+            _legendMid.text = Units.Number((_hm.RangeMin + _hm.RangeMax) / 2, digits);
+            _legendMax.text = Units.Number(_hm.RangeMax, digits) + " " + unit;
             _lock.text = _hm.Locked ? "Unlock range" : "Lock range";
             StyleButton(_lock, _hm.Locked);
         }
@@ -540,8 +552,14 @@ namespace HeadLoss.Unity.UI
                 case TargetKind.Outlet: lines = OutletReadout(t.Anchor, lines); break;
                 case TargetKind.Inline: lines = InlineReadout(t.Id, snap, lines); break;
             }
+            bool room = false;
+            if (t.Kind == TargetKind.None && !_ix.PointerOverUi && _s.Layout.RoomOf(_ix.PointerTile) is RoomDef r)
+            {
+                room = true;
+                lines = RoomReadout(r, lines);
+            }
             for (int i = lines; i < ReadoutLines; i++) _lines[i].style.display = DisplayStyle.None;
-            _readout.style.display = t.Kind == TargetKind.None ? DisplayStyle.None : DisplayStyle.Flex;
+            _readout.style.display = t.Kind == TargetKind.None && !room ? DisplayStyle.None : DisplayStyle.Flex;
 
             string key = actions ? ActionsKey(t) : "";
             if (key != _shownActionsKey)
@@ -715,6 +733,21 @@ namespace HeadLoss.Unity.UI
             i = Line(i, $"Flow  {Units.FormatAirFlow(System.Math.Abs(r.Flow[k]))}");
             i = Line(i, $"Pressure lost  {Units.FormatPa(System.Math.Abs(r.DpFittings[k]))}");
             return Line(i, "Drag the Open slider to send air to other branches. Changing the opening is free and works at once, no Commit needed. To put the damper somewhere else, Remove it and place a new one.");
+        }
+
+        /// <summary>The room under the pointer: its air from the room grid (<c>05-simulation.md</c> §3.2).</summary>
+        int RoomReadout(RoomDef r, int i)
+        {
+            int index = -1;
+            for (int k = 0; k < _s.Layout.Rooms.Count; k++) if (_s.Layout.Rooms[k] == r) index = k;
+            RoomTypeDef? type = _data.FindRoomType(r.Type);
+            _readoutTitle.text = $"{type?.DisplayName ?? r.Type} · {r.Width * r.Height} m²";
+            if (index < 0 || index >= _s.Rooms.Rooms.Length) return i;
+            Sim.Rooms.RoomSummary sum = _s.Rooms.Rooms[index];
+            i = Line(i, $"Air  {sum.MeanTemperature:0.0} °C · outside {_s.Climate.OutsideTemperatureC:0.0} °C");
+            i = Line(i, $"CO₂  {sum.Co2Ppm:0} ppm · {sum.AirChangesPerHour:0.0} air changes per hour");
+            if (r.Occupants > 0) i = Line(i, $"{r.Occupants:0.#} {(r.Occupants == 1 ? "person" : "people")} · {r.Occupants * _data.Balancing.Climate.OccupantSensibleW + r.MachinesW:0} W of heat");
+            return i;
         }
 
         int OutletReadout(string outletId, int i)

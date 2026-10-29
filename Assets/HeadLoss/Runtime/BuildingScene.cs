@@ -28,6 +28,9 @@ namespace HeadLoss.Unity
         readonly BuildingRenderer _building;
         readonly FlowParticles _particles;
         readonly EquipmentLayer _equipment;
+        readonly RoomHeatmapRenderer _rooms;
+        readonly ViewPalette _palette;
+        readonly Sim.Rooms.IRoomGridStepper _previousStepper;
         readonly HeatmapState _heatmap;
         readonly BuildingInput _input;
         int _stateRev = -1, _solveRev = -1, _ixRev = -1, _hmRev = -1;
@@ -35,15 +38,21 @@ namespace HeadLoss.Unity
         /// <summary>HUD screen-fraction insets (left, right, top, bottom) at the 1920×1080 reference.</summary>
         public static readonly Vector4 HudInsets = new Vector4(310f / 1920f, 400f / 1920f, 190f / 1080f, 90f / 1080f);
 
+        /// <param name="roomStepper">Room grid stepper for the open building (the Burst one), or null for the CPU reference.</param>
         public BuildingScene(BuildingSession session, Materials materials, ViewPalette palette, UiKit ui, HeatmapState heatmap,
-            CameraController camera, BuildingInput input, VisualElement uiRoot, bool debugAvailable)
+            CameraController camera, BuildingInput input, VisualElement uiRoot, bool debugAvailable, Sim.Rooms.IRoomGridStepper? roomStepper = null)
         {
             Session = session;
             _heatmap = heatmap;
             _input = input;
+            _palette = palette;
+            _previousStepper = session.Rooms.Stepper;
+            if (roomStepper != null) session.Rooms.Stepper = roomStepper;
             _root = new GameObject("Building " + session.Layout.Id);
             _building = Child<BuildingRenderer>("Blueprint");
-            _building.Build(session.Layout, palette, materials.Building, materials.Overlay);
+            _building.Build(session.Layout, palette, materials.Building, materials.Walls, materials.Overlay);
+            _rooms = Child<RoomHeatmapRenderer>("RoomHeatmap");
+            _rooms.Init(materials.RoomHeat, session.Rooms.Grid, session.Layout.Width, session.Layout.Height);
             Ducts = Child<DuctRenderer>("Ducts");
             Ducts.Init(palette, heatmap, session.Data.Balancing.Drawing, materials.Ducts);
             _particles = Child<FlowParticles>("Particles");
@@ -78,6 +87,7 @@ namespace HeadLoss.Unity
             for (int i = 0; i < _input.HeatmapKeys.Length; i++)
                 if (_input.HeatmapKeys[i].WasPressedThisFrame()) _heatmap.SetMode((HeatmapMode)(i + 1));
             if (_input.DebugOverlay.WasPressedThisFrame()) Hud.ToggleDebug();
+            if (_input.RoomLayer.WasPressedThisFrame()) _heatmap.CycleLayer();
             if (_input.Undo.WasPressedThisFrame()) s.Undo();
             if (_input.Redo.WasPressedThisFrame()) s.Redo();
             if (_input.Commit.WasPressedThisFrame()) s.Execute(new Game.Commands.CommitDesignCommand());
@@ -88,6 +98,7 @@ namespace HeadLoss.Unity
             if (s.StateRevision != _stateRev) Interaction.Validate();
             _equipment.Sync(s.Layout, s.State);
             UpdateHeatmapRange();
+            _rooms.Refresh(s.Rooms, _heatmap, _palette, (float)s.Data.Balancing.Heatmap.RoomAlpha);
             RebuildDuctsIfNeeded();
             Hud.Update(time);
         }
@@ -106,13 +117,36 @@ namespace HeadLoss.Unity
             _equipment.Animate(Session, Session.Data.Balancing.Particles.FanSpinDegreesPerM3h);
         }
 
+        /// <summary>The scale follows the building: ducts (and rooms, for modes that colour them).</summary>
         void UpdateHeatmapRange()
         {
             NetworkSnapshot? snap = Session.Current;
-            if (snap == null) return;
-            double max = 0;
-            foreach (var kv in snap.Compiled.SegmentLink) max = System.Math.Max(max, System.Math.Abs(snap.Result.Velocity[kv.Value]));
-            _heatmap.AutoRange(max);
+            if (snap == null || _heatmap.Mode == HeatmapMode.Plain) return;
+            double min = double.MaxValue, max = double.MinValue, roomMax = 0;
+            foreach (var kv in snap.Compiled.SegmentLink)
+            {
+                double v = DuctRenderer.Value(_heatmap.Mode, snap, kv.Value);
+                min = System.Math.Min(min, v);
+                max = System.Math.Max(max, v);
+            }
+            if (HeatmapState.ColoursRooms(_heatmap.Mode))
+            {
+                Game.Thermal.BuildingClimate rooms = Session.Rooms;
+                int n = rooms.Grid.Cells;
+                for (int c = 0; c < rooms.Grid.NX * rooms.Grid.NY; c++)
+                {
+                    if (rooms.Grid.Room[c] < 0) continue;
+                    double v = RoomHeatmapRenderer.Value(rooms, _heatmap, c, n);
+                    if (_heatmap.Mode == HeatmapMode.Velocity) roomMax = System.Math.Max(roomMax, v);
+                    else
+                    {
+                        min = System.Math.Min(min, v);
+                        max = System.Math.Max(max, v);
+                    }
+                }
+            }
+            if (min > max) return;
+            _heatmap.AutoRange(min, max, roomMax);
         }
 
         void RebuildDuctsIfNeeded()
@@ -176,6 +210,8 @@ namespace HeadLoss.Unity
 
         public void Dispose()
         {
+            if (Session.Rooms.Stepper is Jobs.BurstRoomGridStepper burst) burst.Release(Session.Rooms.State);
+            Session.Rooms.Stepper = _previousStepper;
             Session.Leave();
             Hud.Dispose();
             Object.Destroy(_root);
@@ -185,6 +221,6 @@ namespace HeadLoss.Unity
     /// <summary>The flat-layer materials shared by every building view.</summary>
     public sealed class Materials
     {
-        public Material Building = null!, Overlay = null!, Ducts = null!, Equipment = null!, Particles = null!;
+        public Material Building = null!, Walls = null!, RoomHeat = null!, Overlay = null!, Ducts = null!, Equipment = null!, Particles = null!;
     }
 }
