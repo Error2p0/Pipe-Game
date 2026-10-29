@@ -51,6 +51,8 @@ namespace HeadLoss.Unity
         BuildingListScreen? _list;
         CityScene? _city;
         BuildingScene? _scene;
+        ShopScreen? _shop;
+        Notice? _notice;
         readonly System.Collections.Generic.HashSet<BuildingSession> _online = new System.Collections.Generic.HashSet<BuildingSession>();
         readonly Materials _materials = new Materials();
         readonly System.Collections.Generic.List<Material> _ownedMaterials = new System.Collections.Generic.List<Material>();
@@ -70,6 +72,7 @@ namespace HeadLoss.Unity
         public bool InBuildingList => _screen == ScreenKind.List;
         public bool InCity => _screen == ScreenKind.City;
         public CityScene? City => _city;
+        public ShopScreen? Shop => _shop;
 
         void Awake()
         {
@@ -179,7 +182,9 @@ namespace HeadLoss.Unity
             _online.Clear();
             foreach (BuildingSession s in _ctx.Sessions) Hook(s);
             _ctx.SessionCreated += Hook;
+            _ctx.TierUnlocked += OnTierUnlocked;
             _topBar = new TopBar(_uiRoot!, _ui!, _ctx);
+            _notice = new Notice(_uiRoot!, _ui!);
             if (_ctx.Building != null) OpenBuilding(_ctx.Building.Record.BuildingId);
             else if (_ctx.City != null) ShowCity();
             else ShowList();
@@ -233,6 +238,8 @@ namespace HeadLoss.Unity
             _scene?.Dispose();
             BuildingSession s = _ctx!.Open(id);
             _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild);
+            GameContext ctx = _ctx;
+            _scene.Hud.UnlockCondition = tier => Game.Progression.Tech.Condition(ctx.Data, ctx, tier);
             _topBar!.BringToFront();
             _screen = ScreenKind.Building;
         }
@@ -254,6 +261,9 @@ namespace HeadLoss.Unity
             _list = null;
             _city?.Dispose();
             _city = null;
+            CloseShop();
+            _notice?.Root.RemoveFromHierarchy();
+            _notice = null;
             _topBar?.Root.RemoveFromHierarchy();
             _topBar = null;
             _ctx = null;
@@ -268,6 +278,27 @@ namespace HeadLoss.Unity
 #else
             Application.Quit();
 #endif
+        }
+
+        // ---------- shop and notices ----------
+
+        void OpenShop()
+        {
+            CloseShop();
+            _shop = new ShopScreen(_uiRoot!, _ui!, _ctx!, _scene?.Session, CloseShop);
+            _topBar?.BringToFront();
+        }
+
+        void CloseShop()
+        {
+            _shop?.Dispose();
+            _shop = null;
+        }
+
+        void OnTierUnlocked(int tier)
+        {
+            _audio?.PlayChime();
+            _notice?.Show($"Tier {tier} unlocked · new equipment, sizes and upgrades in the shop", Time.unscaledTime);
         }
 
         // ---------- events ----------
@@ -322,8 +353,22 @@ namespace HeadLoss.Unity
                 _sinceSave += dt;
                 if (_sinceSave >= _data!.Balancing.Save.AutosaveSeconds) SaveNow();
             }
+            _notice?.Update(Time.unscaledTime);
+            if (_shop != null)
+            {
+                // The shop is modal: Esc closes it, the scenes wait.
+                if (_input!.Cancel.WasPressedThisFrame()) CloseShop();
+                _topBar?.Update(Time.unscaledTime);
+                return;
+            }
             if (_scene != null)
             {
+                if (_scene.Hud.ShopRequested)
+                {
+                    _scene.Hud.ShopRequested = false;
+                    OpenShop();
+                    return;
+                }
                 _scene.Update(dt, Time.unscaledTime);
                 if (_scene.ConsumeBack())
                 {
@@ -344,6 +389,12 @@ namespace HeadLoss.Unity
                 if (_city.ConsumeMenu())
                 {
                     ShowMenu();
+                    return;
+                }
+                if (_city.Hud.ShopRequested)
+                {
+                    _city.Hud.ShopRequested = false;
+                    OpenShop();
                     return;
                 }
             }

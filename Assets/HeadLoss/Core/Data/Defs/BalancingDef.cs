@@ -21,6 +21,14 @@ namespace HeadLoss.Core.Data.Defs
         public TargetsDef Targets = new TargetsDef();
         public AutoRouterDef AutoRouter = new AutoRouterDef();
         public DifficultyDef Difficulty = new DifficultyDef();
+        public ProgressionDef Progression = new ProgressionDef();
+    }
+
+    /// <summary>Tech unlocks (<c>03-city.md</c> §Progression).</summary>
+    public sealed class ProgressionDef
+    {
+        /// <summary>Buildings of tier N online at the same time to unlock tier N + 1 (index N − 1).</summary>
+        public List<int> UnlockOnline = new List<int>();
     }
 
     /// <summary>The 1–5 dot difficulty estimate on a plot's hover (<c>03-city.md</c> §Difficulty hint).</summary>

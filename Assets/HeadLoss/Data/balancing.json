@@ -76,7 +76,7 @@
     "refundFraction": 0.5,
     "startingWallet": 40,
     "tickHz": 10,
-    "basePay": [0.05, 0.9, 5, 30, 180],
+    "basePay": [0.05, 0.2, 5, 30, 180],
     "tierFactor": [1, 5, 25, 125, 625],
     "electricityTierFactor": [1, 1, 3, 10, 30]
   },
@@ -133,5 +133,8 @@
     "pathReferenceMetres": 12,
     "floorWeight": 1.0,
     "codeWeight": 0.25
+  },
+  "progression": {
+    "unlockOnline": [2, 3, 3, 2]
   }
 }

@@ -33,6 +33,7 @@ namespace HeadLoss.Unity.UI
         /// <summary>The player asked to open this plot's building (consumed by the scene).</summary>
         public string? OpenRequested;
         public bool MenuRequested;
+        public bool ShopRequested;
 
         public CityHud(VisualElement root, UiKit ui, GameContext ctx, CameraController camera)
         {
@@ -68,6 +69,7 @@ namespace HeadLoss.Unity.UI
             bottom.AddToClassList("hl-citymenu");
             _layer.Add(bottom);
             ui.Button(bottom, "Menu", () => MenuRequested = true);
+            ui.Button(bottom, "Shop", () => ShopRequested = true);
         }
 
         public void Dispose() => _layer.RemoveFromHierarchy();

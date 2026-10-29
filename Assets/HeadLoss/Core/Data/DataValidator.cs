@@ -12,7 +12,7 @@ namespace HeadLoss.Core.Data
         static readonly HashSet<string> MaterialKinds = new HashSet<string> { "duct", "pipe" };
         static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "filter" };
         static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable" };
-        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline" };
+        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon" };
         static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };
         static readonly HashSet<string> Utilities = new HashSet<string> { "air", "water", "gas", "heating", "power" };
@@ -36,6 +36,8 @@ namespace HeadLoss.Core.Data
             ValidateHandmade(data, errors);
             ValidateCity(data, errors);
             ValidateBuildings(data, errors);
+            ValidateUpgrades(data, errors);
+            if (data.Balancing.Progression.UnlockOnline.Count != 4) errors.Add("balancing.json: progression.unlockOnline needs 4 entries (tier 1→2 … 4→5)");
             return errors;
         }
 
@@ -71,8 +73,6 @@ namespace HeadLoss.Core.Data
             Colour("game.json theme.danger", t.Danger, errors);
             Colour("game.json theme.good", t.Good, errors);
             if (string.IsNullOrWhiteSpace(data.Game.CurrencySymbol)) errors.Add("game.json: currencySymbol is empty");
-            foreach (string id in data.Game.Toolbox.IntakeEquipment)
-                if (data.FindEquipment(id)?.Placement != "intake") errors.Add($"game.json toolbox: '{id}' is not intake equipment");
             foreach (string id in data.Game.Toolbox.Parts)
             {
                 bool fan = data.FindEquipment(id)?.Placement == "inline";
@@ -310,9 +310,15 @@ namespace HeadLoss.Core.Data
                 if (e.Footprint.Width < 1 || e.Footprint.Height < 1) errors.Add($"{w}: footprint must be ≥ 1×1");
                 foreach (string fl in e.Fluids)
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
+                if (e.Price < 0) errors.Add($"{w}: price negative");
+                if (e.Placement == "addon")
+                {
+                    if (!(e.EfficiencyFactor > 0 && e.EfficiencyFactor <= 1)) errors.Add($"{w}: efficiencyFactor must be in (0, 1]");
+                    if (e.FitsCategories.Count == 0) errors.Add($"{w}: add-on fits no category");
+                    continue;
+                }
                 Positive(w + " connectionDiameterMm", e.ConnectionDiameterMm, errors);
                 Positive(w + " reverseK", e.ReverseK, errors);
-                if (e.Price < 0) errors.Add($"{w}: price negative");
                 ValidateCurve(w, e, errors);
             }
         }
@@ -516,6 +522,27 @@ namespace HeadLoss.Core.Data
             BuildingGenerationDef g = b.Generation;
             if (g.MinRoomSide < 1 || g.WindowSpacing < 1 || g.SolvabilityAttempts < 1) errors.Add($"{w}: generation ranges invalid");
             foreach (string f in g.PhaseFluids) if (data.FindFluid(f) == null) errors.Add($"{w}: phase fluid '{f}' unknown");
+        }
+
+        static void ValidateUpgrades(DataRepository data, List<string> errors)
+        {
+            UpgradesDef u = data.Upgrades;
+            const string w = "upgrades.json";
+            if (u.DuctSealing.Count == 0) errors.Add($"{w}: no sealing classes");
+            else if (u.DuctSealing[0].Tier != 1 || u.DuctSealing[0].PricePerMetre != 0) errors.Add($"{w}: the first sealing class is the free tier-1 default");
+            foreach (SealingDef s in u.DuctSealing)
+            {
+                Id(w, s.Id, errors);
+                Tier($"{w} '{s.Id}'", s.Tier, errors);
+                Positive($"{w} '{s.Id}' leakageCoefficient", s.LeakageCoefficient, errors);
+            }
+            if (!(u.LeakageExponent > 0 && u.LeakageExponent < 1)) errors.Add($"{w}: leakageExponent must be in (0, 1)");
+            foreach (InsulationDef i in u.Insulation)
+            {
+                Id(w, i.Id, errors);
+                Tier($"{w} '{i.Id}'", i.Tier, errors);
+                Positive($"{w} '{i.Id}' u", i.U, errors);
+            }
         }
 
         static int RoomAt(BuildingLayoutDef b, int x, int y)

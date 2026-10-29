@@ -57,3 +57,5 @@ MonoBehaviour:
     text: {fileID: 4900000, guid: 6daba69bffbc8dc448a9afa7be2c0da2, type: 3}
   - path: pipes.json
     text: {fileID: 4900000, guid: 7f657b449e247334c8f2903928b4ebc2, type: 3}
+  - path: upgrades.json
+    text: {fileID: 4900000, guid: 8c00da6a948b56049862879dc6664b4b, type: 3}

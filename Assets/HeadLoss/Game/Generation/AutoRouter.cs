@@ -513,6 +513,32 @@ namespace HeadLoss.Game.Generation
             (BuildingEvaluation ev, CompiledNetwork c, SolveResult res) = Solve(data, layout, s, crank);
             List<double> sizes = SizesFor(data, layout.Tier, data.Balancing.Drawing.DefaultMaterial);
             const double gain = 0.8;
+            // A variable-speed source (built in, or a drive fitted where the tier has drives) sets the level by speed
+            // instead of throttling: far less electricity. A trunk damper is the fallback below the minimum speed.
+            Func<double>? getSpeed = null;
+            Action<double>? setSpeed = null;
+            EquipmentDef? drive = null;
+            foreach (EquipmentDef d in data.Equipment) if (d.Placement == "addon" && d.FitsCategories.Contains("air-mover")) drive = d;
+            bool driveOk = drive != null && layout.Tier >= drive.Tier && crank <= 0;
+            foreach (EquipmentState e in s.Equipment)
+            {
+                string control = data.EquipmentItem(e.EquipmentId).SpeedControl;
+                if (control != "variable" && !(control == "on-off" && driveOk)) continue;
+                e.Vsd = control == "on-off";
+                EquipmentState fan = e;
+                getSpeed = () => fan.Speed;
+                setSpeed = v => fan.Speed = v;
+            }
+            foreach (DuctNode n in s.Air.Nodes)
+            {
+                if (getSpeed != null || n.Kind != DuctNodeKind.Inline || data.FindEquipment(n.PartId) is not EquipmentDef inl) continue;
+                if (inl.SpeedControl != "variable" && !(inl.SpeedControl == "on-off" && driveOk)) continue;
+                n.Vsd = inl.SpeedControl == "on-off";
+                DuctNode fan = n;
+                getSpeed = () => fan.Speed;
+                setSpeed = v => fan.Speed = v;
+            }
+            if (getSpeed != null) (ev, c, res) = Solve(data, layout, s, crank);
             for (int pass = 0; pass < ar.BalancingPasses; pass++)
             {
                 if (trace != null)
@@ -556,18 +582,26 @@ namespace HeadLoss.Game.Generation
                 }
                 double scale = Math.Exp(logSum / Math.Max(1, count));
                 scale = lo <= hi ? Math.Max(lo, Math.Min(hi, scale)) : Math.Sqrt(lo * hi);
-                if (scale < 0.97 && trunk == null && FirstStraightTile(data, layout, s.Air, out TilePos tt, out var td))
+                bool trunkOpen = true, speedAtMinimum = false;
+                if (getSpeed != null)
+                {
+                    double speed = getSpeed();
+                    double next = Math.Round(Math.Max(0.2, Math.Min(1, speed * Math.Pow(scale, gain))) * 100) / 100;
+                    if (Math.Abs(next - speed) > 1e-9) { setSpeed!(next); changed = true; }
+                    trunkOpen = next >= 1;
+                    speedAtMinimum = next <= 0.2 + 1e-9;
+                }
+                if (scale < 0.97 && trunk == null && (getSpeed == null || speedAtMinimum) && FirstStraightTile(data, layout, s.Air, out TilePos tt, out var td))
                 {
                     DuctEditor.PlaceInline(s.Air, tt, "damper", td.dx, td.dy);
                     trunk = tt;
                     changed = true;
                 }
-                bool trunkOpen = true;
                 if (trunk.HasValue)
                 {
                     DuctNode tn = s.Air.NodeAt(trunk.Value)!;
                     changed |= Trim(tn, Math.Pow(scale, gain), damper.MinOpening);
-                    trunkOpen = tn.Opening >= 1;
+                    trunkOpen &= tn.Opening >= 1;
                 }
 
                 // Branch dampers bring their outlets to target (the weakest one's opens fully).

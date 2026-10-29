@@ -38,6 +38,10 @@ namespace HeadLoss.Game.Networks
         public Dictionary<int, int> OpenEndLink = new Dictionary<int, int>();
         /// <summary>Inline node id (damper or inline fan) → valve or fan link index.</summary>
         public Dictionary<int, int> InlineLink = new Dictionary<int, int>();
+        /// <summary>Duct segment id → its two leak links (half the duct surface at each end), into the room.</summary>
+        public Dictionary<int, (int a, int b)> SegmentLeaks = new Dictionary<int, (int, int)>();
+        /// <summary>Fan link index → efficiency multiplier of a fitted variable-speed drive.</summary>
+        public Dictionary<int, double> DriveFactor = new Dictionary<int, double>();
         public List<CompiledFitting> Fittings = new List<CompiledFitting>();
     }
 
@@ -103,11 +107,13 @@ namespace HeadLoss.Game.Networks
                 }
                 EquipmentDef def = data.EquipmentItem(eq.EquipmentId);
                 int outside = g.AddFixed(0, z, $"outside-{n.AnchorId}");
-                double speed = def.SpeedControl == "crank" ? crankSpeed : eq.On ? eq.Speed : 0;
+                bool variable = def.SpeedControl == "variable" || eq.Vsd;
+                double speed = def.SpeedControl == "crank" ? crankSpeed : !eq.On ? 0 : variable ? eq.Speed : 1;
                 int fan = g.AddFan(outside, c.NodeIndex[n.Id], FanCurve.FromDef(def), Units.MmToM(def.ConnectionDiameterMm),
                     speed, eq.EquipmentId);
                 g.Links[fan].Temperature = airTemperatureK;
                 c.FanLink[n.AnchorId] = fan;
+                if (eq.Vsd) c.DriveFactor[fan] = DriveEfficiency(data);
             }
 
             // Inline parts: a damper is a valve K(θ) = K_open/θ², an inline fan a fan link in its direction.
@@ -122,7 +128,9 @@ namespace HeadLoss.Game.Networks
                 EquipmentDef? fanDef = data.FindEquipment(n.PartId);
                 if (fanDef != null)
                 {
-                    link = g.AddFan(from, to, FanCurve.FromDef(fanDef), Units.MmToM(fanDef.ConnectionDiameterMm), n.On ? 1 : 0, $"{n.PartId}-n{n.Id}");
+                    bool variable = fanDef.SpeedControl == "variable" || n.Vsd;
+                    link = g.AddFan(from, to, FanCurve.FromDef(fanDef), Units.MmToM(fanDef.ConnectionDiameterMm), !n.On ? 0 : variable ? n.Speed : 1, $"{n.PartId}-n{n.Id}");
+                    if (n.Vsd) c.DriveFactor[link] = DriveEfficiency(data);
                 }
                 else
                 {
@@ -171,9 +179,31 @@ namespace HeadLoss.Game.Networks
                 c.OpenEndLink[n.Id] = link;
             }
 
+            // Duct leakage (07 §Duct sealing): Q = C_L · A_surface · p^n, half the surface at each end into the room.
+            double exponent = data.Upgrades.LeakageExponent;
+            foreach (DuctSegment s in net.Segments)
+            {
+                int link = segLink[s.Id];
+                double d = Units.MmToM(s.DiameterMm);
+                double half = data.Sealing(s.Sealing).LeakageCoefficient * Math.PI * d * g.Links[link].Length * 0.5;
+                int roomA = g.AddFixed(0, z, $"room-leak-{s.Id}a"), roomB = g.AddFixed(0, z, $"room-leak-{s.Id}b");
+                int la = g.AddLeak(g.Links[link].From, roomA, half, exponent, $"leak-s{s.Id}a");
+                int lb = g.AddLeak(g.Links[link].To, roomB, half, exponent, $"leak-s{s.Id}b");
+                g.Links[la].Temperature = g.Links[lb].Temperature = airTemperatureK;
+                c.SegmentLeaks[s.Id] = (la, lb);
+            }
+
             AssignFittings(net, data, c, segLink);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
             return c;
+        }
+
+        /// <summary>Efficiency multiplier of a variable-speed drive (<c>07-equipment.md</c>: costs 3% efficiency).</summary>
+        static double DriveEfficiency(DataRepository data)
+        {
+            foreach (EquipmentDef e in data.Equipment)
+                if (e.Placement == "addon" && e.FitsCategories.Contains("air-mover")) return e.EfficiencyFactor;
+            return 1;
         }
 
         static void AssignFittings(DuctNetworkState net, DataRepository data, CompiledNetwork c, Dictionary<int, int> segLink)
@@ -184,6 +214,7 @@ namespace HeadLoss.Game.Networks
             FittingDef sharp = data.Fitting("elbow-90-sharp");
             FittingDef smooth = data.Fitting("elbow-90-long-radius");
             FittingDef tee = data.Fitting("tee-sharp");
+            FittingDef teeSmooth = data.Fitting("tee-smooth");
             FittingDef cross = data.Fitting("cross-sharp");
             FittingDef reducer = data.Fitting("reducer");
             var segs = new List<DuctSegment>(4);
@@ -231,7 +262,7 @@ namespace HeadLoss.Game.Networks
                 }
 
                 // Tee (3 ducts) or cross (4 ducts): the run continues straight from upstream, branches turn 90°.
-                FittingDef junction = segs.Count >= 4 ? cross : tee;
+                FittingDef junction = segs.Count >= 4 ? cross : n.SmoothFittings ? teeSmooth : tee;
                 for (int i = 1; i < segs.Count; i++)
                 {
                     DuctSegment out_ = segs[i];

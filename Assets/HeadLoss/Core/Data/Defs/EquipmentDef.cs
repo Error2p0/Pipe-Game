@@ -17,8 +17,12 @@ namespace HeadLoss.Core.Data.Defs
         public bool IsIgnitionSource;
         /// <summary>crank, on-off, variable.</summary>
         public string SpeedControl = "";
-        /// <summary>intake (at an entry opening) or inline.</summary>
+        /// <summary>intake (at an entry opening), inline, or addon (fitted to another device, e.g. a variable-speed drive).</summary>
         public string Placement = "";
+        /// <summary>Add-ons: efficiency multiplier on the device they are fitted to (VSD 0.97: "costs 3% efficiency").</summary>
+        public double EfficiencyFactor = 1;
+        /// <summary>Add-ons: device categories they fit (e.g. air-mover).</summary>
+        public List<string> FitsCategories = new List<string>();
         /// <summary>Performance curve at full speed, 5–8 points from Q = 0 to Q_max.</summary>
         public List<CurvePointDef> Curve = new List<CurvePointDef>();
         /// <summary>Loss coefficient for reverse flow through the device.</summary>

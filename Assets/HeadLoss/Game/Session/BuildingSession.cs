@@ -159,6 +159,9 @@ namespace HeadLoss.Game.Session
         public bool Undo() => Commands.Undo(this);
         public bool Redo() => Commands.Redo(this);
 
+        /// <summary>True when items of this tier are unlocked in the game's city (<c>03-city.md</c> §Progression).</summary>
+        public bool Unlocked(int tier) => Progression.Tech.Unlocked(Game, tier);
+
         /// <summary>The committed equipment matching a design item (same opening and model), if built.</summary>
         public EquipmentState? CommittedTwin(EquipmentState design)
         {
@@ -289,6 +292,18 @@ namespace HeadLoss.Game.Session
             DuctEditor.PlaceRun(copy.Air, path, diameterMm, materialId, smoothElbows);
             p.Snapshot = SolveState(copy, null, new NetworkSolver(_settings), CrankSpeed);
             return p;
+        }
+
+        /// <summary>
+        /// Solves a changed copy of the design and evaluates it (the shop's "compare with placed"; the session is
+        /// untouched). Runs on the calling thread.
+        /// </summary>
+        public BuildingEvaluation EvaluateWith(Action<BuildingState> change)
+        {
+            BuildingState copy = State.Clone();
+            change(copy);
+            NetworkSnapshot snap = SolveState(copy, null, new NetworkSolver(_settings), CrankSpeed);
+            return BuildingEconomy.Evaluate(Data, Layout, snap.Compiled, snap.Result);
         }
 
         /// <summary>Volumetric flow delivered by an outlet in the design, m³/s (0 when not connected).</summary>

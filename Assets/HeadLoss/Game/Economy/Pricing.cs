@@ -45,6 +45,30 @@ namespace HeadLoss.Game.Economy
             return basePrice * m.PriceFactor * Math.Pow(diameterMm / dRef, p.DiameterExponent);
         }
 
+        /// <summary>Price per metre of a segment with its upgrades: duct + sealing + insulation (scaled like the duct), $/m.</summary>
+        public static double SegmentPerMetre(DataRepository data, DuctSegment seg)
+        {
+            double p = PerMetre(data, seg.MaterialId, seg.DiameterMm);
+            p += data.Sealing(seg.Sealing).PricePerMetre;
+            InsulationDef? ins = seg.Insulation.Length > 0 ? data.FindInsulation(seg.Insulation) : null;
+            if (ins != null)
+            {
+                PricesDef pr = data.Balancing.Prices;
+                bool duct = data.Material(seg.MaterialId).Kind == "duct";
+                double dRef = duct ? pr.DuctReferenceDiameterMm : pr.PipeReferenceDiameterMm;
+                p += ins.PricePerMetre * Math.Pow(seg.DiameterMm / dRef, pr.DiameterExponent);
+            }
+            return p;
+        }
+
+        /// <summary>Price of the variable-speed drive add-on for a device category, $ (0 when none exists).</summary>
+        public static double DrivePrice(DataRepository data, string category)
+        {
+            foreach (EquipmentDef e in data.Equipment)
+                if (e.Placement == "addon" && e.FitsCategories.Contains(category)) return e.Price;
+            return 0;
+        }
+
         /// <summary>Fitting price, × D / D_ref for sizes above the reference, $.</summary>
         /// <param name="diameterMm">Size of the fitting, mm.</param>
         /// <param name="duct">Duct (true) or pipe reference diameter.</param>
@@ -63,6 +87,7 @@ namespace HeadLoss.Game.Economy
             foreach (var kv in b.Ducts) v += kv.Value.Price;
             foreach (var kv in b.Fittings) v += kv.Value.Price;
             foreach (var kv in b.Equipment) v += kv.Value.Price;
+            foreach (var kv in b.Addons) v += kv.Value.Price;
             return v;
         }
 
@@ -75,6 +100,7 @@ namespace HeadLoss.Game.Economy
             Compare(a.Ducts, b.Ducts, refund, true, c, ref c.DuctCharge);
             Compare(a.Fittings, b.Fittings, refund, true, c, ref c.FittingCharge);
             Compare(a.Equipment, b.Equipment, refund, false, c, ref c.EquipmentCharge);
+            Compare(a.Addons, b.Addons, refund, false, c, ref c.EquipmentCharge);
             return c;
         }
 
@@ -132,6 +158,8 @@ namespace HeadLoss.Game.Economy
             public readonly Dictionary<(TilePos, TilePos), Item> Ducts = new Dictionary<(TilePos, TilePos), Item>();
             public readonly Dictionary<TilePos, Item> Fittings = new Dictionary<TilePos, Item>();
             public readonly Dictionary<string, Item> Equipment = new Dictionary<string, Item>();
+            /// <summary>Add-ons fitted to equipment (variable-speed drives), keyed by the device's place.</summary>
+            public readonly Dictionary<string, Item> Addons = new Dictionary<string, Item>();
 
             public static Bill Of(DataRepository data, BuildingLayout layout, BuildingState s)
             {
@@ -141,8 +169,8 @@ namespace HeadLoss.Game.Economy
                 {
                     TilePos a = net.FindNode(seg.NodeA)!.Pos, b = net.FindNode(seg.NodeB)!.Pos;
                     (int dx, int dy) = a.DirectionTo(b);
-                    double perMetre = PerMetre(data, seg.MaterialId, seg.DiameterMm);
-                    string spec = $"{seg.MaterialId}/{seg.DiameterMm}";
+                    double perMetre = SegmentPerMetre(data, seg);
+                    string spec = $"{seg.MaterialId}/{seg.DiameterMm}/{seg.Sealing}/{seg.Insulation}";
                     for (TilePos t = a; t != b; )
                     {
                         var next = new TilePos(t.X + dx, t.Y + dy);
@@ -172,7 +200,7 @@ namespace HeadLoss.Game.Economy
                     if (n.Kind == DuctNodeKind.Free)
                     {
                         if (adjacent.Count == 2 && DuctEditor.IsElbow(net, n)) Add(n.SmoothFittings ? "elbow-90-long-radius" : "elbow-90-sharp", dMax);
-                        else if (adjacent.Count == 3) Add("tee-sharp", dMax);
+                        else if (adjacent.Count == 3) Add(n.SmoothFittings ? "tee-smooth" : "tee-sharp", dMax);
                         else if (adjacent.Count >= 4) Add("cross-sharp", dMax);
                     }
                     else if (n.Kind == DuctNodeKind.Inline)
@@ -182,6 +210,7 @@ namespace HeadLoss.Game.Economy
                         {
                             specs.Add(fan.Id);
                             price += fan.Price;
+                            if (n.Vsd) bill.Addons[$"{n.X},{n.Y}:vsd"] = new Item("vsd", DrivePrice(data, fan.Category));
                         }
                         else Add(n.PartId, dMax);
                     }
@@ -198,7 +227,9 @@ namespace HeadLoss.Game.Economy
                     bool preplaced = false;
                     foreach (EquipmentPlacementDef p in layout.InitialEquipment)
                         if (p.OpeningId == e.OpeningId && p.EquipmentId == e.EquipmentId) preplaced = true;
-                    bill.Equipment[e.OpeningId] = new Item(e.EquipmentId, preplaced ? 0 : data.EquipmentItem(e.EquipmentId).Price);
+                    EquipmentDef def = data.EquipmentItem(e.EquipmentId);
+                    bill.Equipment[e.OpeningId] = new Item(e.EquipmentId, preplaced ? 0 : def.Price);
+                    if (e.Vsd) bill.Addons[e.OpeningId + ":vsd"] = new Item("vsd", DrivePrice(data, def.Category));
                 }
                 return bill;
             }

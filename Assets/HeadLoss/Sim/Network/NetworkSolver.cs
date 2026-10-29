@@ -86,7 +86,7 @@ namespace HeadLoss.Sim.Network
                 rho[k] = fluid.Density(_s.AtmosphericPressure, l.Temperature);
                 mu[k] = fluid.Viscosity(_s.AtmosphericPressure, l.Temperature);
                 if (!res.LinkActive[k]) continue;
-                q[k] = warm ? initialFlows![k] : _s.InitialVelocity * l.Area;
+                q[k] = warm ? initialFlows![k] : l.Kind == LinkKind.Leak ? l.LeakCoefficient * Math.Pow(10, l.LeakExponent) : _s.InitialVelocity * l.Area;
             }
 
             var dp = new double[linkCount];
@@ -384,6 +384,25 @@ namespace HeadLoss.Sim.Network
                     loss = PipeLoss.Evaluate(flow, l.Length, l.Diameter, l.Area, l.Roughness, l.SumK, density, viscosity, _s.Friction);
                     derivative = loss.Derivative;
                     return loss.TotalDp + elevation;
+                }
+                case LinkKind.Leak:
+                {
+                    // Power law Δp = (|Q| / C)^(1/n), linear below the flow at 1 Pa (Q = C) so Newton stays well posed.
+                    double cl = l.LeakCoefficient, inv = 1.0 / l.LeakExponent, absQ = Math.Abs(flow);
+                    double dp;
+                    if (absQ < cl)
+                    {
+                        derivative = 1.0 / cl;
+                        dp = flow / cl;
+                    }
+                    else
+                    {
+                        double mag = Math.Pow(absQ / cl, inv);
+                        derivative = inv * mag / absQ;
+                        dp = Math.Sign(flow) * mag;
+                    }
+                    loss.FittingsDp = dp;
+                    return dp + elevation;
                 }
                 default:
                 {

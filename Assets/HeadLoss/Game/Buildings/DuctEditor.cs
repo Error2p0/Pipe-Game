@@ -17,6 +17,8 @@ namespace HeadLoss.Game.Buildings
         Duplicate,
         /// <summary>An inline part must go on a straight duct, between fittings.</summary>
         NotOnStraightDuct,
+        /// <summary>The size, material or fitting is not unlocked yet.</summary>
+        Locked,
     }
 
     /// <summary>What occupies a tile of the duct layer.</summary>
@@ -56,6 +58,7 @@ namespace HeadLoss.Game.Buildings
             DrawError.NodeFull => "No more connections fit here",
             DrawError.Duplicate => "These points are already connected",
             DrawError.NotOnStraightDuct => "Place it on a straight duct, between fittings",
+            DrawError.Locked => "Not unlocked yet (see the shop)",
             _ => e.ToString(),
         };
 
@@ -215,8 +218,8 @@ namespace HeadLoss.Game.Buildings
             {
                 DuctSegment s = net.FindSegment(occ.SegmentId)!;
                 net.Segments.Remove(s);
-                net.Segments.Add(new DuctSegment { Id = net.NextSegmentId++, NodeA = s.NodeA, NodeB = id, DiameterMm = s.DiameterMm, MaterialId = s.MaterialId });
-                net.Segments.Add(new DuctSegment { Id = net.NextSegmentId++, NodeA = id, NodeB = s.NodeB, DiameterMm = s.DiameterMm, MaterialId = s.MaterialId });
+                net.Segments.Add(s.Like(net.NextSegmentId++, s.NodeA, id));
+                net.Segments.Add(s.Like(net.NextSegmentId++, id, s.NodeB));
             }
             return id;
         }
@@ -259,6 +262,22 @@ namespace HeadLoss.Game.Buildings
             return any;
         }
 
+        /// <summary>Applies a material, sealing class or insulation (null = unchanged) to several segments, merging equal runs.</summary>
+        public static bool SetSpec(DuctNetworkState net, IEnumerable<int> segmentIds, string? materialId, string? sealing, string? insulation)
+        {
+            bool any = false;
+            foreach (int id in segmentIds)
+            {
+                DuctSegment? s = net.FindSegment(id);
+                if (s == null) continue;
+                if (materialId != null && s.MaterialId != materialId) { s.MaterialId = materialId; any = true; }
+                if (sealing != null && s.Sealing != sealing) { s.Sealing = sealing; any = true; }
+                if (insulation != null && s.Insulation != insulation) { s.Insulation = insulation; any = true; }
+            }
+            if (any) Normalize(net);
+            return any;
+        }
+
         /// <summary>An inline part that lost one of its two ducts is removed with it (the node becomes a plain end).</summary>
         static void DropBrokenInline(DuctNetworkState net, int nodeId)
         {
@@ -274,6 +293,8 @@ namespace HeadLoss.Game.Buildings
             n.DirX = n.DirY = 0;
             n.Opening = 1;
             n.On = true;
+            n.Vsd = false;
+            n.Speed = 1;
         }
 
         /// <summary>Checks that an inline part can go on <paramref name="tile"/>: inside a straight duct, not on a fitting.</summary>
@@ -376,18 +397,21 @@ namespace HeadLoss.Game.Buildings
                         if (s1 == null) s1 = s; else s2 = s;
                     }
                     if (count != 2 || s1 == null || s2 == null) continue;
-                    if (s1.DiameterMm != s2.DiameterMm || s1.MaterialId != s2.MaterialId) continue;
+                    if (!s1.SameSpec(s2)) continue;
                     TilePos a = net.FindNode(s1.Other(n.Id))!.Pos, b = net.FindNode(s2.Other(n.Id))!.Pos;
                     if (a.X != b.X && a.Y != b.Y) continue;  // a corner
                     net.Segments.Remove(s1);
                     net.Segments.Remove(s2);
                     net.Nodes.Remove(n);
-                    net.Segments.Add(new DuctSegment { Id = net.NextSegmentId++, NodeA = s1.Other(n.Id), NodeB = s2.Other(n.Id), DiameterMm = s1.DiameterMm, MaterialId = s1.MaterialId });
+                    net.Segments.Add(s1.Like(net.NextSegmentId++, s1.Other(n.Id), s2.Other(n.Id)));
                     changed = true;
                     break;
                 }
             }
         }
+
+        /// <summary>True when the node is a tee (three ducts) made by drawing.</summary>
+        public static bool IsTee(DuctNetworkState net, DuctNode n) => n.Kind == DuctNodeKind.Free && net.Degree(n.Id) == 3;
 
         /// <summary>True when the node is a 90° corner between exactly two segments.</summary>
         public static bool IsElbow(DuctNetworkState net, DuctNode n)

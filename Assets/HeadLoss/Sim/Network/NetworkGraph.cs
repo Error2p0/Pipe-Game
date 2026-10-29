@@ -26,6 +26,8 @@ namespace HeadLoss.Sim.Network
         Fan,
         /// <summary>Damper or valve: K(θ) = K_open/θ²; closed = removed from the solve.</summary>
         Valve,
+        /// <summary>Duct leakage to the room: Q = C · Δp^n (<c>05-simulation.md</c> §1.1).</summary>
+        Leak,
     }
 
     public sealed class NetworkNode
@@ -65,6 +67,10 @@ namespace HeadLoss.Sim.Network
         public double Speed = 1;
         /// <summary>Fluid temperature in the link, K.</summary>
         public double Temperature = 293.15;
+        /// <summary>Leaks: flow coefficient C, m³/s per Pa^n.</summary>
+        public double LeakCoefficient;
+        /// <summary>Leaks: pressure exponent n.</summary>
+        public double LeakExponent = 0.65;
         public string Label = "";
 
         /// <summary>True when the link takes part in the solve.</summary>
@@ -140,6 +146,19 @@ namespace HeadLoss.Sim.Network
             {
                 Kind = LinkKind.Valve, From = from, To = to, SumK = kOpen, Opening = opening, Diameter = diameter,
                 Area = Math.PI * diameter * diameter / 4.0, Label = label,
+            });
+            return Links.Count - 1;
+        }
+
+        /// <summary>Adds a leakage path Q = C · Δp^n (duct leakage into the room).</summary>
+        /// <param name="coefficient">C, m³/s per Pa^n.</param>
+        /// <param name="exponent">n.</param>
+        public int AddLeak(int from, int to, double coefficient, double exponent, string label = "")
+        {
+            Links.Add(new NetworkLink
+            {
+                Kind = LinkKind.Leak, From = from, To = to, LeakCoefficient = coefficient, LeakExponent = exponent,
+                Area = 1, Diameter = 1, Label = label,
             });
             return Links.Count - 1;
         }

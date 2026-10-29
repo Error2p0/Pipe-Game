@@ -23,6 +23,7 @@ namespace HeadLoss.Core.Data
         public BalancingDef Balancing { get; private set; } = new BalancingDef();
         public CityDef City { get; private set; } = new CityDef();
         public BuildingsDef Buildings { get; private set; } = new BuildingsDef();
+        public UpgradesDef Upgrades { get; private set; } = new UpgradesDef();
         public IReadOnlyList<FluidDef> Fluids => _fluids;
         public IReadOnlyList<MaterialDef> Materials => _materials;
         public IReadOnlyList<PipeFamilyDef> PipeFamilies => _pipeFamilies;
@@ -82,6 +83,7 @@ namespace HeadLoss.Core.Data
             repo.Balancing = Parse<BalancingDef>(source, "balancing.json");
             repo.City = Parse<CityDef>(source, "city.json");
             repo.Buildings = Parse<BuildingsDef>(source, "buildings.json");
+            repo.Upgrades = Parse<UpgradesDef>(source, "upgrades.json");
             foreach (BuildingTypeDef t in repo.Buildings.Types)
                 if (!repo._buildingTypeById.ContainsKey(t.Id)) repo._buildingTypeById[t.Id] = t;
                 else repo._loadIssues.Add($"buildings.json: duplicate building type '{t.Id}'");
@@ -184,6 +186,11 @@ namespace HeadLoss.Core.Data
         public FittingDef Fitting(string id) => FindFitting(id) ?? throw new KeyNotFoundException($"Unknown fitting '{id}'");
         public EquipmentDef EquipmentItem(string id) => FindEquipment(id) ?? throw new KeyNotFoundException($"Unknown equipment '{id}'");
         public OutletDef Outlet(string id) => FindOutlet(id) ?? throw new KeyNotFoundException($"Unknown outlet '{id}'");
+        public SealingDef? FindSealing(string id) => Upgrades.DuctSealing.Find(x => x.Id == id);
+        public InsulationDef? FindInsulation(string id) => Upgrades.Insulation.Find(x => x.Id == id);
+        /// <summary>A segment's sealing class ("" = the first class, unsealed).</summary>
+        public SealingDef Sealing(string id) => (id.Length == 0 ? Upgrades.DuctSealing[0] : FindSealing(id)) ?? throw new KeyNotFoundException($"Unknown sealing '{id}'");
+
         public BuildingTypeDef? FindBuildingType(string id) => _buildingTypeById.TryGetValue(id, out var v) ? v : null;
         public RoomTypeDef? FindRoomType(string id) => _roomTypeById.TryGetValue(id, out var v) ? v : null;
         public BuildingTypeDef BuildingType(string id) => FindBuildingType(id) ?? throw new KeyNotFoundException($"Unknown building type '{id}'");

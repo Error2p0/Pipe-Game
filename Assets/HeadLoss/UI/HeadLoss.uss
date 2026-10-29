@@ -378,3 +378,32 @@
     border-radius: 6px;
     -unity-font-style: bold;
 }
+
+/* ---- shop and notices ---- */
+
+.hl-shop {
+    position: absolute;
+    left: 50%; top: 90px; bottom: 90px;
+    translate: -50% 0;
+    width: 900px;
+    padding: 20px;
+}
+
+.hl-shop-list {
+    flex-grow: 1;
+    margin-top: 8px;
+}
+
+.hl-shop-row {
+    padding: 6px 0;
+    border-bottom-width: 1px;
+    border-bottom-color: rgba(62, 74, 87, 0.12);
+}
+
+.hl-notice {
+    position: absolute;
+    top: 76px;
+    left: 50%;
+    translate: -50% 0;
+    padding: 8px 16px;
+}

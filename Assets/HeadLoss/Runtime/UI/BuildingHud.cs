@@ -6,6 +6,7 @@ using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Commands;
 using HeadLoss.Game.Economy;
+using HeadLoss.Game.Progression;
 using HeadLoss.Game.Networks;
 using HeadLoss.Game.Session;
 using HeadLoss.Sim.Network;
@@ -40,8 +41,12 @@ namespace HeadLoss.Unity.UI
         Label _title = null!, _status = null!, _hint = null!;
         Label _designText = null!, _designReason = null!;
         Button _commit = null!, _discard = null!, _undo = null!, _redo = null!;
-        DropdownField _size = null!;
+        DropdownField _size = null!, _material = null!;
+        Label _lockNote = null!;
         Button _sharp = null!, _smooth = null!, _upgrade = null!;
+        int _shownTier = -1;
+        readonly List<string> _materials = new List<string>();
+        Slider? _speedSlider;
         readonly List<(string id, Button button)> _partButtons = new List<(string, Button)>();
         VisualElement _crankBox = null!, _crankFill = null!, _crankButton = null!;
         readonly Button[] _modeButtons = new Button[8];
@@ -83,6 +88,10 @@ namespace HeadLoss.Unity.UI
         public bool CrankHeld { get; private set; }
         /// <summary>The Buildings (back) button was pressed.</summary>
         public bool BackRequested;
+        /// <summary>The Shop button was pressed.</summary>
+        public bool ShopRequested;
+        /// <summary>The unlock condition of a tier with progress (set by the game root, which sees every building).</summary>
+        public System.Func<int, string>? UnlockCondition;
 
         public BuildingHud(VisualElement root, UiKit ui, BuildingSession session, BuildingInteraction interaction,
             HeatmapState heatmap, CameraController camera)
@@ -129,6 +138,7 @@ namespace HeadLoss.Unity.UI
             VisualElement cardRow = UiKit.Row(card);
             _ui.Button(cardRow, "Requirements (Tab)", () => _sheet.Toggle());
             _ui.Button(cardRow, _s.Game.City != null ? "City (Esc)" : "Buildings (Esc)", () => BackRequested = true);
+            _ui.Button(cardRow, "Shop", () => ShopRequested = true);
 
             VisualElement design = _ui.Panel(_layer, "hl-designbar");
             _designText = UiKit.Text(design, "", "hl-design-text");
@@ -202,24 +212,27 @@ namespace HeadLoss.Unity.UI
         void BuildToolbox(VisualElement parent)
         {
             VisualElement tools = _ui.Panel(parent, "hl-toolbox");
-            UiKit.Text(tools, "Duct size", "hl-section");
-            var choices = new List<string>();
-            PipeFamilyDef family = _data.PipeFamily(_data.Balancing.Drawing.DefaultDuctFamily);
-            foreach (PipeSizeDef sz in family.Sizes)
-            {
-                _sizes.Add(sz.DiameterMm);
-                choices.Add($"{sz.DiameterMm:0} mm · {Units.FormatMoney(Pricing.PerMetre(_data, _ix.DrawMaterialId, sz.DiameterMm), _symbol)}/m");
-            }
-            _size = new DropdownField(choices, _sizes.IndexOf(_ix.DrawDiameterMm));
+            UiKit.Text(tools, "Duct", "hl-section");
+            _size = new DropdownField();
             _size.AddToClassList("hl-dropdown");
-            _size.RegisterValueChangedCallback(_ => _ix.DrawDiameterMm = _sizes[_size.index]);
+            _size.RegisterValueChangedCallback(_ => { if (_size.index >= 0) _ix.DrawDiameterMm = _sizes[_size.index]; });
             tools.Add(_size);
+            _material = new DropdownField();
+            _material.AddToClassList("hl-dropdown");
+            _material.RegisterValueChangedCallback(_ =>
+            {
+                if (_material.index < 0) return;
+                _ix.DrawMaterialId = _materials[_material.index];
+                RebuildDrawChoices();
+            });
+            tools.Add(_material);
 
-            UiKit.Text(tools, "Elbows", "hl-section");
+            UiKit.Text(tools, "Fittings (elbows and tees)", "hl-section");
             VisualElement row = UiKit.Row(tools);
             _sharp = _ui.Button(row, "Sharp", () => SetSmooth(false));
-            _smooth = _ui.Button(row, "Long-radius", () => SetSmooth(true));
-            _upgrade = _ui.Button(tools, "Upgrade all bends", () => _s.Execute(new UpgradeAllBendsCommand()));
+            _smooth = _ui.Button(row, "Smooth", () => SetSmooth(true));
+            _upgrade = _ui.Button(tools, "Upgrade all fittings", () => _s.Execute(new UpgradeAllBendsCommand()));
+            _lockNote = UiKit.Text(tools, "", "hl-subtitle");
 
             UiKit.Text(tools, "Parts (click a straight duct)", "hl-section");
             foreach (string id in _data.Game.Toolbox.Parts)
@@ -284,8 +297,38 @@ namespace HeadLoss.Unity.UI
 
         void SetSmooth(bool smooth)
         {
+            if (smooth && !_s.Unlocked(Tech.SmoothFittingsTier(_data))) return;
             _ix.DrawSmoothElbows = smooth;
             _hmRev = -1;
+        }
+
+        /// <summary>The duct sizes and materials on offer: only unlocked ones (<c>03-city.md</c> §Progression).</summary>
+        void RebuildDrawChoices()
+        {
+            _sizes.Clear();
+            var sizeChoices = new List<string>();
+            PipeFamilyDef family = _data.PipeFamily(_data.Balancing.Drawing.DefaultDuctFamily);
+            foreach (PipeSizeDef sz in family.Sizes)
+            {
+                if (!_s.Unlocked(sz.Tier)) continue;
+                _sizes.Add(sz.DiameterMm);
+                sizeChoices.Add($"{sz.DiameterMm:0} mm · {Units.FormatMoney(Pricing.PerMetre(_data, _ix.DrawMaterialId, sz.DiameterMm), _symbol)}/m");
+            }
+            if (!_sizes.Contains(_ix.DrawDiameterMm)) _ix.DrawDiameterMm = _sizes.Contains(_data.Balancing.Drawing.DefaultDuctSizeMm) ? _data.Balancing.Drawing.DefaultDuctSizeMm : _sizes[0];
+            _size.choices = sizeChoices;
+            _size.SetValueWithoutNotify(sizeChoices[_sizes.IndexOf(_ix.DrawDiameterMm)]);
+
+            _materials.Clear();
+            var matChoices = new List<string>();
+            foreach (MaterialDef m in _data.Materials)
+            {
+                if (m.Kind != "duct" || !_s.Unlocked(m.Tier)) continue;
+                _materials.Add(m.Id);
+                matChoices.Add(m.DisplayName);
+            }
+            if (!_materials.Contains(_ix.DrawMaterialId)) _ix.DrawMaterialId = _materials[0];
+            _material.choices = matChoices;
+            _material.SetValueWithoutNotify(matChoices[_materials.IndexOf(_ix.DrawMaterialId)]);
         }
 
         // ---------- per frame ----------
@@ -350,6 +393,26 @@ namespace HeadLoss.Unity.UI
 
         void RefreshTools()
         {
+            int tier = Tech.UnlockedTier(_s.Game);
+            if (tier != _shownTier)
+            {
+                _shownTier = tier;
+                RebuildDrawChoices();
+                bool smoothOk = _s.Unlocked(Tech.SmoothFittingsTier(_data));
+                _smooth.SetEnabled(smoothOk);
+                _upgrade.SetEnabled(smoothOk);
+                if (!smoothOk) _ix.DrawSmoothElbows = false;
+                foreach ((string id, Button b) in _partButtons)
+                {
+                    int t = Tech.ItemTier(_data, id);
+                    b.SetEnabled(_s.Unlocked(t));
+                    b.text = _s.Unlocked(t) ? PartLabel(id) : $"{PartLabel(id)} · tier {t}";
+                }
+                _shownActionsKey = "";
+            }
+            string note = tier < Tech.MaxTier && UnlockCondition != null ? $"Tier {tier + 1} (more sizes, materials and parts): {UnlockCondition(tier + 1).ToLowerInvariant()}" : "";
+            if (_lockNote.text != note) _lockNote.text = note;
+            _lockNote.style.display = note.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             StyleButton(_sharp, !_ix.DrawSmoothElbows);
             StyleButton(_smooth, _ix.DrawSmoothElbows);
             foreach ((string id, Button b) in _partButtons) StyleButton(b, _ix.PlaceTool == id);
@@ -488,6 +551,10 @@ namespace HeadLoss.Unity.UI
             }
             else if (_damperSlider != null && t.Kind == TargetKind.Inline && _s.State.Air.FindNode(t.Id) is DuctNode d)
                 _damperSlider.SetValueWithoutNotify((float)d.Opening * 100);
+            else if (_speedSlider != null && t.Kind == TargetKind.Intake && _s.State.EquipmentAt(t.Anchor) is EquipmentState se)
+                _speedSlider.SetValueWithoutNotify((float)se.Speed * 100);
+            else if (_speedSlider != null && t.Kind == TargetKind.Inline && _s.State.Air.FindNode(t.Id) is DuctNode sn)
+                _speedSlider.SetValueWithoutNotify((float)sn.Speed * 100);
         }
 
         /// <summary>What the action buttons depend on; they are rebuilt only when it changes (a slider keeps its drag).</summary>
@@ -505,12 +572,13 @@ namespace HeadLoss.Unity.UI
                     if (_s.State.Air.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(_s.State.Air.Degree(n.Id));
                     break;
                 case TargetKind.Intake:
-                    if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On);
+                    if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On).Append(e.Vsd);
                     break;
                 case TargetKind.Inline:
-                    if (_s.State.Air.FindNode(t.Id) is DuctNode p) _sb.Append(p.PartId).Append(p.On);
+                    if (_s.State.Air.FindNode(t.Id) is DuctNode p) _sb.Append(p.PartId).Append(p.On).Append(p.Vsd);
                     break;
             }
+            _sb.Append('/').Append(_shownTier);
             return _sb.ToString();
         }
 
@@ -539,7 +607,12 @@ namespace HeadLoss.Unity.UI
             i = Line(i, $"Loss  friction {Units.FormatPa(System.Math.Abs(r.DpFriction[k]))} · fittings {Units.FormatPa(System.Math.Abs(r.DpFittings[k]))} · elevation {Units.FormatPa(r.DpElevation[k])}");
             string regime = r.Reynolds[k] <= _data.Balancing.Physics.LaminarReynolds ? "laminar" : r.Reynolds[k] >= _data.Balancing.Physics.TurbulentReynolds ? "turbulent" : "transitional";
             i = Line(i, $"Re  {r.Reynolds[k]:0} ({regime}) · f {r.FrictionFactor[k]:0.0000}");
-            i = Line(i, $"Length  {l.Length:0} m · ΣK {l.SumK:0.00} · {Units.FormatMoney(Pricing.PerMetre(_data, seg.MaterialId, seg.DiameterMm), _symbol)}/m");
+            i = Line(i, $"Length  {l.Length:0} m · ΣK {l.SumK:0.00} · {Units.FormatMoney(Pricing.SegmentPerMetre(_data, seg), _symbol)}/m");
+            if (snap.Compiled.SegmentLeaks.TryGetValue(id, out var leaks))
+            {
+                string ins = seg.Insulation.Length > 0 ? " · " + _data.FindInsulation(seg.Insulation)!.DisplayName.ToLowerInvariant() : "";
+                i = Line(i, $"{_data.Sealing(seg.Sealing).DisplayName} · leaking {Units.FormatAirFlow(r.Flow[leaks.a] + r.Flow[leaks.b])}{ins}");
+            }
             i = Line(i, $"Temperature  {Units.FormatTemperatureK(l.Temperature)}");
             i = Line(i, "Stress  — (from Phase 4)");
             return i;
@@ -554,7 +627,7 @@ namespace HeadLoss.Unity.UI
             _readoutTitle.text = elbow
                 ? _data.Fitting(n.SmoothFittings ? "elbow-90-long-radius" : "elbow-90-sharp").DisplayName
                 : degree >= 4 ? _data.Fitting("cross-sharp").DisplayName
-                : degree == 3 ? _data.Fitting("tee-sharp").DisplayName
+                : degree == 3 ? _data.Fitting(n.SmoothFittings ? "tee-smooth" : "tee-sharp").DisplayName
                 : degree == 1 ? _data.Fitting("open-end").DisplayName
                 : _data.Fitting("reducer").DisplayName;
             if (snap == null) return Line(i, "Solving…");
@@ -577,6 +650,7 @@ namespace HeadLoss.Unity.UI
             }
             if (!any) i = Line(i, "No loss here");
             if (elbow) i = Line(i, n.SmoothFittings ? "Long-radius: gentle turn, low loss." : "Sharp: abrupt turn, high loss.");
+            if (degree == 3) i = Line(i, n.SmoothFittings ? "Smooth tee: the branch turns gently." : "Sharp tee: the branch turns abruptly.");
             return i;
         }
 
@@ -600,6 +674,7 @@ namespace HeadLoss.Unity.UI
             bool crank = def.SpeedControl == "crank";
             if (!crank && !e.On) return Line(i, "Switched off");
             if (crank) i = Line(i, $"Crank speed  {_s.CrankSpeed * 100:0} % · click or hold C (no electricity, nothing offline)");
+            else if (e.Vsd || def.SpeedControl == "variable") i = Line(i, $"Speed  {e.Speed * 100:0} %{(e.Vsd ? " · variable-speed drive" : "")}");
             if (snap == null || !snap.Compiled.FanLink.TryGetValue(openingId, out int k)) return Line(i, "Solving…");
             return DeviceLines(snap, k, def, i);
         }
@@ -662,10 +737,64 @@ namespace HeadLoss.Unity.UI
             return i;
         }
 
+        /// <summary>Material, sealing and insulation pickers for selected ducts (only unlocked choices).</summary>
+        void AddSpecDropdowns(List<int> ids, DuctSegment first)
+        {
+            void Picker(string label, List<(string id, string name)> options, string current, System.Func<string, ICommand> make)
+            {
+                var names = new List<string>();
+                foreach (var o in options) names.Add(o.name);
+                int at = options.FindIndex(o => o.id == current);
+                var dd = new DropdownField(label, names, at < 0 ? 0 : at);
+                dd.AddToClassList("hl-dropdown");
+                dd.style.minWidth = 300;
+                dd.RegisterValueChangedCallback(_ =>
+                {
+                    if (dd.index < 0) return;
+                    _s.Execute(make(options[dd.index].id));
+                });
+                _readoutActions.Add(dd);
+            }
+            var mats = new List<(string, string)>();
+            foreach (MaterialDef m in _data.Materials)
+                if (m.Kind == "duct" && _s.Unlocked(m.Tier)) mats.Add((m.Id, $"{m.DisplayName} · {Units.FormatMoney(Pricing.PerMetre(_data, m.Id, first.DiameterMm), _symbol)}/m"));
+            Picker("Material", mats, first.MaterialId, id => new SetSegmentSpecCommand(ids, materialId: id));
+            var seals = new List<(string, string)>();
+            foreach (SealingDef sd in _data.Upgrades.DuctSealing)
+                if (_s.Unlocked(sd.Tier)) seals.Add((sd.Id == _data.Upgrades.DuctSealing[0].Id ? "" : sd.Id, sd.PricePerMetre > 0 ? $"{sd.DisplayName} · +{Units.FormatMoney(sd.PricePerMetre, _symbol)}/m" : sd.DisplayName));
+            if (seals.Count > 1) Picker("Sealing", seals, first.Sealing, id => new SetSegmentSpecCommand(ids, sealing: id));
+            var ins = new List<(string, string)> { ("", "No insulation") };
+            foreach (InsulationDef d in _data.Upgrades.Insulation)
+                if (_s.Unlocked(d.Tier)) ins.Add((d.Id, d.DisplayName));
+            if (ins.Count > 1) Picker("Insulation", ins, first.Insulation, id => new SetSegmentSpecCommand(ids, insulation: id));
+        }
+
+        /// <summary>Fit or remove a variable-speed drive (bought with the Commit; disabled until unlocked).</summary>
+        void AddDriveButton(bool fitted, System.Action toggle)
+        {
+            EquipmentDef? drive = null;
+            foreach (EquipmentDef d in _data.Equipment) if (d.Placement == "addon" && d.FitsCategories.Contains("air-mover")) drive = d;
+            if (drive == null) return;
+            bool ok = _s.Unlocked(drive.Tier);
+            Button b = _ui.Button(_readoutActions, fitted ? "Remove speed drive" : ok ? $"Add speed drive · {Units.FormatMoney(drive.Price, _symbol)}" : $"Speed drive · tier {drive.Tier}", toggle);
+            b.SetEnabled(fitted || ok);
+        }
+
+        /// <summary>Fan speed 20–100% (free and live, like a damper, D25).</summary>
+        void AddSpeedSlider(double speed, System.Action<double> set)
+        {
+            var slider = new Slider("Speed", 20, 100) { value = (float)speed * 100 };
+            slider.AddToClassList("hl-slider");
+            slider.RegisterValueChangedCallback(ev => set(Mathf.Round(ev.newValue) / 100.0));
+            _readoutActions.Add(slider);
+            _speedSlider = slider;
+        }
+
         void BuildActions(Target t)
         {
             _readoutActions.Clear();
             _damperSlider = null;
+            _speedSlider = null;
             switch (t.Kind)
             {
                 case TargetKind.Segment:
@@ -679,15 +808,18 @@ namespace HeadLoss.Unity.UI
                     dd.style.minWidth = 140;
                     dd.RegisterValueChangedCallback(_ =>
                     {
+                        if (dd.index < 0) return;
                         _s.Execute(new SetSegmentSizeCommand(ids, _sizes[dd.index]));
                         _ix.ClearSelection();
                     });
                     _readoutActions.Add(dd);
+                    if (first != null) AddSpecDropdowns(ids, first);
                     _ui.Button(_readoutActions, "Delete", _ix.DeleteSelection);
                     TilePos tile = _ix.SelectedTile;
                     if (ids.Count == 1 && DuctEditor.ValidateInline(_s.State.Air, tile) == DrawError.None)
                         foreach (string part in _data.Game.Toolbox.Parts)
                         {
+                            if (!_s.Unlocked(Tech.ItemTier(_data, part))) continue;
                             string p = part;
                             _ui.Button(_readoutActions, "Add " + PartLabel(part).ToLowerInvariant(), () => _s.Execute(new PlaceInlineCommand(tile, p)));
                         }
@@ -696,30 +828,39 @@ namespace HeadLoss.Unity.UI
                 case TargetKind.Node:
                 {
                     DuctNode? n = _s.State.Air.FindNode(t.Id);
-                    if (n == null || !DuctEditor.IsElbow(_s.State.Air, n)) break;
+                    if (n == null || !(DuctEditor.IsElbow(_s.State.Air, n) || DuctEditor.IsTee(_s.State.Air, n))) break;
                     int id = t.Id;
                     StyleButton(_ui.Button(_readoutActions, "Sharp", () => _s.Execute(new SetElbowCommand(id, false))), !n.SmoothFittings);
-                    StyleButton(_ui.Button(_readoutActions, "Long-radius", () => _s.Execute(new SetElbowCommand(id, true))), n.SmoothFittings);
+                    Button smooth = _ui.Button(_readoutActions, DuctEditor.IsTee(_s.State.Air, n) ? "Smooth tee" : "Long-radius", () => _s.Execute(new SetElbowCommand(id, true)));
+                    StyleButton(smooth, n.SmoothFittings);
+                    smooth.SetEnabled(_s.Unlocked(Tech.SmoothFittingsTier(_data)));
                     break;
                 }
                 case TargetKind.Intake:
                 {
                     string opening = t.Anchor;
                     EquipmentState? e = _s.State.EquipmentAt(opening);
-                    foreach (string eqId in _data.Game.Toolbox.IntakeEquipment)
+                    foreach (EquipmentDef def in Catalogue.IntakeAirMovers(_data))
                     {
-                        EquipmentDef def = _data.EquipmentItem(eqId);
+                        string eqId = def.Id;
                         bool here = e != null && e.EquipmentId == eqId;
                         bool preplaced = false;
                         foreach (EquipmentPlacementDef p in _s.Layout.InitialEquipment)
                             if (p.OpeningId == opening && p.EquipmentId == eqId) preplaced = true;
+                        bool unlocked = _s.Unlocked(def.Tier);
+                        if (!unlocked && def.Tier > Tech.UnlockedTier(_s.Game) + 1) continue;
                         string price = preplaced ? "free" : Units.FormatMoney(def.Price, _symbol);
-                        string id = eqId;
-                        StyleButton(_ui.Button(_readoutActions, $"{def.DisplayName} · {price}", () => _s.Execute(new SetIntakeEquipmentCommand(opening, id))), here);
+                        Button b = _ui.Button(_readoutActions, unlocked ? $"{def.DisplayName} · {price}" : $"{def.DisplayName} · tier {def.Tier}", () => _s.Execute(new SetIntakeEquipmentCommand(opening, eqId)));
+                        StyleButton(b, here);
+                        b.SetEnabled(unlocked);
                     }
                     if (e == null) break;
-                    if (_data.EquipmentItem(e.EquipmentId).SpeedControl != "crank")
+                    EquipmentDef placed = _data.EquipmentItem(e.EquipmentId);
+                    if (placed.SpeedControl != "crank")
                         _ui.Button(_readoutActions, e.On ? "Switch off" : "Switch on", () => _s.Execute(new SetEquipmentOnCommand(opening, !e.On)));
+                    if (placed.SpeedControl == "on-off") AddDriveButton(e.Vsd, () => _s.Execute(new SetVsdCommand(opening, !e.Vsd)));
+                    if (e.Vsd || placed.SpeedControl == "variable")
+                        AddSpeedSlider(e.Speed, v => _s.Execute(new SetEquipmentSpeedCommand(opening, v)));
                     _ui.Button(_readoutActions, "Remove", () => _s.Execute(new SetIntakeEquipmentCommand(opening, "")));
                     break;
                 }
@@ -729,11 +870,13 @@ namespace HeadLoss.Unity.UI
                     if (n == null) break;
                     int id = n.Id;
                     TilePos tile = n.Pos;
-                    if (_data.FindEquipment(n.PartId) != null)
+                    if (_data.FindEquipment(n.PartId) is EquipmentDef fan)
                     {
-                        bool on = n.On;
+                        bool on = n.On, vsd = n.Vsd;
                         _ui.Button(_readoutActions, on ? "Switch off" : "Switch on", () => _s.Execute(new SetInlineOnCommand(tile, !on)));
                         _ui.Button(_readoutActions, "Turn around (R)", () => _s.Execute(new FlipInlineCommand(id)));
+                        if (fan.SpeedControl == "on-off") AddDriveButton(vsd, () => _s.Execute(new SetVsdCommand(tile, !vsd)));
+                        if (vsd) AddSpeedSlider(n.Speed, v => _s.Execute(new SetInlineSpeedCommand(tile, v)));
                     }
                     else
                     {

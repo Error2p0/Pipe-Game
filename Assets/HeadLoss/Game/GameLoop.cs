@@ -83,6 +83,17 @@ namespace HeadLoss.Game
 
         public BuildingSession? FindSession(string buildingId) => _sessions.Find(s => s.Record.BuildingId == buildingId);
 
+        /// <summary>Raised when a tech tier unlocks (the tier number).</summary>
+        public event System.Action<int>? TierUnlocked;
+
+        /// <summary>Checks the unlock conditions (<see cref="Progression.Tech.Update"/>) and raises <see cref="TierUnlocked"/>.</summary>
+        public void UpdateUnlocks()
+        {
+            int before = Progression.Tech.UnlockedTier(Game);
+            int now = Progression.Tech.Update(this);
+            for (int t = before + 1; now > 0 && t <= now; t++) TierUnlocked?.Invoke(t);
+        }
+
         /// <summary>Raised when a session is created for a building opened for the first time.</summary>
         public event System.Action<BuildingSession>? SessionCreated;
 
@@ -122,6 +133,7 @@ namespace HeadLoss.Game
     {
         public GameContext Context { get; }
         double _economyAccumulator;
+        double _unlockAccumulator;
 
         public GameLoop(GameContext context) => Context = context;
 
@@ -136,6 +148,12 @@ namespace HeadLoss.Game
             {
                 _economyAccumulator -= step;
                 EconomyStep(Context.Game, Context.Sessions, step);
+            }
+            _unlockAccumulator += dtSeconds;
+            if (_unlockAccumulator >= 1.0)
+            {
+                _unlockAccumulator = 0;
+                Context.UpdateUnlocks();
             }
         }
 

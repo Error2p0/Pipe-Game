@@ -215,13 +215,14 @@ namespace HeadLoss.Game.Tests
     public class BalancingReportTests
     {
         [Test]
-        public void Report_CoversEveryHandmadeBuilding()
+        public void Report_CoversTheStarterAndEveryGeneratedTier()
         {
-            Balancing.BalancingReport.Result r = Balancing.BalancingReport.Run(GameTestUtil.Data);
-            foreach (Core.Data.Defs.BuildingLayoutDef b in GameTestUtil.Data.HandmadeBuildings)
-                Assert.IsTrue(r.Checks.Exists(c => c.Building == b.DisplayName), b.Id);
+            Balancing.BalancingReport.Result r = Balancing.BalancingReport.Run(GameTestUtil.Data, perTier: 4, starterCities: 2);
+            foreach (Core.Data.Defs.BuildingTierDef t in GameTestUtil.Data.Buildings.Tiers)
+                if (t.Available) Assert.IsTrue(r.Checks.Exists(c => c.Building == $"Tier {t.Tier}"), $"tier {t.Tier}");
             Assert.IsTrue(r.Checks.Exists(c => c.Name.StartsWith("Cranking")), "starter crank check");
             Assert.IsTrue(r.Checks.Exists(c => c.Name.StartsWith("Doubling")), "doubling-by-speed check");
+            Assert.IsTrue(r.Checks.Find(c => c.Name.StartsWith("Reference solvable")).Pass);
         }
     }
 }

@@ -117,5 +117,20 @@ namespace HeadLoss.PlayMode.Tests
             yield return Tap(_keyboard.enterKey);
             Assert.IsTrue(root.InCity, "tier 3+ buildings arrive later");
         }
+
+        [UnityTest]
+        public IEnumerator Shop_OpensFromTheBuilding_EscClosesItFirst()
+        {
+            yield return StartCity();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            root.OpenBuilding(root.Context!.City!.Starter!.Id);
+            yield return Tap(_keyboard.tabKey);
+            root.Hud!.ShopRequested = true;
+            yield return null;
+            Assert.IsNotNull(root.Shop, "the shop is open");
+            yield return Tap(_keyboard.escapeKey);
+            Assert.IsNull(root.Shop, "Esc closed the shop");
+            Assert.IsFalse(root.InCity, "and stayed in the building");
+        }
     }
 }

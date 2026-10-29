@@ -71,6 +71,10 @@ namespace HeadLoss.Game.Economy
             return OutletRequirement.FromDef(def, new OutletRequirementDef { Min = placement.Min, Ideal = placement.Ideal, Max = placement.Max });
         }
 
+        /// <summary>Electrical input power of a device link, W (a variable-speed drive divides by its efficiency factor).</summary>
+        static double DevicePower(CompiledNetwork network, SolveResult result, int link) =>
+            network.DriveFactor.TryGetValue(link, out double f) ? result.Power[link] / f : result.Power[link];
+
         /// <summary>Evaluates a solve. A null network (not solved yet) leaves every outlet unconnected.</summary>
         public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, CompiledNetwork? network, SolveResult? result)
         {
@@ -108,8 +112,8 @@ namespace HeadLoss.Game.Economy
 
             if (network != null && result != null)
             {
-                foreach (var kv in network.FanLink) ev.PowerW += result.Power[kv.Value];
-                foreach (var kv in network.InlineLink) ev.PowerW += result.Power[kv.Value];
+                foreach (var kv in network.FanLink) ev.PowerW += DevicePower(network, result, kv.Value);
+                foreach (var kv in network.InlineLink) ev.PowerW += DevicePower(network, result, kv.Value);
             }
             ev.Electricity = ev.PowerW / 1000.0 * e.ElectricityPricePerKWs * e.ElectricityTierFactor[layout.Tier - 1];
             return ev;

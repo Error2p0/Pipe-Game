@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
+using HeadLoss.Game.Progression;
 using HeadLoss.Game.Session;
 
 namespace HeadLoss.Game.Commands
@@ -129,6 +130,9 @@ namespace HeadLoss.Game.Commands
         protected override bool Apply(BuildingSession s)
         {
             LastError = DuctEditor.Validate(s.State.Air, s.Layout, _path, s.Data.Balancing.Drawing.MaxNodeDegree);
+            if (LastError == DrawError.None && (!s.Unlocked(Tech.SizeTier(s.Data, _materialId, _diameterMm))
+                || !s.Unlocked(Tech.ItemTier(s.Data, _materialId)) || (_smoothElbows && !s.Unlocked(Tech.SmoothFittingsTier(s.Data)))))
+                LastError = DrawError.Locked;
             if (LastError != DrawError.None) return false;
             DuctEditor.PlaceRun(s.State.Air, _path, _diameterMm, _materialId, _smoothElbows);
             return true;
@@ -160,10 +164,43 @@ namespace HeadLoss.Game.Commands
         }
 
         public override string Description => $"Change duct size to {_diameterMm} mm";
-        protected override bool Apply(BuildingSession s) => DuctEditor.SetSize(s.State.Air, _segmentIds, _diameterMm);
+
+        protected override bool Apply(BuildingSession s)
+        {
+            foreach (int id in _segmentIds)
+                if (s.State.Air.FindSegment(id) is DuctSegment seg && !s.Unlocked(Tech.SizeTier(s.Data, seg.MaterialId, _diameterMm))) return false;
+            return DuctEditor.SetSize(s.State.Air, _segmentIds, _diameterMm);
+        }
     }
 
-    /// <summary>Switches one elbow between sharp and long-radius.</summary>
+    /// <summary>Changes the material, sealing class or insulation (null = unchanged) of several segments.</summary>
+    public sealed class SetSegmentSpecCommand : DesignCommand
+    {
+        readonly List<int> _segmentIds;
+        readonly string? _material, _sealing, _insulation;
+
+        public SetSegmentSpecCommand(IEnumerable<int> segmentIds, string? materialId = null, string? sealing = null, string? insulation = null)
+        {
+            _segmentIds = new List<int>(segmentIds);
+            _material = materialId;
+            _sealing = sealing;
+            _insulation = insulation;
+        }
+
+        public override string Description => _material != null ? "Change duct material" : _sealing != null ? "Change duct sealing" : "Change insulation";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            foreach (string? id in new[] { _material, _sealing, _insulation })
+                if (id != null && !s.Unlocked(Tech.ItemTier(s.Data, id))) return false;
+            if (_material != null && s.Data.FindMaterial(_material)?.Kind != "duct") return false;
+            if (_sealing != null && _sealing.Length > 0 && s.Data.FindSealing(_sealing) == null) return false;
+            if (_insulation != null && _insulation.Length > 0 && s.Data.FindInsulation(_insulation) == null) return false;
+            return DuctEditor.SetSpec(s.State.Air, _segmentIds, _material, _sealing, _insulation);
+        }
+    }
+
+    /// <summary>Switches one fitting between sharp and smooth (long-radius elbow, smooth tee).</summary>
     public sealed class SetElbowCommand : DesignCommand
     {
         readonly int _nodeId;
@@ -175,28 +212,30 @@ namespace HeadLoss.Game.Commands
             _smooth = smooth;
         }
 
-        public override string Description => _smooth ? "Long-radius elbow" : "Sharp elbow";
+        public override string Description => _smooth ? "Smooth fitting" : "Sharp fitting";
 
         protected override bool Apply(BuildingSession s)
         {
             DuctNode? n = s.State.Air.FindNode(_nodeId);
-            if (n == null || !DuctEditor.IsElbow(s.State.Air, n) || n.SmoothFittings == _smooth) return false;
+            if (n == null || !(DuctEditor.IsElbow(s.State.Air, n) || DuctEditor.IsTee(s.State.Air, n)) || n.SmoothFittings == _smooth) return false;
+            if (_smooth && !s.Unlocked(Tech.SmoothFittingsTier(s.Data))) return false;
             n.SmoothFittings = _smooth;
             return true;
         }
     }
 
-    /// <summary>"Upgrade all bends": every elbow of the network becomes long-radius.</summary>
+    /// <summary>"Upgrade all bends": every elbow becomes long-radius and every tee smooth.</summary>
     public sealed class UpgradeAllBendsCommand : DesignCommand
     {
         public override string Description => "Upgrade all bends";
 
         protected override bool Apply(BuildingSession s)
         {
+            if (!s.Unlocked(Tech.SmoothFittingsTier(s.Data))) return false;
             bool any = false;
             foreach (DuctNode n in s.State.Air.Nodes)
             {
-                if (n.SmoothFittings || !DuctEditor.IsElbow(s.State.Air, n)) continue;
+                if (n.SmoothFittings || !(DuctEditor.IsElbow(s.State.Air, n) || DuctEditor.IsTee(s.State.Air, n))) continue;
                 n.SmoothFittings = true;
                 any = true;
             }
@@ -229,10 +268,11 @@ namespace HeadLoss.Game.Commands
                 return true;
             }
             EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
-            if (def == null || def.Placement != "intake") return false;
+            if (def == null || def.Placement != "intake" || !s.Unlocked(def.Tier)) return false;
             if (e != null && e.EquipmentId == _equipmentId) return false;
+            bool vsd = e != null && e.Vsd && def.SpeedControl == "on-off";
             if (e != null) s.State.Equipment.Remove(e);
-            s.State.Equipment.Add(new EquipmentState { EquipmentId = _equipmentId, OpeningId = _openingId, On = true });
+            s.State.Equipment.Add(new EquipmentState { EquipmentId = _equipmentId, OpeningId = _openingId, On = true, Vsd = vsd });
             return true;
         }
     }
@@ -258,6 +298,7 @@ namespace HeadLoss.Game.Commands
         protected override bool Apply(BuildingSession s)
         {
             LastError = DuctEditor.ValidateInline(s.State.Air, _tile);
+            if (LastError == DrawError.None && !s.Unlocked(Tech.ItemTier(s.Data, _partId))) LastError = DrawError.Locked;
             if (LastError != DrawError.None) return false;
             (int dx, int dy) = DuctEditor.DefaultInlineDirection(s.State.Air, _tile);
             if (_reverse) (dx, dy) = (-dx, -dy);
@@ -287,6 +328,52 @@ namespace HeadLoss.Game.Commands
             if (n == null || n.Kind != DuctNodeKind.Inline) return false;
             n.DirX = -n.DirX;
             n.DirY = -n.DirY;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Fits or removes a variable-speed drive on an on/off fan (<c>07-equipment.md</c>): at an intake
+    /// (<paramref name="openingId"/>) or on an inline fan (<paramref name="tile"/>). Bought with the Commit.
+    /// </summary>
+    public sealed class SetVsdCommand : DesignCommand
+    {
+        readonly string _openingId;
+        readonly TilePos _tile;
+        readonly bool _fit;
+
+        public SetVsdCommand(string openingId, bool fit)
+        {
+            _openingId = openingId;
+            _fit = fit;
+        }
+
+        public SetVsdCommand(TilePos inlineTile, bool fit)
+        {
+            _openingId = "";
+            _tile = inlineTile;
+            _fit = fit;
+        }
+
+        public override string Description => _fit ? "Fit variable-speed drive" : "Remove variable-speed drive";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            EquipmentDef? drive = null;
+            foreach (EquipmentDef d in s.Data.Equipment) if (d.Placement == "addon" && d.FitsCategories.Contains("air-mover")) drive = d;
+            if (drive == null || (_fit && !s.Unlocked(drive.Tier))) return false;
+            if (_openingId.Length > 0)
+            {
+                EquipmentState? e = s.State.EquipmentAt(_openingId);
+                if (e == null || e.Vsd == _fit || s.Data.EquipmentItem(e.EquipmentId).SpeedControl != "on-off") return false;
+                e.Vsd = _fit;
+                e.Speed = 1;
+                return true;
+            }
+            DuctNode? n = s.State.Air.NodeAt(_tile);
+            if (n == null || n.Kind != DuctNodeKind.Inline || n.Vsd == _fit || s.Data.FindEquipment(n.PartId)?.SpeedControl != "on-off") return false;
+            n.Vsd = _fit;
+            n.Speed = 1;
             return true;
         }
     }
@@ -366,11 +453,14 @@ namespace HeadLoss.Game.Commands
         }
     }
 
-    /// <summary>Sets a device speed fraction (dev overlay; variable-speed drives arrive in Phase 3).</summary>
+    /// <summary>
+    /// Sets the speed of an intake fan with a variable-speed drive or built-in variable speed (0.2–1, 0.01 steps).
+    /// Free and live like dampers (D25); consecutive moves merge into one undo step.
+    /// </summary>
     public sealed class SetEquipmentSpeedCommand : OperationalCommand
     {
         readonly string _openingId;
-        readonly double _speed;
+        double _speed;
         double _wasDesign, _wasCommitted;
         bool _hadCommitted;
 
@@ -382,12 +472,19 @@ namespace HeadLoss.Game.Commands
 
         public override string Description => $"Speed {_speed:P0}";
 
+        /// <summary>Clamps to 20–100% in 1% steps (<c>05-simulation.md</c> §2).</summary>
+        public static double SpeedStep(double speed) => System.Math.Round(System.Math.Max(0.2, System.Math.Min(1.0, speed)) * 100) / 100;
+
+        static bool Variable(BuildingSession s, EquipmentState e) => e.Vsd || s.Data.EquipmentItem(e.EquipmentId).SpeedControl == "variable";
+
         public override bool Execute(BuildingSession s)
         {
             EquipmentState? e = s.State.EquipmentAt(_openingId);
-            double v = System.Math.Max(0.2, System.Math.Min(1.0, _speed));
-            if (e == null || e.Speed == v) return false;
+            double v = SpeedStep(_speed);
+            if (e == null || e.Speed == v || !Variable(s, e)) return false;
+            _speed = v;
             EquipmentState? c = s.CommittedTwin(e);
+            if (c != null && !Variable(s, c)) c = null;  // the drive is not bought yet
             _wasDesign = e.Speed;
             e.Speed = v;
             _hadCommitted = c != null;
@@ -404,6 +501,62 @@ namespace HeadLoss.Game.Commands
             EquipmentState? e = s.State.EquipmentAt(_openingId);
             if (e != null) e.Speed = _wasDesign;
             if (_hadCommitted && s.Committed.EquipmentAt(_openingId) is EquipmentState c) c.Speed = _wasCommitted;
+        }
+
+        public override bool TryMerge(ICommand next)
+        {
+            if (!(next is SetEquipmentSpeedCommand d) || d._openingId != _openingId || d._hadCommitted != _hadCommitted) return false;
+            _speed = d._speed;
+            return true;
+        }
+    }
+
+    /// <summary>Sets the speed of an inline fan with a variable-speed drive (live, free, merging like the intake version).</summary>
+    public sealed class SetInlineSpeedCommand : OperationalCommand
+    {
+        readonly TilePos _tile;
+        double _speed;
+        double _wasDesign, _wasCommitted;
+        bool _hadCommitted;
+
+        public SetInlineSpeedCommand(TilePos tile, double speed)
+        {
+            _tile = tile;
+            _speed = speed;
+        }
+
+        public override string Description => $"Speed {_speed:P0}";
+
+        public override bool Execute(BuildingSession s)
+        {
+            DuctNode? n = s.State.Air.NodeAt(_tile);
+            double v = SetEquipmentSpeedCommand.SpeedStep(_speed);
+            if (n == null || n.Kind != DuctNodeKind.Inline || !n.Vsd || n.Speed == v) return false;
+            _speed = v;
+            DuctNode? c = s.CommittedTwin(n);
+            if (c != null && !c.Vsd) c = null;
+            _wasDesign = n.Speed;
+            n.Speed = v;
+            _hadCommitted = c != null;
+            if (c != null)
+            {
+                _wasCommitted = c.Speed;
+                c.Speed = v;
+            }
+            return true;
+        }
+
+        public override void Undo(BuildingSession s)
+        {
+            if (s.State.Air.NodeAt(_tile) is DuctNode n) n.Speed = _wasDesign;
+            if (_hadCommitted && s.Committed.Air.NodeAt(_tile) is DuctNode c) c.Speed = _wasCommitted;
+        }
+
+        public override bool TryMerge(ICommand next)
+        {
+            if (!(next is SetInlineSpeedCommand d) || d._tile != _tile || d._hadCommitted != _hadCommitted) return false;
+            _speed = d._speed;
+            return true;
         }
     }
 

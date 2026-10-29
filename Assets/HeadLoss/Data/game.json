@@ -3,7 +3,6 @@
   "version": "0.3.0-phase3",
   "currencySymbol": "$",
   "toolbox": {
-    "intakeEquipment": ["hand-crank-fan", "small-axial-fan"],
     "parts": ["damper", "inline-duct-fan"]
   },
   "theme": {

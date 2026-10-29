@@ -16,8 +16,6 @@ namespace HeadLoss.Core.Data.Defs
 
     public sealed class ToolboxDef
     {
-        /// <summary>Equipment offered at an entry opening.</summary>
-        public List<string> IntakeEquipment = new List<string>();
         /// <summary>Inline parts (fitting or equipment ids) placed on a duct.</summary>
         public List<string> Parts = new List<string>();
     }

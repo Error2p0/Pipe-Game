@@ -1,0 +1,343 @@
+{
+  "saveVersion": 2,
+  "generatorVersion": 2,
+  "dataVersion": "93e989c9db4c12f4",
+  "savedAtUtc": "2026-10-29T12:00:00.0000000Z",
+  "playTimeSeconds": 600.0,
+  "gameState": {
+    "wallet": 23.004780183968272,
+    "debt": 0.0,
+    "lifetimeIncome": 0.0,
+    "playTimeSeconds": 600.0,
+    "currentBuildingId": "",
+    "city": {
+      "seed": 424242,
+      "index": 1,
+      "unlockedTier": 1
+    },
+    "buildings": [
+      {
+        "buildingId": "plot-1",
+        "committed": {
+          "buildingId": "plot-1",
+          "air": {
+            "fluidId": "air",
+            "nodes": [
+              {
+                "id": 1,
+                "x": 5,
+                "y": 0,
+                "kind": 1,
+                "anchorId": "air-intake",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 2,
+                "x": 2,
+                "y": 3,
+                "kind": 2,
+                "anchorId": "vent-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 3,
+                "x": 6,
+                "y": 3,
+                "kind": 2,
+                "anchorId": "vent-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 5,
+                "x": 5,
+                "y": 3,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 6,
+                "x": 5,
+                "y": 5,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 7,
+                "x": 6,
+                "y": 5,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              }
+            ],
+            "segments": [
+              {
+                "id": 1,
+                "nodeA": 1,
+                "nodeB": 5,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 4,
+                "nodeA": 5,
+                "nodeB": 2,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 5,
+                "nodeA": 5,
+                "nodeB": 6,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 6,
+                "nodeA": 6,
+                "nodeB": 7,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 7,
+                "nodeA": 7,
+                "nodeB": 3,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              }
+            ],
+            "nextNodeId": 8,
+            "nextSegmentId": 8
+          },
+          "equipment": [
+            {
+              "equipmentId": "hand-crank-fan",
+              "openingId": "air-intake",
+              "on": true,
+              "speed": 1.0,
+              "vsd": false
+            }
+          ]
+        },
+        "design": {
+          "buildingId": "plot-1",
+          "air": {
+            "fluidId": "air",
+            "nodes": [
+              {
+                "id": 1,
+                "x": 5,
+                "y": 0,
+                "kind": 1,
+                "anchorId": "air-intake",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 2,
+                "x": 2,
+                "y": 3,
+                "kind": 2,
+                "anchorId": "vent-1",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 3,
+                "x": 6,
+                "y": 3,
+                "kind": 2,
+                "anchorId": "vent-2",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 5,
+                "x": 5,
+                "y": 3,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 6,
+                "x": 5,
+                "y": 5,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              },
+              {
+                "id": 7,
+                "x": 6,
+                "y": 5,
+                "kind": 0,
+                "anchorId": "",
+                "smoothFittings": false,
+                "partId": "",
+                "dirX": 0,
+                "dirY": 0,
+                "opening": 1.0,
+                "on": true,
+                "vsd": false,
+                "speed": 1.0
+              }
+            ],
+            "segments": [
+              {
+                "id": 1,
+                "nodeA": 1,
+                "nodeB": 5,
+                "diameterMm": 125.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 4,
+                "nodeA": 5,
+                "nodeB": 2,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 5,
+                "nodeA": 5,
+                "nodeB": 6,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 6,
+                "nodeA": 6,
+                "nodeB": 7,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              },
+              {
+                "id": 7,
+                "nodeA": 7,
+                "nodeB": 3,
+                "diameterMm": 80.0,
+                "materialId": "galvanized-duct",
+                "sealing": "",
+                "insulation": ""
+              }
+            ],
+            "nextNodeId": 8,
+            "nextSegmentId": 8
+          },
+          "equipment": [
+            {
+              "equipmentId": "hand-crank-fan",
+              "openingId": "air-intake",
+              "on": true,
+              "speed": 1.0,
+              "vsd": false
+            }
+          ]
+        },
+        "spentTotal": 16.995219816031728,
+        "everOnline": false,
+        "sheetSeen": true,
+        "lifetimeIncome": 0.0
+      }
+    ],
+    "settings": {
+      "masterVolume": -1.0
+    }
+  }
+}

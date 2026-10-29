@@ -12,6 +12,14 @@ namespace HeadLoss.Game.Tests
 {
     public class DuctLayoutTests
     {
+        /// <summary>Air leaking out of every duct (07 §Duct sealing), m³/s.</summary>
+        static double Leaks(BuildingSession s)
+        {
+            double q = 0;
+            foreach (var kv in s.Current!.Compiled.SegmentLeaks) q += s.Current.Result.Flow[kv.Value.a] + s.Current.Result.Flow[kv.Value.b];
+            return q;
+        }
+
         static DataRepository? _data;
         static DataRepository Data => _data ??= DataRepository.Load(new FileDataSource(System.IO.Path.Combine(Directory.GetCurrentDirectory(), "Assets", "HeadLoss", "Data")));
 
@@ -147,7 +155,7 @@ namespace HeadLoss.Game.Tests
             Assert.IsTrue(s.Current!.Result.Converged);
             double q = s.OutletFlow("vent-1");
             Assert.Greater(Units.M3sToM3h(q), 50);
-            Assert.AreEqual(s.Current.Result.Flow[s.Current.Compiled.FanLink["air-intake"]], q, 1e-9);
+            Assert.AreEqual(s.Current.Result.Flow[s.Current.Compiled.FanLink["air-intake"]], q + Leaks(s), 1e-9, "fan flow = vent + duct leakage");
             Assert.AreEqual(0, s.OutletFlow("vent-2"));
         }
 
@@ -240,7 +248,7 @@ namespace HeadLoss.Game.Tests
             Assert.IsTrue(s.Current!.Compiled.OpenEndLink.TryGetValue(end.Id, out int link));
             double fan = s.Current.Result.Flow[s.Current.Compiled.FanLink["air-intake"]];
             Assert.Greater(Units.M3sToM3h(fan), 50);
-            Assert.AreEqual(fan, s.Current.Result.Flow[link], 1e-9);
+            Assert.AreEqual(fan, s.Current.Result.Flow[link] + Leaks(s), 1e-9, "fan flow = open end + duct leakage");
         }
 
         [Test]

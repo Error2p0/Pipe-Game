@@ -34,6 +34,10 @@ namespace HeadLoss.Game.Buildings
         public double Opening = 1;
         /// <summary>Inline fans: switched on.</summary>
         public bool On = true;
+        /// <summary>Inline fans: a variable-speed drive is fitted.</summary>
+        public bool Vsd;
+        /// <summary>Inline fans with a VSD: speed fraction (0.2–1).</summary>
+        public double Speed = 1;
 
         public TilePos Pos => new TilePos(X, Y);
         public DuctNode Clone() => (DuctNode)MemberwiseClone();
@@ -48,9 +52,22 @@ namespace HeadLoss.Game.Buildings
         /// <summary>Nominal diameter, mm.</summary>
         public double DiameterMm;
         public string MaterialId = "";
+        /// <summary>Sealing class id from <c>upgrades.json</c> ("" = unsealed).</summary>
+        public string Sealing = "";
+        /// <summary>Insulation id from <c>upgrades.json</c> ("" = none).</summary>
+        public string Insulation = "";
 
         public int Other(int node) => node == NodeA ? NodeB : NodeA;
         public DuctSegment Clone() => (DuctSegment)MemberwiseClone();
+
+        /// <summary>A new segment between two nodes with this one's size, material and upgrades.</summary>
+        public DuctSegment Like(int id, int nodeA, int nodeB) => new DuctSegment
+        {
+            Id = id, NodeA = nodeA, NodeB = nodeB, DiameterMm = DiameterMm, MaterialId = MaterialId, Sealing = Sealing, Insulation = Insulation,
+        };
+
+        /// <summary>Same size, material and upgrades (two such segments in a straight line merge into one).</summary>
+        public bool SameSpec(DuctSegment o) => DiameterMm == o.DiameterMm && MaterialId == o.MaterialId && Sealing == o.Sealing && Insulation == o.Insulation;
     }
 
     /// <summary>The player's layout for one network (one fluid) in one building.</summary>
@@ -88,8 +105,10 @@ namespace HeadLoss.Game.Buildings
         public string EquipmentId = "";
         public string OpeningId = "";
         public bool On = true;
-        /// <summary>Speed fraction when on (1 for on/off devices).</summary>
+        /// <summary>Speed fraction when on (used with a VSD or built-in variable speed; 0.2–1).</summary>
         public double Speed = 1;
+        /// <summary>A variable-speed drive is fitted (on/off fans only).</summary>
+        public bool Vsd;
 
         public EquipmentState Clone() => (EquipmentState)MemberwiseClone();
     }
@@ -124,14 +143,14 @@ namespace HeadLoss.Game.Buildings
             {
                 TilePos a = Air.FindNode(s.NodeA)!.Pos, b = Air.FindNode(s.NodeB)!.Pos;
                 if (a.X > b.X || (a.X == b.X && a.Y > b.Y)) (a, b) = (b, a);
-                parts.Add($"s{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId}");
+                parts.Add($"s{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}");
             }
             foreach (DuctNode n in Air.Nodes)
             {
                 if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
-                parts.Add($"n{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On}");
+                parts.Add($"n{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}");
             }
-            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed}");
+            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}");
             parts.Sort(System.StringComparer.Ordinal);
             return string.Join(";", parts);
         }

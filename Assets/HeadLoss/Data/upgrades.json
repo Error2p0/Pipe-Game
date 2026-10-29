@@ -1,0 +1,13 @@
+{
+  "ductSealing": [
+    { "id": "unsealed", "displayName": "Unsealed", "tier": 1, "leakageCoefficient": 1.0e-4, "pricePerMetre": 0 },
+    { "id": "sealed", "displayName": "Sealed joints", "tier": 2, "leakageCoefficient": 2.5e-5, "pricePerMetre": 0.3 },
+    { "id": "premium-sealed", "displayName": "Premium sealing", "tier": 4, "leakageCoefficient": 8.0e-6, "pricePerMetre": 0.8 }
+  ],
+  "leakageExponent": 0.65,
+  "insulation": [
+    { "id": "insulation-13", "displayName": "Insulation 13 mm", "tier": 2, "thicknessMm": 13, "u": 1.5, "pricePerMetre": 0.5, "extraCapacityUnits": 1, "capacityAboveMm": 42 },
+    { "id": "insulation-25", "displayName": "Insulation 25 mm", "tier": 3, "thicknessMm": 25, "u": 0.8, "pricePerMetre": 1.2, "extraCapacityUnits": 1, "capacityAboveMm": 42 },
+    { "id": "insulation-50", "displayName": "Insulation 50 mm", "tier": 4, "thicknessMm": 50, "u": 0.45, "pricePerMetre": 2.5, "extraCapacityUnits": 1, "capacityAboveMm": 42 }
+  ]
+}
