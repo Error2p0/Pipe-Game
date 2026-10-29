@@ -43,7 +43,7 @@ Task list from `14-roadmap.md` §Phase 2:
 Task list from `14-roadmap.md` §Phase 3:
 
 - [x] 1. City generation (districts, roads, rail, parks, protected and historic sites, facilities, plots, starter guarantee). Seeds and tests.
-- [ ] 2. City view rendering, plot hover difficulty hint, open building, online glow / offline grey.
+- [x] 2. City view rendering, plot hover difficulty hint, open building, online glow / offline grey.
 - [x] 3. Procedural building generation for tier 1–2 single-floor buildings, air only: footprint, rooms, doors, walls, outlets by room type, air intake, occupants, heat loads.
 - [x] 4. Auto-router + solvability check; reference layout; budget cap from it.
 - [ ] 5. Room grid CPU reference (velocity field, advection, diffusion, temperature, CO₂), Burst version, comparison test. Room heatmaps for velocity, temperature, density.

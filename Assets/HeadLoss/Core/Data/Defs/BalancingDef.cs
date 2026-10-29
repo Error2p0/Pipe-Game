@@ -20,6 +20,20 @@ namespace HeadLoss.Core.Data.Defs
         public AudioDef Audio = new AudioDef();
         public TargetsDef Targets = new TargetsDef();
         public AutoRouterDef AutoRouter = new AutoRouterDef();
+        public DifficultyDef Difficulty = new DifficultyDef();
+    }
+
+    /// <summary>The 1–5 dot difficulty estimate on a plot's hover (<c>03-city.md</c> §Difficulty hint).</summary>
+    public sealed class DifficultyDef
+    {
+        /// <summary>Sum of outlet minimums worth one dot, m³/h.</summary>
+        public double DemandReferenceM3h;
+        /// <summary>Longest entry-to-outlet duct path worth one dot, m.</summary>
+        public double PathReferenceMetres;
+        /// <summary>Dots per floor above the first.</summary>
+        public double FloorWeight;
+        /// <summary>Dots per code in force.</summary>
+        public double CodeWeight;
     }
 
     /// <summary>Auto-router for reference layouts (<c>04-buildings.md</c> §Auto-router).</summary>
@@ -165,6 +179,9 @@ namespace HeadLoss.Core.Data.Defs
         public double ZoomStep;
         /// <summary>Keyboard pan speed, multiples of the orthographic size per second.</summary>
         public double KeyPanSpeed;
+        /// <summary>Orthographic size limits in the city view, m.</summary>
+        public double CityZoomMin;
+        public double CityZoomMax;
     }
 
     /// <summary>Money rules (<c>02-economy.md</c>). Arrays indexed by tier − 1.</summary>

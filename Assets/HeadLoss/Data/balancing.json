@@ -61,7 +61,9 @@
     "zoomMin": 2.5,
     "zoomMax": 25,
     "zoomStep": 1.12,
-    "keyPanSpeed": 1.0
+    "keyPanSpeed": 1.0,
+    "cityZoomMin": 40,
+    "cityZoomMax": 520
   },
   "economy": {
     "overdeliveryCapRatio": 5,
@@ -125,5 +127,11 @@
     "shortApproachPenalty": 12,
     "balancingPasses": 80,
     "balanceTarget": 0.4
+  },
+  "difficulty": {
+    "demandReferenceM3h": 120,
+    "pathReferenceMetres": 12,
+    "floorWeight": 1.0,
+    "codeWeight": 0.25
   }
 }

@@ -34,7 +34,7 @@ namespace HeadLoss.Game.Tests
         /// <summary>A game with built ducts, a pending design, a damper, debt and play time.</summary>
         static GameContext SampleGame()
         {
-            var ctx = new GameContext(Data, GameContext.NewGame(Data));
+            var ctx = new GameContext(Data, GameContext.NewFixtureGame(Data, "test-house", "small-house"));
             BuildingSession s = ctx.Open("test-house");
             Draw(s, Run((0, 3), (5, 3), (5, 5), (3, 5)), 125);
             s.Execute(new PlaceInlineCommand(new TilePos(2, 3), "damper"));
@@ -185,20 +185,38 @@ namespace HeadLoss.Game.Tests
                 Assert.IsNotNull(r, f);
                 Assert.AreEqual(SaveSerializer.CurrentSaveVersion, r!.File.SaveVersion, f);
                 var ctx = new GameContext(Data, r.File.GameState);
-                Assert.Greater(ctx.Sessions.Count, 0, f);
+                Assert.IsNotNull(ctx.City, f);
             }
+        }
+
+        /// <summary>Phase 2 saves (v1): the hand-made houses go, their spending comes back, a new city starts.</summary>
+        [Test]
+        public void Migration_V1_RefundsTheHandmadeHousesAndStartsACity()
+        {
+            string sample = Path.Combine(Directory.GetCurrentDirectory(), "Assets", "HeadLoss", "Tests", "EditMode", "Game", "SaveSamples", "save-v1.json");
+            Newtonsoft.Json.Linq.JObject before = SaveSerializer.Parse(File.ReadAllText(sample));
+            double wallet = before["gameState"]!.Value<double>("wallet"), spent = 0;
+            foreach (var b in before["gameState"]!["buildings"]!) spent += b.Value<double>("spentTotal");
+            Directory.CreateDirectory(_folder);
+            File.Copy(sample, Store().PathFor(1), true);
+            LoadResult r = Store().Load(1, Data)!;
+            Assert.AreEqual(wallet + spent, r.File.GameState.Wallet, 1e-9);
+            Assert.IsEmpty(r.File.GameState.Buildings);
+            Assert.IsNotNull(r.File.GameState.City);
+            Assert.AreEqual(1, r.File.GameState.City!.UnlockedTier);
+            Assert.IsTrue(r.Notes.Exists(n => n.Contains("Migrated")));
         }
 
         [Test]
         public void Sanitize_DropsWhatNoLongerFits()
         {
-            GameState g = GameContext.NewGame(Data);
+            GameState g = GameContext.NewFixtureGame(Data, "test-house", "small-house");
             g.Buildings.Add(new BuildingRecord { BuildingId = "demolished-house" });
             BuildingRecord house = g.FindBuilding("test-house")!;
             house.Design.Air.Nodes.Add(new DuctNode { Id = 900, X = 40, Y = 40, Kind = DuctNodeKind.Free });
             house.Design.Air.Nodes.RemoveAll(n => n.AnchorId == "vent-2");
             var notes = new List<string>();
-            SaveStore.Sanitize(g, Data, notes);
+            SaveStore.Sanitize(g, Data, notes, id => Data.FindHandmadeBuilding(id) != null ? GameContext.LayoutFor(Data, id) : null);
             Assert.IsNull(g.FindBuilding("demolished-house"));
             Assert.IsNull(house.Design.Air.FindNode(900));
             Assert.IsTrue(house.Design.Air.Nodes.Exists(n => n.AnchorId == "vent-2"), "anchors come back");

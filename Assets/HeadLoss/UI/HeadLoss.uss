@@ -353,3 +353,28 @@
 .hl-slider .unity-base-slider__drag-container {
     min-height: 44px;
 }
+
+/* ---- city view ---- */
+
+.hl-citypanel {
+    position: absolute;
+    left: 16px; top: 16px;
+    width: 360px;
+}
+
+.hl-plotpanel {
+    position: absolute;
+    right: 16px; top: 16px;
+    width: 400px;
+}
+
+.hl-citymenu {
+    position: absolute;
+    left: 16px; bottom: 16px;
+}
+
+.hl-start-here {
+    padding: 2px 8px;
+    border-radius: 6px;
+    -unity-font-style: bold;
+}

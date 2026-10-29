@@ -1,6 +1,9 @@
 using System.Collections.Generic;
 using HeadLoss.Core.Data;
 using HeadLoss.Game.Buildings;
+using HeadLoss.Game.City;
+using HeadLoss.Game.Generation;
+using HeadLoss.Game.Save;
 using HeadLoss.Game.Economy;
 using HeadLoss.Game.Session;
 
@@ -11,38 +14,77 @@ namespace HeadLoss.Game
     {
         public DataRepository Data { get; }
         public GameState Game { get; }
+        /// <summary>The city layout, regenerated from <see cref="CityState.Seed"/> (null in hand-made test fixtures).</summary>
+        public CityLayout? City { get; }
+        /// <summary>The city's buildings, generated lazily from their plots.</summary>
+        public CityBuildings? CityBuildings { get; }
+        /// <summary>False when no starter seed was solvable (a dev report item; the game still runs).</summary>
+        public bool StarterSolvable { get; } = true;
         /// <summary>A live session per building record (every building earns, open or not).</summary>
         public IReadOnlyList<BuildingSession> Sessions => _sessions;
         /// <summary>The building open in the building view, if any.</summary>
         public BuildingSession? Building { get; private set; }
+        /// <summary>What loading had to drop or repair (for the log).</summary>
+        public IReadOnlyList<string> Notes => _notes;
 
         readonly List<BuildingSession> _sessions = new List<BuildingSession>();
+        readonly List<string> _notes = new List<string>();
 
         public GameContext(DataRepository data, GameState game)
         {
             Data = data;
             Game = game;
+            if (game.City != null)
+            {
+                City = StarterGuarantee.NewCity(data, game.City.Seed, game.City.Index, out bool ok);
+                StarterSolvable = ok;
+                CityBuildings = new CityBuildings(data, City);
+            }
+            SaveStore.Sanitize(game, data, _notes, FindLayout);
             foreach (BuildingRecord r in game.Buildings) _sessions.Add(CreateSession(r));
-            if (game.CurrentBuildingId.Length > 0) Open(game.CurrentBuildingId);
+            if (game.CurrentBuildingId.Length > 0 && CanOpen(game.CurrentBuildingId)) Open(game.CurrentBuildingId);
+            else game.CurrentBuildingId = "";
         }
 
-        /// <summary>A new game: starting wallet and a fresh record for each starter building; opens the first.</summary>
-        public static GameState NewGame(DataRepository data)
+        /// <summary>A new game in a new city: the starting wallet, nothing built, the city view open.</summary>
+        /// <param name="citySeed">The city seed (random unless the player enters one; chosen by the caller).</param>
+        public static GameState NewGame(DataRepository data, ulong citySeed) =>
+            new GameState { Wallet = data.Balancing.Economy.StartingWallet, City = new CityState { Seed = citySeed } };
+
+        /// <summary>A test fixture: no city, a fresh record for each hand-made building, the first one open.</summary>
+        public static GameState NewFixtureGame(DataRepository data, params string[] handmadeIds)
         {
             var g = new GameState { Wallet = data.Balancing.Economy.StartingWallet };
-            foreach (string id in data.Game.StarterBuildings)
-                g.Buildings.Add(BuildingRecord.CreateFor(LayoutFor(data, id)));
-            if (data.Game.StarterBuildings.Count > 0) g.CurrentBuildingId = data.Game.StarterBuildings[0];
+            foreach (string id in handmadeIds) g.Buildings.Add(BuildingRecord.CreateFor(LayoutFor(data, id)));
+            if (handmadeIds.Length > 0) g.CurrentBuildingId = handmadeIds[0];
             return g;
         }
 
-        /// <summary>The layout of a building id (hand-made buildings until the city generator exists).</summary>
+        /// <summary>The layout of a hand-made building (test fixtures and tools).</summary>
         public static BuildingLayout LayoutFor(DataRepository data, string buildingId) =>
             new BuildingLayout(data.HandmadeBuilding(buildingId));
 
-        BuildingSession CreateSession(BuildingRecord r) => new BuildingSession(Data, LayoutFor(Data, r.BuildingId), r, Game);
+        /// <summary>The layout of a building in this game (a city plot, or a hand-made fixture), or null.</summary>
+        public BuildingLayout? FindLayout(string buildingId)
+        {
+            if (CityBuildings != null && City!.FindPlot(buildingId) != null) return CityBuildings.Get(buildingId)?.Layout;
+            return Data.FindHandmadeBuilding(buildingId) != null ? LayoutFor(Data, buildingId) : null;
+        }
+
+        /// <summary>True when the building exists and can be opened in this version.</summary>
+        public bool CanOpen(string buildingId) => FindLayout(buildingId) != null;
+
+        BuildingSession CreateSession(BuildingRecord r)
+        {
+            GeneratedBuilding? g = CityBuildings != null ? CityBuildings.Get(r.BuildingId) : null;
+            BuildingLayout layout = g?.Layout ?? FindLayout(r.BuildingId)!;
+            return new BuildingSession(Data, layout, r, Game, g?.BudgetCap);
+        }
 
         public BuildingSession? FindSession(string buildingId) => _sessions.Find(s => s.Record.BuildingId == buildingId);
+
+        /// <summary>Raised when a session is created for a building opened for the first time.</summary>
+        public event System.Action<BuildingSession>? SessionCreated;
 
         /// <summary>Opens a building in the building view (the previous one is left).</summary>
         public BuildingSession Open(string buildingId)
@@ -50,10 +92,12 @@ namespace HeadLoss.Game
             BuildingSession? s = FindSession(buildingId);
             if (s == null)
             {
-                BuildingRecord r = Game.FindBuilding(buildingId) ?? BuildingRecord.CreateFor(LayoutFor(Data, buildingId));
+                BuildingLayout layout = FindLayout(buildingId) ?? throw new System.ArgumentException($"Building '{buildingId}' cannot be opened");
+                BuildingRecord r = Game.FindBuilding(buildingId) ?? BuildingRecord.CreateFor(layout);
                 if (!Game.Buildings.Contains(r)) Game.Buildings.Add(r);
                 s = CreateSession(r);
                 _sessions.Add(s);
+                SessionCreated?.Invoke(s);
             }
             if (Building != null && Building != s) Building.Leave();
             Building = s;
@@ -61,7 +105,7 @@ namespace HeadLoss.Game
             return s;
         }
 
-        /// <summary>Back to the building list: undo history cleared.</summary>
+        /// <summary>Back to the city view: undo history cleared.</summary>
         public void Leave()
         {
             Building?.Leave();

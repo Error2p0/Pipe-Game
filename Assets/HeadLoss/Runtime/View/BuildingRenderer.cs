@@ -46,6 +46,7 @@ namespace HeadLoss.Unity.View
             }
 
             DrawInteriorWalls(m, layout, palette);
+            foreach (WindowDef w in layout.Windows) DrawWindow(m, layout, w, palette);
             foreach (EntryOpeningDef o in layout.EntryOpenings) DrawIntake(m, layout, o, palette);
             m.Upload();
             _overlay.Clear();
@@ -92,6 +93,21 @@ namespace HeadLoss.Unity.View
                         }
                     }
                 }
+        }
+
+        /// <summary>A window: a pale pane in the exterior wall with a thin glazing line (blueprint style).</summary>
+        static void DrawWindow(MeshBuilder m, BuildingLayout layout, WindowDef w, ViewPalette p)
+        {
+            float t = WallThickness, a = 0.2f, b = 0.8f;
+            Color pane = p.Paper, glaze = p.Walls;
+            glaze.a = 0.55f;
+            switch (w.Side)
+            {
+                case "west": m.Rect(-t, w.Y + a, 0, w.Y + b, 2.9f, pane); m.Rect(-t * 0.6f, w.Y + a, -t * 0.4f, w.Y + b, 2.8f, glaze); break;
+                case "east": m.Rect(layout.Width, w.Y + a, layout.Width + t, w.Y + b, 2.9f, pane); m.Rect(layout.Width + t * 0.4f, w.Y + a, layout.Width + t * 0.6f, w.Y + b, 2.8f, glaze); break;
+                case "south": m.Rect(w.X + a, -t, w.X + b, 0, 2.9f, pane); m.Rect(w.X + a, -t * 0.6f, w.X + b, -t * 0.4f, 2.8f, glaze); break;
+                case "north": m.Rect(w.X + a, layout.Height, w.X + b, layout.Height + t, 2.9f, pane); m.Rect(w.X + a, layout.Height + t * 0.4f, w.X + b, layout.Height + t * 0.6f, 2.8f, glaze); break;
+            }
         }
 
         static bool HasOpening(BuildingLayout layout, int x, int y, string facing)

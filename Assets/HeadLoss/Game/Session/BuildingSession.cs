@@ -113,7 +113,8 @@ namespace HeadLoss.Game.Session
         double _solvedCrank;
         Task<(NetworkSnapshot design, NetworkSnapshot? committed)>? _pending;
 
-        public BuildingSession(DataRepository data, BuildingLayout layout, BuildingRecord record, GameState game)
+        /// <param name="budgetCap">Budget cap when already known (generated buildings), $; else the auto-router computes it.</param>
+        public BuildingSession(DataRepository data, BuildingLayout layout, BuildingRecord record, GameState game, double? budgetCap = null)
         {
             Data = data;
             Layout = layout;
@@ -124,7 +125,7 @@ namespace HeadLoss.Game.Session
             _committedSolver = new NetworkSolver(_settings);
             AirTemperatureK = Units.CToK(data.Balancing.Physics.DefaultAirTemperatureC);
             Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
-            BudgetCap = ReferenceLayout.BudgetCap(data, layout);
+            BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, null, null);
             CommittedEvaluation = DesignEvaluation;
             RefreshPending();

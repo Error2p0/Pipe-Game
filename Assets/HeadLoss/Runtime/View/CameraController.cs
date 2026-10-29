@@ -10,10 +10,12 @@ namespace HeadLoss.Unity.View
         CameraDef _def = new CameraDef();
         Vector3 _dragOriginWorld;
         bool _dragging;
+        float _zoomMin, _zoomMax;
 
         public void Init(CameraDef def, Color background)
         {
             _def = def;
+            SetZoomLimits(def.ZoomMin, def.ZoomMax);
             Camera = gameObject.AddComponent<Camera>();
             Camera.orthographic = true;
             Camera.clearFlags = CameraClearFlags.SolidColor;
@@ -25,13 +27,20 @@ namespace HeadLoss.Unity.View
             gameObject.tag = "MainCamera";
         }
 
+        /// <summary>Orthographic size limits, m (the building view and the city view use different ones).</summary>
+        public void SetZoomLimits(double min, double max)
+        {
+            _zoomMin = (float)min;
+            _zoomMax = (float)max;
+        }
+
         /// <summary>Frames a rectangle (world metres) with a margin.</summary>
         public void Frame(Rect r, float margin)
         {
             transform.position = new Vector3(r.center.x, r.center.y, -10);
             float aspect = Camera.aspect > 0 ? Camera.aspect : 16f / 9f;
             float size = Mathf.Max(r.height * 0.5f, r.width * 0.5f / aspect) + margin;
-            Camera.orthographicSize = Mathf.Clamp(size, (float)_def.ZoomMin, (float)_def.ZoomMax);
+            Camera.orthographicSize = Mathf.Clamp(size, _zoomMin, _zoomMax);
         }
 
         /// <summary>
@@ -43,7 +52,7 @@ namespace HeadLoss.Unity.View
             float aspect = Camera.aspect > 0 ? Camera.aspect : 16f / 9f;
             float freeW = Mathf.Max(0.2f, 1 - left - right), freeH = Mathf.Max(0.2f, 1 - top - bottom);
             float halfH = Mathf.Max((r.height + 2 * margin) / freeH, (r.width + 2 * margin) / (freeW * aspect)) * 0.5f;
-            Camera.orthographicSize = Mathf.Clamp(halfH, (float)_def.ZoomMin, (float)_def.ZoomMax);
+            Camera.orthographicSize = Mathf.Clamp(halfH, _zoomMin, _zoomMax);
             float viewH = Camera.orthographicSize * 2, viewW = viewH * aspect;
             float cx = (left + (1 - right)) * 0.5f - 0.5f, cy = (bottom + (1 - top)) * 0.5f - 0.5f;
             transform.position = new Vector3(r.center.x - cx * viewW, r.center.y - cy * viewH, -10);
@@ -61,7 +70,7 @@ namespace HeadLoss.Unity.View
             if (Mathf.Approximately(notches, 0)) return;
             Vector2 before = ScreenToWorld(screenPivot);
             float size = Camera.orthographicSize / Mathf.Pow((float)_def.ZoomStep, notches);
-            Camera.orthographicSize = Mathf.Clamp(size, (float)_def.ZoomMin, (float)_def.ZoomMax);
+            Camera.orthographicSize = Mathf.Clamp(size, _zoomMin, _zoomMax);
             Vector2 after = ScreenToWorld(screenPivot);
             transform.position += (Vector3)(before - after);
         }

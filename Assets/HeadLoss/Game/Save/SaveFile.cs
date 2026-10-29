@@ -26,9 +26,9 @@ namespace HeadLoss.Game.Save
     /// <summary>JSON for saves: public fields only (properties are derived), camelCase, invariant.</summary>
     public static class SaveSerializer
     {
-        public const int CurrentSaveVersion = 1;
-        /// <summary>Generator version written into saves (hand-made layouts only until Phase 3).</summary>
-        public const int CurrentGeneratorVersion = 1;
+        public const int CurrentSaveVersion = 2;
+        /// <summary>Generator version written into saves (2: the Phase 3 city and building generators).</summary>
+        public const int CurrentGeneratorVersion = 2;
 
         sealed class FieldsOnlyResolver : CamelCasePropertyNamesContractResolver
         {
@@ -78,8 +78,29 @@ namespace HeadLoss.Game.Save
     /// </summary>
     public static class SaveMigrator
     {
-        /// <summary>Step from version (key) to key + 1. Empty while only version 1 exists.</summary>
-        static readonly Dictionary<int, Action<JObject>> Steps = new Dictionary<int, Action<JObject>>();
+        /// <summary>Step from version (key) to key + 1.</summary>
+        static readonly Dictionary<int, Action<JObject>> Steps = new Dictionary<int, Action<JObject>>
+        {
+            [1] = V1ToV2,
+        };
+
+        /// <summary>
+        /// Phase 2 → Phase 3: the hand-made houses leave the game (D45). Their committed spending goes back into the
+        /// wallet, and the save gets a new city whose seed comes from the save time (no randomness in game logic).
+        /// </summary>
+        static void V1ToV2(JObject o)
+        {
+            JObject game = (JObject?)o["gameState"] ?? new JObject();
+            double refund = 0;
+            if (game["buildings"] is JArray buildings)
+                foreach (JToken b in buildings) refund += b.Value<double?>("spentTotal") ?? 0;
+            game["wallet"] = (game.Value<double?>("wallet") ?? 0) + refund;
+            game["buildings"] = new JArray();
+            game["currentBuildingId"] = "";
+            ulong seed = HeadLoss.Core.Seeds.Derive(0x5EED_C17EUL, o.Value<string>("savedAtUtc") ?? "");
+            game["city"] = new JObject { ["seed"] = seed, ["index"] = 1, ["unlockedTier"] = 1 };
+            o["gameState"] = game;
+        }
 
         /// <exception cref="FormatException">The save is newer than this build or has no version.</exception>
         public static JObject Migrate(JObject o, out int fromVersion)

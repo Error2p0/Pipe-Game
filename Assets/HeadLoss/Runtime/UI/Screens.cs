@@ -18,23 +18,23 @@ namespace HeadLoss.Unity.UI
         {
             _panel = ui.Panel(parent, "hl-menu");
             UiKit.Text(_panel, title, "hl-menu-title");
-            UiKit.Text(_panel, "Design real duct networks. Every outlet that gets enough air earns.", "hl-subtitle");
+            UiKit.Text(_panel, "Design real duct networks across a city. Every outlet that gets enough air earns.", "hl-subtitle");
             if (continueInfo != null)
             {
                 ui.Button(_panel, "Continue", onContinue).AddToClassList("hl-menu-button");
                 UiKit.Text(_panel, continueInfo, "hl-subtitle");
             }
             _confirm = new VisualElement();
-            ui.Button(_panel, "New game", () =>
+            ui.Button(_panel, "New city", () =>
             {
                 if (continueInfo == null) onNew();
                 else _confirm.style.display = DisplayStyle.Flex;
             }).AddToClassList("hl-menu-button");
             _panel.Add(_confirm);
             _confirm.style.display = DisplayStyle.None;
-            UiKit.Text(_confirm, "Start again? The current save is replaced (its last backups are kept).", "hl-readout-line");
+            UiKit.Text(_confirm, "Start again in a new city? The current save is replaced (its last backups are kept).", "hl-readout-line");
             VisualElement row = UiKit.Row(_confirm);
-            ui.Button(row, "Start a new game", onNew);
+            ui.Button(row, "Start a new city", onNew);
             ui.Button(row, "Keep playing", () => _confirm.style.display = DisplayStyle.None);
             Button settings = ui.Button(_panel, "Settings", () => { });
             settings.AddToClassList("hl-menu-button");

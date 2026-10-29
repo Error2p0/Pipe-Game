@@ -1,8 +1,7 @@
 {
   "displayName": "Head Loss",
-  "version": "0.2.0-phase2",
+  "version": "0.3.0-phase3",
   "currencySymbol": "$",
-  "starterBuildings": ["test-house", "small-house"],
   "toolbox": {
     "intakeEquipment": ["hand-crank-fan", "small-axial-fan"],
     "parts": ["damper", "inline-duct-fan"]
@@ -33,6 +32,26 @@
       "electrical-room": "#C7B05B",
       "plant-room": "#8A9AA6",
       "protected-room": "#A65B5B"
+    },
+    "city": {
+      "ground": "#EEEAE0",
+      "countryside": "#E2E3D2",
+      "districts": { "residential": "#8FB08A", "commercial": "#8A9FC2", "industrial": "#B59B7A" },
+      "districtAlpha": 0.16,
+      "road": "#CFC9BC",
+      "mainRoad": "#B6AFA2",
+      "rail": "#6E6A64",
+      "park": "#A8C79E",
+      "protected": "#C2D6B4",
+      "historic": "#C49A7C",
+      "facilities": { "water": "#4F93B8", "gas": "#C9A43B", "heating": "#B86A4F", "special-gas": "#8C7AB8", "power": "#5E6B78" },
+      "plotOffline": "#A7A9AB",
+      "plotLocked": "#C9C9C4",
+      "plotOnline": "#F3D58C",
+      "glow": "#F7C65E",
+      "sideShade": 0.72,
+      "cloud": "#3E4A57",
+      "cloudAlpha": 0.05
     }
   }
 }

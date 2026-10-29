@@ -129,7 +129,7 @@ namespace HeadLoss.Game.Save
                 r.Notes.Add($"Generator version changed ({r.File.GeneratorVersion} → {SaveSerializer.CurrentGeneratorVersion}); keeping edits that still fit");
             if (r.File.DataVersion != data.Version) r.Notes.Add("Data files changed since this save");
             r.OfflineSeconds = OfflineSeconds(r.File.SavedAtUtc, data.Balancing.Offline.MaxHours, r.Notes);
-            Sanitize(r.File.GameState, data, r.Notes);
+            // Edits that no longer fit are dropped when the game context opens (it regenerates the city first).
             return r;
         }
 
@@ -153,17 +153,20 @@ namespace HeadLoss.Game.Save
         /// Keeps only what still fits: unknown buildings are dropped; in each state, nodes outside the building,
         /// segments that cross walls or miss a node, unknown parts and equipment are removed; anchors are re-added.
         /// </summary>
-        public static void Sanitize(GameState game, DataRepository data, List<string> notes)
+        /// <param name="layouts">The layout of a building id in this game, or null when it no longer exists.</param>
+        public static void Sanitize(GameState game, DataRepository data, List<string> notes, Func<string, BuildingLayout?> layouts)
         {
+            var known = new Dictionary<string, BuildingLayout>();
             game.Buildings.RemoveAll(b =>
             {
-                bool unknown = data.FindHandmadeBuilding(b.BuildingId) == null;
-                if (unknown) notes.Add($"Dropped unknown building '{b.BuildingId}'");
-                return unknown;
+                BuildingLayout? l = layouts(b.BuildingId);
+                if (l == null) notes.Add($"Dropped unknown building '{b.BuildingId}'");
+                else known[b.BuildingId] = l;
+                return l == null;
             });
             foreach (BuildingRecord r in game.Buildings)
             {
-                BuildingLayout layout = GameContext.LayoutFor(data, r.BuildingId);
+                BuildingLayout layout = known[r.BuildingId];
                 int dropped = SanitizeState(r.Committed, layout, data) + SanitizeState(r.Design, layout, data);
                 if (dropped > 0) notes.Add($"{r.BuildingId}: dropped {dropped} parts that no longer fit");
             }

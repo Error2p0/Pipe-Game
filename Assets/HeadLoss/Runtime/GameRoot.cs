@@ -17,14 +17,13 @@ using UnityEngine.UIElements;
 namespace HeadLoss.Unity
 {
     /// <summary>
-    /// Main scene entry point and frame loop. Screens: main menu → building list (the city's stand-in until
-    /// Phase 3) ⇄ building view. Owns the game context, autosave (interval, leaving a building, Commit,
-    /// pause/focus loss/quit), the camera, input, UI document and procedural audio. No static state (Fast Enter
-    /// Play Mode).
+    /// Main scene entry point and frame loop. Screens: main menu → city view ⇄ building view. Owns the game
+    /// context, autosave (interval, leaving a building, Commit, pause/focus loss/quit), the camera, input, UI
+    /// document and procedural audio. No static state (Fast Enter Play Mode).
     /// </summary>
     public sealed class GameRoot : MonoBehaviour
     {
-        enum ScreenKind { Menu, List, Building }
+        enum ScreenKind { Menu, City, List, Building }
 
         [SerializeField] DataCatalog? catalog;
         [SerializeField] PanelSettings? panelSettings;
@@ -50,7 +49,9 @@ namespace HeadLoss.Unity
         TopBar? _topBar;
         MenuScreen? _menu;
         BuildingListScreen? _list;
+        CityScene? _city;
         BuildingScene? _scene;
+        readonly System.Collections.Generic.HashSet<BuildingSession> _online = new System.Collections.Generic.HashSet<BuildingSession>();
         readonly Materials _materials = new Materials();
         readonly System.Collections.Generic.List<Material> _ownedMaterials = new System.Collections.Generic.List<Material>();
 
@@ -67,6 +68,8 @@ namespace HeadLoss.Unity
         public int RenderedSolveRevision => _scene?.RenderedSolveRevision ?? -1;
         public bool InMenu => _screen == ScreenKind.Menu;
         public bool InBuildingList => _screen == ScreenKind.List;
+        public bool InCity => _screen == ScreenKind.City;
+        public CityScene? City => _city;
 
         void Awake()
         {
@@ -138,8 +141,11 @@ namespace HeadLoss.Unity
                 LoadResult? peek = _store.Load(Profile, _data!);
                 if (peek != null) info = $"Played {FormatDuration(peek.File.PlayTimeSeconds)} · wallet {Units.FormatMoney(peek.File.GameState.Wallet, _data!.Game.CurrencySymbol)}";
             }
-            _menu = new MenuScreen(_uiRoot!, _ui!, _data!.Game.DisplayName, info, Continue, () => StartGame(GameContext.NewGame(_data!), saving: true), Quit);
+            _menu = new MenuScreen(_uiRoot!, _ui!, _data!.Game.DisplayName, info, Continue, () => StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true), Quit);
         }
+
+        /// <summary>A random seed for a new city (the only randomness outside the seeded generators; never used in game rules).</summary>
+        static ulong NewCitySeed() => Core.Seeds.Mix((ulong)DateTime.UtcNow.Ticks ^ ((ulong)Environment.TickCount << 32));
 
         static string FormatDuration(double s) => s < 3600 ? $"{s / 60:0} min" : $"{s / 3600:0.0} h";
 
@@ -149,7 +155,7 @@ namespace HeadLoss.Unity
             if (r == null)
             {
                 Debug.LogWarning("Head Loss: no readable save; starting a new game.");
-                StartGame(GameContext.NewGame(_data!), saving: true);
+                StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true);
                 return;
             }
             foreach (string note in r.Notes) Debug.Log("Save: " + note);
@@ -166,20 +172,43 @@ namespace HeadLoss.Unity
             CloseGame(save: false);
             _saving = saving;
             _sinceSave = 0;
-            string current = game.CurrentBuildingId;
             _ctx = new GameContext(_data!, game);
+            foreach (string note in _ctx.Notes) Debug.Log("Save: " + note);
+            if (!_ctx.StarterSolvable) Debug.LogWarning("Head Loss: no solvable starter house in this city (dev report).");
             _loop = new GameLoop(_ctx);
-            foreach (BuildingSession s in _ctx.Sessions)
-            {
-                s.DesignCommitted += OnCommitted;
-                s.Commands.Executed += OnCommand;
-            }
+            _online.Clear();
+            foreach (BuildingSession s in _ctx.Sessions) Hook(s);
+            _ctx.SessionCreated += Hook;
             _topBar = new TopBar(_uiRoot!, _ui!, _ctx);
-            if (current.Length > 0) OpenBuilding(current);
+            if (_ctx.Building != null) OpenBuilding(_ctx.Building.Record.BuildingId);
+            else if (_ctx.City != null) ShowCity();
             else ShowList();
             if (_saving) SaveNow();
         }
 
+        void Hook(BuildingSession s)
+        {
+            s.DesignCommitted += OnCommitted;
+            s.Commands.Executed += OnCommand;
+            if (s.CommittedEvaluation.Online) _online.Add(s);
+        }
+
+        void ShowCity()
+        {
+            _scene?.Dispose();
+            _scene = null;
+            _list?.Dispose();
+            _list = null;
+            _city?.Dispose();
+            _ctx!.Leave();
+            _audio!.SetAirflow(_data!.Balancing.Audio.AirflowFullM3h * 0.06);
+            _audio.ClearFans();
+            _screen = ScreenKind.City;
+            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, () => false);
+            _topBar!.BringToFront();
+        }
+
+        /// <summary>The hand-made building list (test fixtures without a city only, D34).</summary>
         void ShowList()
         {
             _scene?.Dispose();
@@ -196,8 +225,11 @@ namespace HeadLoss.Unity
         /// <summary>Opens a building in the building view.</summary>
         public void OpenBuilding(string id)
         {
+            if (!_ctx!.CanOpen(id)) return;
             _list?.Dispose();
             _list = null;
+            _city?.Dispose();
+            _city = null;
             _scene?.Dispose();
             BuildingSession s = _ctx!.Open(id);
             _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild);
@@ -208,7 +240,8 @@ namespace HeadLoss.Unity
         void LeaveBuilding()
         {
             SaveNow();
-            ShowList();
+            if (_ctx!.City != null) ShowCity();
+            else ShowList();
         }
 
         void CloseGame(bool save)
@@ -219,6 +252,8 @@ namespace HeadLoss.Unity
             _scene = null;
             _list?.Dispose();
             _list = null;
+            _city?.Dispose();
+            _city = null;
             _topBar?.Root.RemoveFromHierarchy();
             _topBar = null;
             _ctx = null;
@@ -297,11 +332,42 @@ namespace HeadLoss.Unity
                 }
                 UpdateAudio(_scene.Session);
             }
+            if (_city != null)
+            {
+                _city.Update(dt, Time.unscaledTime);
+                string? open = _city.ConsumeOpen();
+                if (open != null)
+                {
+                    OpenBuilding(open);
+                    return;
+                }
+                if (_city.ConsumeMenu())
+                {
+                    ShowMenu();
+                    return;
+                }
+            }
+            ChimeWhenOnline();
             _list?.Update(Time.unscaledTime);
             _topBar?.Update(Time.unscaledTime);
         }
 
-        void LateUpdate() => _scene?.LateUpdate(Time.deltaTime);
+        /// <summary>A quiet chime whenever a building comes online (<c>11-ui-visuals-audio.md</c> §Procedural audio).</summary>
+        void ChimeWhenOnline()
+        {
+            foreach (BuildingSession s in _ctx!.Sessions)
+            {
+                bool on = s.CommittedEvaluation.Online;
+                if (on && _online.Add(s)) _audio?.PlayChime();
+                else if (!on) _online.Remove(s);
+            }
+        }
+
+        void LateUpdate()
+        {
+            _scene?.LateUpdate(Time.deltaTime);
+            _city?.LateUpdate(Time.deltaTime, Time.unscaledTime);
+        }
 
         /// <summary>Airflow follows the design's total delivered and escaping air; one hum per running fan.</summary>
         void UpdateAudio(BuildingSession s)
@@ -322,6 +388,7 @@ namespace HeadLoss.Unity
         void OnDestroy()
         {
             _scene?.Dispose();
+            _city?.Dispose();
             _input?.Dispose();
             foreach (Material m in _ownedMaterials) Destroy(m);
         }

@@ -128,7 +128,7 @@ namespace HeadLoss.Unity.UI
             _status.style.whiteSpace = WhiteSpace.Normal;
             VisualElement cardRow = UiKit.Row(card);
             _ui.Button(cardRow, "Requirements (Tab)", () => _sheet.Toggle());
-            _ui.Button(cardRow, "Buildings (Esc)", () => BackRequested = true);
+            _ui.Button(cardRow, _s.Game.City != null ? "City (Esc)" : "Buildings (Esc)", () => BackRequested = true);
 
             VisualElement design = _ui.Panel(_layer, "hl-designbar");
             _designText = UiKit.Text(design, "", "hl-design-text");

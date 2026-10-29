@@ -55,6 +55,7 @@ namespace HeadLoss.Unity
             Hud = new BuildingHud(uiRoot, ui, session, Interaction, heatmap, camera) { DebugAvailable = debugAvailable };
 
             BuildingLayout l = session.Layout;
+            camera.SetZoomLimits(session.Data.Balancing.Camera.ZoomMin, session.Data.Balancing.Camera.ZoomMax);
             camera.FrameInsets(new Rect(0, 0, l.Width, l.Height), HudInsets.x, HudInsets.y, HudInsets.z, HudInsets.w, 0.8f);
             session.SolveNow();
         }

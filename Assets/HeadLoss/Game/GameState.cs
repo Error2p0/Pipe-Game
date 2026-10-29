@@ -14,8 +14,10 @@ namespace HeadLoss.Game
         public double LifetimeIncome;
         /// <summary>Time played (in game), s.</summary>
         public double PlayTimeSeconds;
-        /// <summary>Building open in the building view ("" = the building list).</summary>
+        /// <summary>Building open in the building view ("" = the city view).</summary>
         public string CurrentBuildingId = "";
+        /// <summary>The current city (null only in test fixtures made of hand-made buildings).</summary>
+        public CityState? City;
         public List<BuildingRecord> Buildings = new List<BuildingRecord>();
         public SettingsState Settings = new SettingsState();
 
@@ -40,6 +42,16 @@ namespace HeadLoss.Game
 
         /// <summary>True when a purchase of <paramref name="cost"/> ($) is allowed: no debt and enough money.</summary>
         public bool CanAfford(double cost) => Debt <= 0 && Wallet >= cost - 1e-9;
+    }
+
+    /// <summary>What is saved about the current city; its layout is regenerated from the seed.</summary>
+    public sealed class CityState
+    {
+        public ulong Seed;
+        /// <summary>1 for the first city, counting up with each new city (modifiers roll from the second).</summary>
+        public int Index = 1;
+        /// <summary>Highest tech tier unlocked in this city (<c>03-city.md</c> §Progression).</summary>
+        public int UnlockedTier = 1;
     }
 
     /// <summary>Player settings kept in the save.</summary>

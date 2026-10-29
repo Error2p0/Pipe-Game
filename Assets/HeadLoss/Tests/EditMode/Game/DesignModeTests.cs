@@ -263,7 +263,7 @@ namespace HeadLoss.Game.Tests
         [Test]
         public void Leave_ClearsHistory()
         {
-            var ctx = new GameContext(Data, GameContext.NewGame(Data));
+            var ctx = new GameContext(Data, GameContext.NewFixtureGame(Data, "test-house", "small-house"));
             BuildingSession s = ctx.Open("test-house");
             Draw(s, Run((0, 3), (3, 3)));
             ctx.Open("small-house");
@@ -377,15 +377,29 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
-        public void NewGame_StartsInTheStarterWithTheStartingWallet()
+        public void NewGame_StartsInTheCityWithTheStartingWallet()
         {
-            GameState g = GameContext.NewGame(Data);
+            GameState g = GameContext.NewGame(Data, 7);
             Assert.AreEqual(Data.Balancing.Economy.StartingWallet, g.Wallet);
-            Assert.AreEqual(Data.Game.StarterBuildings.Count, g.Buildings.Count);
-            Assert.AreEqual("test-house", g.CurrentBuildingId);
+            Assert.IsEmpty(g.Buildings);
+            Assert.AreEqual("", g.CurrentBuildingId);
             var ctx = new GameContext(Data, g);
-            Assert.IsNotNull(ctx.Building);
-            Assert.IsTrue(ctx.Building!.HasCrank);
+            Assert.IsNull(ctx.Building, "the city view is open");
+            BuildingSession s = ctx.Open(ctx.City!.Starter!.Id);
+            Assert.IsTrue(s.HasCrank, "the starter house has its hand crank");
+            Assert.AreEqual(2, s.Layout.Outlets.Count);
+            Assert.Greater(s.BudgetCap, 0);
+            Assert.AreEqual(1, g.Buildings.Count);
+        }
+
+        [Test]
+        public void NewGame_TierThreePlots_CannotBeOpenedYet()
+        {
+            var ctx = new GameContext(Data, GameContext.NewGame(Data, 7));
+            Game.City.Plot? high = ctx.City!.Plots.Find(p => p.Tier >= 3);
+            Assert.IsNotNull(high);
+            Assert.IsFalse(ctx.CanOpen(high!.Id));
+            Assert.IsTrue(ctx.CanOpen(ctx.City.Starter!.Id));
         }
     }
 }

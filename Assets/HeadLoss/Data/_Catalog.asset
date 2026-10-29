@@ -15,6 +15,10 @@ MonoBehaviour:
   entries:
   - path: balancing.json
     text: {fileID: 4900000, guid: 5bb634cf80527f249ad0404d8206207b, type: 3}
+  - path: buildings.json
+    text: {fileID: 4900000, guid: befb373e52ac47646a810cce820a80d3, type: 3}
+  - path: city.json
+    text: {fileID: 4900000, guid: 4b81095ce2644414a96f50d83d671b8b, type: 3}
   - path: codes.json
     text: {fileID: 4900000, guid: 344e4e590e3db304f93c621561dde0ba, type: 3}
   - path: equipment.json

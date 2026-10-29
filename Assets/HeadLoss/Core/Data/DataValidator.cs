@@ -71,9 +71,6 @@ namespace HeadLoss.Core.Data
             Colour("game.json theme.danger", t.Danger, errors);
             Colour("game.json theme.good", t.Good, errors);
             if (string.IsNullOrWhiteSpace(data.Game.CurrencySymbol)) errors.Add("game.json: currencySymbol is empty");
-            if (data.Game.StarterBuildings.Count == 0) errors.Add("game.json: starterBuildings is empty");
-            foreach (string id in data.Game.StarterBuildings)
-                if (data.FindHandmadeBuilding(id) == null) errors.Add($"game.json: starter building '{id}' unknown");
             foreach (string id in data.Game.Toolbox.IntakeEquipment)
                 if (data.FindEquipment(id)?.Placement != "intake") errors.Add($"game.json toolbox: '{id}' is not intake equipment");
             foreach (string id in data.Game.Toolbox.Parts)

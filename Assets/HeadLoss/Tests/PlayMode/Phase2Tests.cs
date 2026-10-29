@@ -188,7 +188,7 @@ namespace HeadLoss.PlayMode.Tests
         {
             yield return Scenes.LoadMenu();
             var root = Object.FindAnyObjectByType<GameRoot>();
-            root.StartGame(GameContext.NewGame(root.Data!), saving: false);
+            root.StartGame(GameContext.NewFixtureGame(root.Data!, "test-house", "small-house"), saving: false);
             yield return null;
             Assert.IsTrue(root.Hud!.SheetVisible);
             Assert.IsTrue(root.Session!.Record.SheetSeen);

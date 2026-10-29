@@ -38,7 +38,7 @@ namespace HeadLoss.PlayMode.Tests
         {
             yield return LoadMenu();
             var root = Object.FindAnyObjectByType<GameRoot>();
-            GameState g = GameContext.NewGame(root.Data!);
+            GameState g = GameContext.NewFixtureGame(root.Data!, "test-house", "small-house");
             foreach (BuildingRecord b in g.Buildings) b.SheetSeen = true;
             root.StartGame(g, saving: false);
             if (!crank) root.Session!.Execute(new SetIntakeEquipmentCommand("air-intake", "small-axial-fan"));
