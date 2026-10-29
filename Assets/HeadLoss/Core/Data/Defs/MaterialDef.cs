@@ -40,5 +40,7 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Nominal diameter (ducts: internal; pipes: outer), mm.</summary>
         public double DiameterMm;
         public int CapacityUnits;
+        /// <summary>Tech tier that unlocks the size.</summary>
+        public int Tier = 1;
     }
 }

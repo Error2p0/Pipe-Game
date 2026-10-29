@@ -24,7 +24,15 @@
       "hall": "#9A9A8A",
       "corridor": "#9A9A8A",
       "office": "#8A7BC7",
-      "storage": "#A08A6E"
+      "storage": "#A08A6E",
+      "shop-floor": "#B07B9A",
+      "warehouse-hall": "#8C8C7A",
+      "workshop": "#A6835B",
+      "lab": "#5BA0C7",
+      "ward": "#7BB08A",
+      "electrical-room": "#C7B05B",
+      "plant-room": "#8A9AA6",
+      "protected-room": "#A65B5B"
     }
   }
 }

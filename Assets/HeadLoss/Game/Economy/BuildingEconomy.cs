@@ -66,7 +66,9 @@ namespace HeadLoss.Game.Economy
         public static OutletRequirement Requirement(DataRepository data, BuildingLayout layout, OutletPlacementDef placement)
         {
             OutletDef def = data.Outlet(placement.Type);
-            return OutletRequirement.FromDef(def, def.Tiers[layout.Tier.ToString()]);
+            OutletRequirementDef tier = def.Tiers[layout.Tier.ToString()];
+            if (placement.Min <= 0) return OutletRequirement.FromDef(def, tier);
+            return OutletRequirement.FromDef(def, new OutletRequirementDef { Min = placement.Min, Ideal = placement.Ideal, Max = placement.Max });
         }
 
         /// <summary>Evaluates a solve. A null network (not solved yet) leaves every outlet unconnected.</summary>

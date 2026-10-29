@@ -340,11 +340,11 @@ namespace HeadLoss.Game.Tests
             s.Record.Design = ReferenceLayout.Build(Data, s.Layout);
             s.Record.Committed = s.Record.Design.Clone();
             s.MarkDirty();
-            if (s.Layout.Reference.CrankSpeed > 0)
+            if (s.Layout.ReferenceCrankSpeed > 0)
             {
-                while (s.CrankSpeed < s.Layout.Reference.CrankSpeed) s.Crank();
+                while (s.CrankSpeed < s.Layout.ReferenceCrankSpeed) s.Crank();
                 // Back down to exactly the reference speed (clicks come in steps).
-                while (s.CrankSpeed > s.Layout.Reference.CrankSpeed + 1e-6) s.Tick(0.001);
+                while (s.CrankSpeed > s.Layout.ReferenceCrankSpeed + 1e-6) s.Tick(0.001);
             }
             s.SolveNow();
             BuildingEvaluation ev = s.CommittedEvaluation;

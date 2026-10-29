@@ -19,6 +19,29 @@ namespace HeadLoss.Core.Data.Defs
         public OfflineDef Offline = new OfflineDef();
         public AudioDef Audio = new AudioDef();
         public TargetsDef Targets = new TargetsDef();
+        public AutoRouterDef AutoRouter = new AutoRouterDef();
+    }
+
+    /// <summary>Auto-router for reference layouts (<c>04-buildings.md</c> §Auto-router).</summary>
+    public sealed class AutoRouterDef
+    {
+        /// <summary>Duct sizing velocity limit on trunks (serving two or more outlets), m/s.</summary>
+        public double AirTrunkVelocity;
+        /// <summary>Duct sizing velocity limit on branches (one outlet), m/s.</summary>
+        public double AirBranchVelocity;
+        /// <summary>Pipe sizing velocity limit for water, m/s.</summary>
+        public double WaterVelocity;
+        /// <summary>Straight tiles the trunk runs in from the intake before it may turn or branch.</summary>
+        public int LeadInTiles;
+        /// <summary>Path cost of a turn, in tiles (fewer elbows).</summary>
+        public double TurnPenalty;
+        /// <summary>Extra path cost, in tiles, for a branch that does not leave its outlet with two straight tiles (no room for a damper).</summary>
+        public double ShortApproachPenalty;
+
+        /// <summary>Damper balancing passes (one solve each).</summary>
+        public int BalancingPasses;
+        /// <summary>Damper target within the overdelivery band: ideal + fraction × (max − ideal).</summary>
+        public double BalanceTarget;
     }
 
     /// <summary>Tuning targets the balancing report checks (<c>13-balancing.md</c> §Targets).</summary>

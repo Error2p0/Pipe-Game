@@ -1,0 +1,58 @@
+{
+  "width": 96,
+  "height": 96,
+  "tileMetres": 10,
+  "edgeBand": 4,
+  "districts": {
+    "seedPointsMin": 6,
+    "seedPointsMax": 10,
+    "weights": { "residential": 0.5, "commercial": 0.25, "industrial": 0.25 },
+    "edgeBias": 0.8
+  },
+  "roads": {
+    "mainMin": 2,
+    "mainMax": 3,
+    "mainWander": 3,
+    "mainStepChance": 0.08,
+    "localSpacingMin": 4,
+    "localSpacingMax": 6,
+    "localJitter": 1
+  },
+  "rail": { "chance": 0.6 },
+  "parks": { "min": 2, "max": 5, "sizeMin": 2, "sizeMax": 4, "districts": ["residential", "commercial"] },
+  "protectedSites": { "min": 1, "max": 3, "sizeMin": 1, "sizeMax": 2, "districts": [] },
+  "historic": { "min": 2, "max": 6, "sizeMin": 1, "sizeMax": 1, "districts": [] },
+  "facilities": [
+    { "id": "water-treatment-plant", "displayName": "Water treatment plant", "utility": "water", "width": 3, "height": 2, "count": "one", "district": "" },
+    { "id": "gas-receiving-station", "displayName": "Gas receiving station", "utility": "gas", "width": 2, "height": 2, "count": "one", "district": "" },
+    { "id": "district-heating-plant", "displayName": "District heating plant", "utility": "heating", "width": 3, "height": 2, "count": "one", "district": "" },
+    { "id": "industrial-gas-depot", "displayName": "Industrial gas depot", "utility": "special-gas", "width": 2, "height": 2, "count": "one", "district": "industrial" },
+    { "id": "electrical-substation", "displayName": "Electrical substation", "utility": "power", "width": 1, "height": 1, "count": "per-district", "district": "" }
+  ],
+  "plots": {
+    "target": 120,
+    "tierSizes": [[1, 1], [1, 1], [2, 1], [2, 2], [3, 2]],
+    "tierMix": {
+      "residential": [0.40, 0.35, 0.20, 0.05, 0.0],
+      "commercial": [0.05, 0.35, 0.35, 0.25, 0.0],
+      "industrial": [0.0, 0.0, 0.30, 0.40, 0.30]
+    },
+    "orderJitter": 1.0,
+    "skipChance": 0.4
+  },
+  "starter": {
+    "count": 3,
+    "radius": 6,
+    "buildingType": "starter-house",
+    "maxAttempts": 64
+  },
+  "modifiers": [
+    { "id": "cold-climate", "displayName": "Cold climate", "description": "Outside temperature 10 °C lower; heating matters more.", "outsideTemperatureShift": -10, "heatingFactor": 1.5, "ceilingCapacity": 0 },
+    { "id": "old-buildings", "displayName": "Old buildings", "description": "Strict ceiling space: 3 capacity units per tile instead of 4.", "outsideTemperatureShift": 0, "heatingFactor": 1, "ceilingCapacity": 3 }
+  ],
+  "maxModifiers": 2,
+  "names": {
+    "first": ["Ash", "Bram", "Cal", "Dun", "Elm", "Fen", "Glen", "Hal", "Iver", "Kel", "Lark", "Mar", "Nor", "Oak", "Pell", "Quarry", "Rook", "Sel", "Thorn", "Wen", "Yar"],
+    "last": ["ford", "ham", "ley", "mouth", "stead", "wick", "bury", "ton", "brook", "field", "haven", "moor", "gate", "well"]
+  }
+}

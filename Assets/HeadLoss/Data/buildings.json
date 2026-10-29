@@ -1,0 +1,95 @@
+{
+  "tiers": [
+    { "tier": 1, "footprintMin": [8, 6], "footprintMax": [10, 8], "floorsMin": 1, "floorsMax": 1, "fluids": ["air"], "referenceEquipment": ["small-axial-fan"], "available": true, "unavailableNote": "" },
+    { "tier": 2, "footprintMin": [10, 8], "footprintMax": [14, 10], "floorsMin": 1, "floorsMax": 2, "fluids": ["air", "water"], "referenceEquipment": ["inline-duct-fan"], "available": true, "unavailableNote": "" },
+    { "tier": 3, "footprintMin": [14, 10], "footprintMax": [20, 14], "floorsMin": 2, "floorsMax": 4, "fluids": ["air", "water", "natural-gas"], "referenceEquipment": ["centrifugal-blower"], "available": false, "unavailableNote": "Multi-floor buildings with water arrive in the next update" },
+    { "tier": 4, "footprintMin": [20, 14], "footprintMax": [32, 22], "floorsMin": 1, "floorsMax": 6, "fluids": ["air", "water", "natural-gas", "heating-water"], "referenceEquipment": ["ec-fan", "industrial-ahu"], "available": false, "unavailableNote": "Gas, heating and cooling buildings arrive in a later update" },
+    { "tier": 5, "footprintMin": [24, 18], "footprintMax": [40, 28], "floorsMin": 2, "floorsMax": 10, "fluids": ["air", "water", "natural-gas", "oxygen", "nitrogen"], "referenceEquipment": ["industrial-ahu"], "available": false, "unavailableNote": "Industrial and special-gas buildings arrive in a later update" }
+  ],
+  "roomTypes": [
+    { "id": "bedroom", "displayName": "Bedroom", "occupants": 2, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 18, "fromTier": 1 }] },
+    { "id": "living", "displayName": "Living room", "occupants": 2, "occupantsPerM2": 0, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 18, "fromTier": 1 }] },
+    { "id": "kitchen", "displayName": "Kitchen", "occupants": 1, "occupantsPerM2": 0, "machinesW": 300, "hub": false, "protected": false, "relativeHumidity": 0.60, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 0, "fromTier": 1 }] },
+    { "id": "bathroom", "displayName": "Bathroom", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.70, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 0, "fromTier": 1 }] },
+    { "id": "hall", "displayName": "Hall", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "corridor", "displayName": "Corridor", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "office", "displayName": "Office", "occupants": 0, "occupantsPerM2": 0.1, "machinesW": 150, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 12, "fromTier": 1 }] },
+    { "id": "shop-floor", "displayName": "Shop floor", "occupants": 0, "occupantsPerM2": 0.1, "machinesW": 200, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 14, "fromTier": 1 }] },
+    { "id": "storage", "displayName": "Storage", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "warehouse-hall", "displayName": "Warehouse hall", "occupants": 0, "occupantsPerM2": 0.01, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 40, "fromTier": 1 }] },
+    { "id": "workshop", "displayName": "Workshop", "occupants": 0, "occupantsPerM2": 0.05, "machinesW": 2000, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 16, "fromTier": 1 }] },
+    { "id": "lab", "displayName": "Lab", "occupants": 0, "occupantsPerM2": 0.05, "machinesW": 1000, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 12, "fromTier": 1 }] },
+    { "id": "ward", "displayName": "Ward", "occupants": 0, "occupantsPerM2": 0.15, "machinesW": 200, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 12, "fromTier": 1 }] },
+    { "id": "electrical-room", "displayName": "Electrical room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 500, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "plant-room", "displayName": "Plant room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "protected-room", "displayName": "Server room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 3000, "hub": false, "protected": true, "relativeHumidity": 0.45, "outlets": [] }
+  ],
+  "types": [
+    {
+      "id": "starter-house", "displayName": "Starter house", "tier": 1, "districts": {},
+      "program": [ { "room": "living", "countMin": 1, "countMax": 1, "areaWeight": 1.2, "outlets": 1 }, { "room": "bedroom", "countMin": 1, "countMax": 1, "areaWeight": 1.0, "outlets": 1 } ],
+      "footprintMin": [8, 6], "footprintMax": [8, 6],
+      "initialEquipment": ["hand-crank-fan"], "referenceCrankSpeed": 0.7, "maxIntakeDistance": 6, "codes": []
+    },
+    {
+      "id": "small-house", "displayName": "Small house", "tier": 1, "districts": { "residential": 1.0, "commercial": 0.2 },
+      "program": [
+        { "room": "living", "countMin": 1, "countMax": 1, "areaWeight": 1.6 },
+        { "room": "bedroom", "countMin": 1, "countMax": 2, "areaWeight": 1.1 },
+        { "room": "kitchen", "countMin": 1, "countMax": 1, "areaWeight": 0.8 },
+        { "room": "bathroom", "countMin": 1, "countMax": 1, "areaWeight": 0.5 },
+        { "room": "hall", "countMin": 0, "countMax": 1, "areaWeight": 0.5 }
+      ],
+      "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": []
+    },
+    {
+      "id": "kiosk", "displayName": "Kiosk", "tier": 1, "districts": { "commercial": 1.0, "residential": 0.3 },
+      "program": [
+        { "room": "shop-floor", "countMin": 1, "countMax": 1, "areaWeight": 2.5 },
+        { "room": "storage", "countMin": 1, "countMax": 1, "areaWeight": 0.6 },
+        { "room": "office", "countMin": 0, "countMax": 1, "areaWeight": 0.6 },
+        { "room": "bathroom", "countMin": 0, "countMax": 1, "areaWeight": 0.4 }
+      ],
+      "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": []
+    },
+    {
+      "id": "family-house", "displayName": "Family house", "tier": 2, "districts": { "residential": 1.0 },
+      "program": [
+        { "room": "living", "countMin": 1, "countMax": 1, "areaWeight": 1.6 },
+        { "room": "bedroom", "countMin": 2, "countMax": 3, "areaWeight": 1.1 },
+        { "room": "kitchen", "countMin": 1, "countMax": 1, "areaWeight": 0.9 },
+        { "room": "bathroom", "countMin": 1, "countMax": 2, "areaWeight": 0.5 },
+        { "room": "hall", "countMin": 1, "countMax": 1, "areaWeight": 0.6 }
+      ],
+      "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": []
+    },
+    {
+      "id": "shop", "displayName": "Shop", "tier": 2, "districts": { "commercial": 1.0, "residential": 0.2 },
+      "program": [
+        { "room": "shop-floor", "countMin": 1, "countMax": 1, "areaWeight": 3.0 },
+        { "room": "storage", "countMin": 1, "countMax": 1, "areaWeight": 0.8 },
+        { "room": "office", "countMin": 1, "countMax": 2, "areaWeight": 0.8 },
+        { "room": "bathroom", "countMin": 1, "countMax": 1, "areaWeight": 0.4 }
+      ],
+      "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": []
+    },
+    { "id": "apartment-block", "displayName": "Apartment block", "tier": 3, "districts": { "residential": 1.0, "commercial": 0.3 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] },
+    { "id": "restaurant", "displayName": "Restaurant", "tier": 3, "districts": { "commercial": 1.0, "residential": 0.3, "industrial": 0.2 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] },
+    { "id": "warehouse", "displayName": "Warehouse", "tier": 4, "districts": { "industrial": 1.0, "commercial": 0.3 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] },
+    { "id": "office-building", "displayName": "Office", "tier": 4, "districts": { "commercial": 1.0, "residential": 0.2, "industrial": 0.3 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] },
+    { "id": "factory", "displayName": "Factory", "tier": 5, "districts": { "industrial": 1.0 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] },
+    { "id": "lab-building", "displayName": "Lab", "tier": 5, "districts": { "industrial": 0.6, "commercial": 0.4 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] },
+    { "id": "hospital", "displayName": "Hospital", "tier": 5, "districts": { "residential": 0.5, "commercial": 0.5, "industrial": 0.3 }, "program": [], "footprintMin": [], "footprintMax": [], "initialEquipment": [], "referenceCrankSpeed": 0, "maxIntakeDistance": 0, "codes": [] }
+  ],
+  "generation": {
+    "requirementVariation": 0.1,
+    "roundingSteps": { "m3/h": 5, "bar": 0.1, "mbar": 1 },
+    "minRoomSide": 2,
+    "streetSideChance": 0.5,
+    "windowSpacing": 3,
+    "windowAreaM2": 1.2,
+    "solvabilityAttempts": 20,
+    "openingNudges": 5,
+    "phaseFluids": ["air"]
+  }
+}

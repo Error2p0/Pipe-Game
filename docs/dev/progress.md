@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **3 · Idle city** (not started; waiting for the go-ahead) (`docs/spec/14-roadmap.md`).
+Current phase: **3 · Idle city** (in progress, started 2026-10-29) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -40,12 +40,12 @@ Task list from `14-roadmap.md` §Phase 2:
 
 ## Phase 3 · Idle city
 
-Not started. Task list from `14-roadmap.md` §Phase 3:
+Task list from `14-roadmap.md` §Phase 3:
 
-- [ ] 1. City generation (districts, roads, rail, parks, protected and historic sites, facilities, plots, starter guarantee). Seeds and tests.
+- [x] 1. City generation (districts, roads, rail, parks, protected and historic sites, facilities, plots, starter guarantee). Seeds and tests.
 - [ ] 2. City view rendering, plot hover difficulty hint, open building, online glow / offline grey.
-- [ ] 3. Procedural building generation for tier 1–2 single-floor buildings, air only: footprint, rooms, doors, walls, outlets by room type, air intake, occupants, heat loads.
-- [ ] 4. Auto-router + solvability check; reference layout; budget cap from it.
+- [x] 3. Procedural building generation for tier 1–2 single-floor buildings, air only: footprint, rooms, doors, walls, outlets by room type, air intake, occupants, heat loads.
+- [x] 4. Auto-router + solvability check; reference layout; budget cap from it.
 - [ ] 5. Room grid CPU reference (velocity field, advection, diffusion, temperature, CO₂), Burst version, comparison test. Room heatmaps for velocity, temperature, density.
 - [ ] 6. Thermal model along ducts; outside temperature (climate), solar gain, occupants.
 - [ ] 7. Tech unlocks (tier 1 → 2), upgrade shop with compare view. Centrifugal blower, EC fan, VSD (speed slider applies without Commit, D25), duct sizes, galvanized vs flex vs spiral, duct sealing, insulation.

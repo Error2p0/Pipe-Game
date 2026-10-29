@@ -115,5 +115,15 @@
     "humGain": 0.05,
     "clickGain": 0.12,
     "limiterCeiling": 0.5
+  },
+  "autoRouter": {
+    "airTrunkVelocity": 4.0,
+    "airBranchVelocity": 2.5,
+    "waterVelocity": 1.5,
+    "leadInTiles": 3,
+    "turnPenalty": 0.6,
+    "shortApproachPenalty": 12,
+    "balancingPasses": 80,
+    "balanceTarget": 0.4
   }
 }

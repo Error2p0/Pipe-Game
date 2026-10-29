@@ -34,6 +34,8 @@ namespace HeadLoss.Core.Data
             ValidateOutlets(data, errors);
             ValidateCodes(data, errors);
             ValidateHandmade(data, errors);
+            ValidateCity(data, errors);
+            ValidateBuildings(data, errors);
             return errors;
         }
 
@@ -377,19 +379,24 @@ namespace HeadLoss.Core.Data
 
         static void ValidateHandmade(DataRepository data, List<string> errors)
         {
-            foreach (HandmadeBuildingDef b in data.HandmadeBuildings)
+            foreach (BuildingLayoutDef b in data.HandmadeBuildings) ValidateLayout($"handmade '{b.Id}'", b, data, errors);
+        }
+
+        /// <summary>Checks one building layout (hand-made or generated).</summary>
+        public static void ValidateLayout(string w, BuildingLayoutDef b, DataRepository data, List<string> errors)
+        {
             {
-                string w = $"handmade '{b.Id}'";
-                Id("handmade", b.Id, errors);
+                Id(w, b.Id, errors);
                 Tier(w, b.Tier, errors);
-                if (b.Width < 1 || b.Height < 1) { errors.Add($"{w}: size must be ≥ 1×1"); continue; }
+                if (b.Width < 1 || b.Height < 1) { errors.Add($"{w}: size must be ≥ 1×1"); return; }
                 if (b.Rooms.Count == 0) errors.Add($"{w}: no rooms");
                 foreach (RoomDef r in b.Rooms)
                 {
                     Id(w + " rooms", r.Id, errors);
                     if (r.X < 0 || r.Y < 0 || r.Width < 1 || r.Height < 1 || r.X + r.Width > b.Width || r.Y + r.Height > b.Height)
                         errors.Add($"{w}: room '{r.Id}' outside the footprint");
-                    if (!data.Game.Theme.RoomFills.ContainsKey(r.Type)) errors.Add($"{w}: room '{r.Id}' type '{r.Type}' has no theme fill");
+                    if (data.FindRoomType(r.Type) == null) errors.Add($"{w}: room '{r.Id}' type '{r.Type}' unknown");
+                    if (r.Occupants < 0 || r.MachinesW < 0) errors.Add($"{w}: room '{r.Id}' loads must be ≥ 0");
                 }
                 var openingIds = new HashSet<string>();
                 foreach (EntryOpeningDef o in b.EntryOpenings)
@@ -414,10 +421,17 @@ namespace HeadLoss.Core.Data
                     Id(w + " outlets", o.Id, errors);
                     if (data.FindOutlet(o.Type) == null) errors.Add($"{w}: outlet '{o.Id}' type '{o.Type}' unknown");
                     if (o.X < 0 || o.Y < 0 || o.X >= b.Width || o.Y >= b.Height) errors.Add($"{w}: outlet '{o.Id}' outside the footprint");
+                    if (o.Min > 0 && !(o.Min < o.Ideal && (o.Max == 0 || o.Ideal <= o.Max))) errors.Add($"{w}: outlet '{o.Id}' needs min < ideal ≤ max");
+                    if (o.Facing.Length > 0 && !Facings.Contains(o.Facing)) errors.Add($"{w}: outlet '{o.Id}' facing '{o.Facing}' unknown");
+                    if (RoomAt(b, o.X, o.Y) < 0) errors.Add($"{w}: outlet '{o.Id}' is not in a room");
                 }
+                foreach (WindowDef win in b.Windows)
+                    if (!Facings.Contains(win.Side) || RoomAt(b, win.X, win.Y) < 0) errors.Add($"{w}: window at ({win.X}, {win.Y}) {win.Side} is not on a room wall");
+                foreach (string code in b.Codes)
+                    if (data.FindCode(code) == null) errors.Add($"{w}: code '{code}' unknown");
+                if (b.ReferenceCrankSpeed < 0 || b.ReferenceCrankSpeed > 1) errors.Add($"{w}: referenceCrankSpeed outside 0–1");
                 foreach (EquipmentPlacementDef e in b.Equipment) Placement(w, e, data, openingIds, errors);
                 ValidateDoors(w, b, errors);
-                ValidateReference(w, b, data, openingIds, errors);
             }
         }
 
@@ -429,7 +443,85 @@ namespace HeadLoss.Core.Data
             if (!openingIds.Contains(e.OpeningId)) errors.Add($"{w}: equipment '{e.EquipmentId}' opening '{e.OpeningId}' unknown");
         }
 
-        static int RoomAt(HandmadeBuildingDef b, int x, int y)
+        static readonly string[] DistrictKinds = { "residential", "commercial", "industrial" };
+
+        static void ValidateCity(DataRepository data, List<string> errors)
+        {
+            CityDef c = data.City;
+            const string w = "city.json";
+            if (c.Width < 2 * c.EdgeBand + 16 || c.Height < 2 * c.EdgeBand + 16) errors.Add($"{w}: map too small for its edge band");
+            Positive(w + " tileMetres", c.TileMetres, errors);
+            if (c.Districts.SeedPointsMin < 3 || c.Districts.SeedPointsMax < c.Districts.SeedPointsMin) errors.Add($"{w}: district seed points need 3 ≤ min ≤ max");
+            foreach (string k in DistrictKinds)
+                if (!c.Districts.Weights.ContainsKey(k)) errors.Add($"{w}: district weight '{k}' missing");
+            if (c.Roads.MainMin < 1 || c.Roads.MainMax < c.Roads.MainMin) errors.Add($"{w}: main roads need 1 ≤ min ≤ max");
+            if (c.Roads.LocalSpacingMin < 2 || c.Roads.LocalSpacingMax < c.Roads.LocalSpacingMin) errors.Add($"{w}: local road spacing needs 2 ≤ min ≤ max");
+            foreach (CityAreaRuleDef a in new[] { c.Parks, c.ProtectedSites, c.Historic })
+            {
+                if (a.Min < 0 || a.Max < a.Min || a.SizeMin < 1 || a.SizeMax < a.SizeMin) errors.Add($"{w}: area rule ranges invalid");
+                foreach (string k in a.Districts) if (System.Array.IndexOf(DistrictKinds, k) < 0) errors.Add($"{w}: district '{k}' unknown");
+            }
+            foreach (FacilityTypeDef f in c.Facilities)
+            {
+                Id(w + " facilities", f.Id, errors);
+                if (f.Count != "one" && f.Count != "per-district") errors.Add($"{w}: facility '{f.Id}' count must be one or per-district");
+                if (f.District.Length > 0 && System.Array.IndexOf(DistrictKinds, f.District) < 0) errors.Add($"{w}: facility '{f.Id}' district unknown");
+                if (f.Width < 1 || f.Height < 1) errors.Add($"{w}: facility '{f.Id}' size must be ≥ 1×1");
+            }
+            if (c.Plots.TierSizes.Count != 5) errors.Add($"{w}: plots.tierSizes needs 5 entries");
+            foreach (List<int> sz in c.Plots.TierSizes) if (sz.Count != 2 || sz[0] < 1 || sz[1] < 1) errors.Add($"{w}: plot size must be [w, h] ≥ 1");
+            foreach (string k in DistrictKinds)
+                if (!c.Plots.TierMix.TryGetValue(k, out List<double>? mix) || mix.Count != 5) errors.Add($"{w}: plots.tierMix '{k}' needs 5 weights");
+            BuildingTypeDef? starter = data.FindBuildingType(c.Starter.BuildingType);
+            if (starter == null) errors.Add($"{w}: starter building type '{c.Starter.BuildingType}' unknown");
+            else if (starter.Tier != 1) errors.Add($"{w}: starter building type must be tier 1");
+            if (c.Starter.Count < 1 || c.Starter.MaxAttempts < 1) errors.Add($"{w}: starter count and attempts must be ≥ 1");
+            foreach (CityModifierDef m in c.Modifiers) Id(w + " modifiers", m.Id, errors);
+            if (c.Names.First.Count == 0 || c.Names.Last.Count == 0) errors.Add($"{w}: names need first and last parts");
+        }
+
+        static void ValidateBuildings(DataRepository data, List<string> errors)
+        {
+            BuildingsDef b = data.Buildings;
+            const string w = "buildings.json";
+            for (int t = 1; t <= 5; t++)
+            {
+                BuildingTierDef? tier = b.Tiers.Find(x => x.Tier == t);
+                if (tier == null) { errors.Add($"{w}: tier {t} missing"); continue; }
+                if (tier.FootprintMin.Count != 2 || tier.FootprintMax.Count != 2 || tier.FootprintMin[0] > tier.FootprintMax[0] || tier.FootprintMin[1] > tier.FootprintMax[1])
+                    errors.Add($"{w}: tier {t} footprint range invalid");
+                foreach (string f in tier.Fluids) if (data.FindFluid(f) == null) errors.Add($"{w}: tier {t} fluid '{f}' unknown");
+                foreach (string e in tier.ReferenceEquipment) if (data.FindEquipment(e) == null) errors.Add($"{w}: tier {t} reference equipment '{e}' unknown");
+                if (tier.Available && tier.ReferenceEquipment.Count == 0) errors.Add($"{w}: tier {t} has no reference equipment");
+            }
+            foreach (RoomTypeDef r in b.RoomTypes)
+            {
+                Id(w + " roomTypes", r.Id, errors);
+                if (!data.Game.Theme.RoomFills.ContainsKey(r.Id)) errors.Add($"{w}: room type '{r.Id}' has no theme fill");
+                foreach (RoomOutletRuleDef o in r.Outlets)
+                    if (data.FindOutlet(o.Type) == null) errors.Add($"{w}: room type '{r.Id}' outlet '{o.Type}' unknown");
+            }
+            foreach (BuildingTypeDef t in b.Types)
+            {
+                Id(w + " types", t.Id, errors);
+                Tier($"{w} type '{t.Id}'", t.Tier, errors);
+                BuildingTierDef? tier = b.Tiers.Find(x => x.Tier == t.Tier);
+                if (tier != null && tier.Available && t.Program.Count == 0) errors.Add($"{w}: type '{t.Id}' has no room program");
+                foreach (ProgramRoomDef p in t.Program)
+                {
+                    if (data.FindRoomType(p.Room) == null) errors.Add($"{w}: type '{t.Id}' room '{p.Room}' unknown");
+                    if (p.CountMin < 0 || p.CountMax < p.CountMin || !(p.AreaWeight > 0)) errors.Add($"{w}: type '{t.Id}' room '{p.Room}' ranges invalid");
+                }
+                foreach (string k in t.Districts.Keys) if (System.Array.IndexOf(DistrictKinds, k) < 0) errors.Add($"{w}: type '{t.Id}' district '{k}' unknown");
+                foreach (string e in t.InitialEquipment) if (data.FindEquipment(e)?.Placement != "intake") errors.Add($"{w}: type '{t.Id}' initial equipment '{e}' is not intake equipment");
+                foreach (string code in t.Codes) if (data.FindCode(code) == null) errors.Add($"{w}: type '{t.Id}' code '{code}' unknown");
+            }
+            BuildingGenerationDef g = b.Generation;
+            if (g.MinRoomSide < 1 || g.WindowSpacing < 1 || g.SolvabilityAttempts < 1) errors.Add($"{w}: generation ranges invalid");
+            foreach (string f in g.PhaseFluids) if (data.FindFluid(f) == null) errors.Add($"{w}: phase fluid '{f}' unknown");
+        }
+
+        static int RoomAt(BuildingLayoutDef b, int x, int y)
         {
             for (int i = 0; i < b.Rooms.Count; i++)
             {
@@ -439,7 +531,7 @@ namespace HeadLoss.Core.Data
             return -1;
         }
 
-        static void ValidateDoors(string w, HandmadeBuildingDef b, List<string> errors)
+        static void ValidateDoors(string w, BuildingLayoutDef b, List<string> errors)
         {
             foreach (DoorDef d in b.Doors)
             {
@@ -450,28 +542,6 @@ namespace HeadLoss.Core.Data
                 int ra = RoomAt(b, d.X, d.Y), rb = RoomAt(b, nx, ny);
                 if (ra < 0 || rb < 0) errors.Add($"{where}: not between two rooms");
                 else if (ra == rb) errors.Add($"{where}: both sides are the same room");
-            }
-        }
-
-        static void ValidateReference(string w, HandmadeBuildingDef b, DataRepository data, HashSet<string> openingIds, List<string> errors)
-        {
-            ReferenceLayoutDef r = b.Reference;
-            if (r.Equipment.Count == 0) errors.Add($"{w}: reference has no equipment");
-            foreach (EquipmentPlacementDef e in r.Equipment) Placement(w + " reference", e, data, openingIds, errors);
-            if (r.CrankSpeed < 0 || r.CrankSpeed > 1) errors.Add($"{w}: reference crankSpeed outside 0–1");
-            if (r.Runs.Count == 0) errors.Add($"{w}: reference has no runs");
-            foreach (ReferenceRunDef run in r.Runs)
-            {
-                if (run.Points.Count < 2) { errors.Add($"{w}: reference run needs ≥ 2 points"); continue; }
-                foreach (List<int> pt in run.Points)
-                    if (pt.Count != 2) errors.Add($"{w}: reference point must be [x, y]");
-                string mat = string.IsNullOrEmpty(run.MaterialId) ? data.Balancing.Drawing.DefaultMaterial : run.MaterialId;
-                MaterialDef? m = data.FindMaterial(mat);
-                if (m == null) { errors.Add($"{w}: reference material '{mat}' unknown"); continue; }
-                bool sized = false;
-                foreach (PipeFamilyDef fam in data.PipeFamilies)
-                    if (fam.Kind == m.Kind && fam.Sizes.Exists(s => s.DiameterMm == run.DiameterMm)) sized = true;
-                if (!sized) errors.Add($"{w}: reference size {run.DiameterMm} mm is not a {m.Kind} size");
             }
         }
     }

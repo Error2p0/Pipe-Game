@@ -21,6 +21,8 @@ namespace HeadLoss.Core.Data
 
         public GameDef Game { get; private set; } = new GameDef();
         public BalancingDef Balancing { get; private set; } = new BalancingDef();
+        public CityDef City { get; private set; } = new CityDef();
+        public BuildingsDef Buildings { get; private set; } = new BuildingsDef();
         public IReadOnlyList<FluidDef> Fluids => _fluids;
         public IReadOnlyList<MaterialDef> Materials => _materials;
         public IReadOnlyList<PipeFamilyDef> PipeFamilies => _pipeFamilies;
@@ -28,7 +30,7 @@ namespace HeadLoss.Core.Data
         public IReadOnlyList<EquipmentDef> Equipment => _equipment;
         public IReadOnlyList<OutletDef> Outlets => _outlets;
         public IReadOnlyList<CodeDef> Codes => _codes;
-        public IReadOnlyList<HandmadeBuildingDef> HandmadeBuildings => _handmade;
+        public IReadOnlyList<BuildingLayoutDef> HandmadeBuildings => _handmade;
 
         /// <summary>Fluid tables by fluid id.</summary>
         public IReadOnlyDictionary<string, FluidTableDef> FluidTables => _fluidTables;
@@ -46,7 +48,7 @@ namespace HeadLoss.Core.Data
         readonly List<EquipmentDef> _equipment = new List<EquipmentDef>();
         readonly List<OutletDef> _outlets = new List<OutletDef>();
         readonly List<CodeDef> _codes = new List<CodeDef>();
-        readonly List<HandmadeBuildingDef> _handmade = new List<HandmadeBuildingDef>();
+        readonly List<BuildingLayoutDef> _handmade = new List<BuildingLayoutDef>();
         readonly Dictionary<string, FluidTableDef> _fluidTables = new Dictionary<string, FluidTableDef>();
         readonly List<string> _loadIssues = new List<string>();
 
@@ -57,7 +59,9 @@ namespace HeadLoss.Core.Data
         readonly Dictionary<string, EquipmentDef> _equipmentById = new Dictionary<string, EquipmentDef>();
         readonly Dictionary<string, OutletDef> _outletById = new Dictionary<string, OutletDef>();
         readonly Dictionary<string, CodeDef> _codeById = new Dictionary<string, CodeDef>();
-        readonly Dictionary<string, HandmadeBuildingDef> _handmadeById = new Dictionary<string, HandmadeBuildingDef>();
+        readonly Dictionary<string, BuildingLayoutDef> _handmadeById = new Dictionary<string, BuildingLayoutDef>();
+        readonly Dictionary<string, BuildingTypeDef> _buildingTypeById = new Dictionary<string, BuildingTypeDef>();
+        readonly Dictionary<string, RoomTypeDef> _roomTypeById = new Dictionary<string, RoomTypeDef>();
 
         static readonly JsonSerializerSettings Settings = new JsonSerializerSettings
         {
@@ -76,6 +80,14 @@ namespace HeadLoss.Core.Data
             repo.Version = HashAll(source);
             repo.Game = Parse<GameDef>(source, "game.json");
             repo.Balancing = Parse<BalancingDef>(source, "balancing.json");
+            repo.City = Parse<CityDef>(source, "city.json");
+            repo.Buildings = Parse<BuildingsDef>(source, "buildings.json");
+            foreach (BuildingTypeDef t in repo.Buildings.Types)
+                if (!repo._buildingTypeById.ContainsKey(t.Id)) repo._buildingTypeById[t.Id] = t;
+                else repo._loadIssues.Add($"buildings.json: duplicate building type '{t.Id}'");
+            foreach (RoomTypeDef t in repo.Buildings.RoomTypes)
+                if (!repo._roomTypeById.ContainsKey(t.Id)) repo._roomTypeById[t.Id] = t;
+                else repo._loadIssues.Add($"buildings.json: duplicate room type '{t.Id}'");
             AddAll(repo, Parse<List<FluidDef>>(source, "fluids.json"), repo._fluids, repo._fluidById, f => f.Id, "fluids.json");
             AddAll(repo, Parse<List<MaterialDef>>(source, "materials.json"), repo._materials, repo._materialById, m => m.Id, "materials.json");
             AddAll(repo, Parse<List<PipeFamilyDef>>(source, "pipes.json"), repo._pipeFamilies, repo._familyById, p => p.Id, "pipes.json");
@@ -95,11 +107,11 @@ namespace HeadLoss.Core.Data
                 repo._fluidTables[fluid.Id] = Parse<FluidTableDef>(source, fluid.Table);
             }
 
-            var handmade = new List<HandmadeBuildingDef>();
+            var handmade = new List<BuildingLayoutDef>();
             foreach (string path in source.ListFiles())
             {
                 if (path.StartsWith(HandmadeFolder, StringComparison.Ordinal))
-                    handmade.Add(Parse<HandmadeBuildingDef>(source, path));
+                    handmade.Add(Parse<BuildingLayoutDef>(source, path));
             }
             AddAll(repo, handmade, repo._handmade, repo._handmadeById, b => b.Id, HandmadeFolder);
             return repo;
@@ -164,7 +176,7 @@ namespace HeadLoss.Core.Data
         public EquipmentDef? FindEquipment(string id) => _equipmentById.TryGetValue(id, out var v) ? v : null;
         public OutletDef? FindOutlet(string id) => _outletById.TryGetValue(id, out var v) ? v : null;
         public CodeDef? FindCode(string id) => _codeById.TryGetValue(id, out var v) ? v : null;
-        public HandmadeBuildingDef? FindHandmadeBuilding(string id) => _handmadeById.TryGetValue(id, out var v) ? v : null;
+        public BuildingLayoutDef? FindHandmadeBuilding(string id) => _handmadeById.TryGetValue(id, out var v) ? v : null;
 
         public FluidDef Fluid(string id) => FindFluid(id) ?? throw new KeyNotFoundException($"Unknown fluid '{id}'");
         public MaterialDef Material(string id) => FindMaterial(id) ?? throw new KeyNotFoundException($"Unknown material '{id}'");
@@ -172,6 +184,14 @@ namespace HeadLoss.Core.Data
         public FittingDef Fitting(string id) => FindFitting(id) ?? throw new KeyNotFoundException($"Unknown fitting '{id}'");
         public EquipmentDef EquipmentItem(string id) => FindEquipment(id) ?? throw new KeyNotFoundException($"Unknown equipment '{id}'");
         public OutletDef Outlet(string id) => FindOutlet(id) ?? throw new KeyNotFoundException($"Unknown outlet '{id}'");
-        public HandmadeBuildingDef HandmadeBuilding(string id) => FindHandmadeBuilding(id) ?? throw new KeyNotFoundException($"Unknown hand-made building '{id}'");
+        public BuildingTypeDef? FindBuildingType(string id) => _buildingTypeById.TryGetValue(id, out var v) ? v : null;
+        public RoomTypeDef? FindRoomType(string id) => _roomTypeById.TryGetValue(id, out var v) ? v : null;
+        public BuildingTypeDef BuildingType(string id) => FindBuildingType(id) ?? throw new KeyNotFoundException($"Unknown building type '{id}'");
+        public RoomTypeDef RoomType(string id) => FindRoomType(id) ?? throw new KeyNotFoundException($"Unknown room type '{id}'");
+
+        /// <summary>The <c>buildings.json</c> entry for a tier (1–5).</summary>
+        public BuildingTierDef BuildingTier(int tier) => Buildings.Tiers.Find(t => t.Tier == tier) ?? throw new KeyNotFoundException($"Unknown building tier {tier}");
+
+        public BuildingLayoutDef HandmadeBuilding(string id) => FindHandmadeBuilding(id) ?? throw new KeyNotFoundException($"Unknown hand-made building '{id}'");
     }
 }

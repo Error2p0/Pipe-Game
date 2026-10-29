@@ -40,12 +40,12 @@ namespace HeadLoss.Game.Balancing
             var r = new Result();
             string sym = data.Game.CurrencySymbol;
             TargetsDef t = data.Balancing.Targets;
-            foreach (HandmadeBuildingDef def in data.HandmadeBuildings)
+            foreach (BuildingLayoutDef def in data.HandmadeBuildings)
             {
                 var layout = new BuildingLayout(def);
                 BuildingState reference = ReferenceLayout.Build(data, layout);
                 double cost = Pricing.Value(data, layout, reference);
-                double crank = layout.Reference.CrankSpeed;
+                double crank = layout.ReferenceCrankSpeed;
                 BuildingEvaluation ev = Evaluate(data, layout, reference, crank > 0 ? crank : 0);
                 r.Lines.Add($"{layout.DisplayName} (tier {layout.Tier}, {layout.Outlets.Count} outlets)");
                 r.Lines.Add($"  reference: {Equipment(data, reference)}{(crank > 0 ? $" at {crank:P0} crank" : "")}, cost {Units.FormatMoney(cost, sym)}, budget cap {Units.FormatMoney(cost * data.Balancing.Building.BudgetCapFactor, sym)}");

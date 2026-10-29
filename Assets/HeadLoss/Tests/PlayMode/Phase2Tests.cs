@@ -64,21 +64,11 @@ namespace HeadLoss.PlayMode.Tests
             yield return null;
         }
 
+        /// <summary>Puts the auto-router's reference ducts into the design (equipment unchanged).</summary>
         static void DrawReference(BuildingSession s)
         {
-            foreach (ReferenceRunDefRun run in Runs(s)) s.Execute(new PlaceRunCommand(run.Path, run.D, "galvanized-duct", false));
-        }
-
-        struct ReferenceRunDefRun
-        {
-            public List<TilePos> Path;
-            public double D;
-        }
-
-        static IEnumerable<ReferenceRunDefRun> Runs(BuildingSession s)
-        {
-            foreach (var r in s.Layout.Reference.Runs)
-                yield return new ReferenceRunDefRun { Path = ReferenceLayout.Expand(r.Points), D = r.DiameterMm };
+            s.Record.Design.Air = ReferenceLayout.Build(s.Data, s.Layout).Air.Clone();
+            s.MarkDirty();
         }
 
         [UnityTest]

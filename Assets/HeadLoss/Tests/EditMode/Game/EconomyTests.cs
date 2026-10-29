@@ -218,7 +218,7 @@ namespace HeadLoss.Game.Tests
         public void Report_CoversEveryHandmadeBuilding()
         {
             Balancing.BalancingReport.Result r = Balancing.BalancingReport.Run(GameTestUtil.Data);
-            foreach (Core.Data.Defs.HandmadeBuildingDef b in GameTestUtil.Data.HandmadeBuildings)
+            foreach (Core.Data.Defs.BuildingLayoutDef b in GameTestUtil.Data.HandmadeBuildings)
                 Assert.IsTrue(r.Checks.Exists(c => c.Building == b.DisplayName), b.Id);
             Assert.IsTrue(r.Checks.Exists(c => c.Name.StartsWith("Cranking")), "starter crank check");
             Assert.IsTrue(r.Checks.Exists(c => c.Name.StartsWith("Doubling")), "doubling-by-speed check");

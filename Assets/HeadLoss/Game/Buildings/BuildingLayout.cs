@@ -20,8 +20,15 @@ namespace HeadLoss.Game.Buildings
         /// <summary>Equipment the layout starts with (pre-placed at openings).</summary>
         public IReadOnlyList<EquipmentPlacementDef> InitialEquipment => _equipment;
         public IReadOnlyList<DoorDef> Doors => _doors;
-        /// <summary>Reference layout for the budget cap and the solvability check.</summary>
-        public ReferenceLayoutDef Reference { get; }
+        public IReadOnlyList<WindowDef> Windows => Def.Windows;
+        /// <summary>Codes in force (code ids).</summary>
+        public IReadOnlyList<string> Codes => Def.Codes;
+        /// <summary>Building type id ("" for hand-made layouts).</summary>
+        public string BuildingType => Def.BuildingType;
+        /// <summary>Hand-crank speed the reference layout must meet every minimum at (0 = no crank reference).</summary>
+        public double ReferenceCrankSpeed => Def.ReferenceCrankSpeed;
+        /// <summary>The definition the layout was built from (hand-made data or the generator).</summary>
+        public BuildingLayoutDef Def { get; }
 
         readonly List<RoomDef> _rooms;
         readonly List<EntryOpeningDef> _openings;
@@ -32,8 +39,9 @@ namespace HeadLoss.Game.Buildings
         /// <summary>Tile edges with a door: key of the tile pair.</summary>
         readonly HashSet<long> _doorEdges = new HashSet<long>();
 
-        public BuildingLayout(HandmadeBuildingDef def)
+        public BuildingLayout(BuildingLayoutDef def)
         {
+            Def = def;
             Id = def.Id;
             DisplayName = def.DisplayName;
             Tier = def.Tier;
@@ -44,7 +52,6 @@ namespace HeadLoss.Game.Buildings
             _outlets = new List<OutletPlacementDef>(def.Outlets);
             _equipment = new List<EquipmentPlacementDef>(def.Equipment);
             _doors = new List<DoorDef>(def.Doors);
-            Reference = def.Reference;
             _roomIndex = new int[Width * Height];
             for (int i = 0; i < _roomIndex.Length; i++) _roomIndex[i] = -1;
             for (int r = 0; r < _rooms.Count; r++)
