@@ -11,6 +11,7 @@ namespace HeadLoss.Core.Data.Defs
         public string CurrencySymbol = "";
         /// <summary>What the building toolbox offers until tech unlocks arrive (Phase 3).</summary>
         public ToolboxDef Toolbox = new ToolboxDef();
+        public SteamDef Steam = new SteamDef();
         public ThemeDef Theme = new ThemeDef();
         /// <summary>The dark theme (settings).</summary>
         public ThemeDef ThemeDark = new ThemeDef();
@@ -72,5 +73,14 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Drifting cloud shadows.</summary>
         public string Cloud = "";
         public double CloudAlpha;
+    }
+
+    /// <summary>Steam (Phase 3 playtest builds).</summary>
+    public sealed class SteamDef
+    {
+        /// <summary>Steam app id (480 = Valve's test app until the real one exists).</summary>
+        public uint AppId;
+        /// <summary>Relaunch through Steam when started outside it (only for the real app id).</summary>
+        public bool RestartIfNecessary;
     }
 }

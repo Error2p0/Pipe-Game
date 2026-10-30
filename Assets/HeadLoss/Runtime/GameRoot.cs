@@ -47,6 +47,7 @@ namespace HeadLoss.Unity
         BuildingInput? _input;
         CameraController? _camera;
         ProceduralAudio? _audio;
+        SteamService? _steam;
         HeatmapState? _heatmap;
         ViewPalette? _palette;
         UiKit? _ui;
@@ -135,6 +136,8 @@ namespace HeadLoss.Unity
             _audio = _camera.gameObject.AddComponent<ProceduralAudio>();
             _audio.Init(_data.Balancing.Audio, (float)_data.Balancing.Audio.MasterVolume);
 
+            _steam = gameObject.AddComponent<SteamService>();
+            _steam.Init(_data.Game.Steam);
             _input = new BuildingInput();
             var doc = gameObject.AddComponent<UIDocument>();
             doc.panelSettings = panelSettings;
@@ -238,6 +241,7 @@ namespace HeadLoss.Unity
                 LoadResult? peek = _store.Load(Profile, _data!);
                 if (peek != null) info = $"Played {FormatDuration(peek.File.PlayTimeSeconds)} · wallet {Units.FormatMoney(peek.File.GameState.Wallet, _data!.Game.CurrencySymbol)}";
             }
+            if (info != null && _steam != null && _steam.Status.Length > 0) info = $"{info} · {_steam.Status}";
             _menu = new MenuScreen(_uiRoot!, _ui!, _data!.Game.DisplayName, info, Continue, () => StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true), OpenSettings, Quit);
         }
 

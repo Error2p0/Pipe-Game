@@ -2,6 +2,7 @@
   "displayName": "Head Loss",
   "version": "0.3.0-phase3",
   "currencySymbol": "$",
+  "steam": { "appId": 480, "restartIfNecessary": false },
   "toolbox": {
     "parts": ["damper", "inline-duct-fan"]
   },
