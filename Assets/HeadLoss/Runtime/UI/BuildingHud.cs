@@ -215,10 +215,12 @@ namespace HeadLoss.Unity.UI
             UiKit.Text(tools, "Duct", "hl-section");
             _size = new DropdownField();
             _size.AddToClassList("hl-dropdown");
+            _ui.StyleField(_size);
             _size.RegisterValueChangedCallback(_ => { if (_size.index >= 0) _ix.DrawDiameterMm = _sizes[_size.index]; });
             tools.Add(_size);
             _material = new DropdownField();
             _material.AddToClassList("hl-dropdown");
+            _ui.StyleField(_material);
             _material.RegisterValueChangedCallback(_ =>
             {
                 if (_material.index < 0) return;
@@ -780,6 +782,7 @@ namespace HeadLoss.Unity.UI
                 int at = options.FindIndex(o => o.id == current);
                 var dd = new DropdownField(label, names, at < 0 ? 0 : at);
                 dd.AddToClassList("hl-dropdown");
+                _ui.StyleField(dd);
                 dd.style.minWidth = 300;
                 dd.RegisterValueChangedCallback(_ =>
                 {
@@ -838,6 +841,7 @@ namespace HeadLoss.Unity.UI
                     DuctSegment? first = ids.Count > 0 ? _s.State.Air.FindSegment(ids[0]) : null;
                     var dd = new DropdownField(choices, first != null ? _sizes.IndexOf(first.DiameterMm) : 0);
                     dd.AddToClassList("hl-dropdown");
+                    _ui.StyleField(dd);
                     dd.style.minWidth = 140;
                     dd.RegisterValueChangedCallback(_ =>
                     {

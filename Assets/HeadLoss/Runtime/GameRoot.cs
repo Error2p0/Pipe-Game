@@ -233,6 +233,8 @@ namespace HeadLoss.Unity
 
         void ShowMenu()
         {
+            _menu?.Dispose();
+            _menu = null;
             CloseGame(save: true);
             _screen = ScreenKind.Menu;
             string? info = null;

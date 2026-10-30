@@ -33,3 +33,4 @@ Add `--no-banner` to every call. Run from the project root so the project is aut
 - While the Editor reloads, commands fail with "Pipeline server isn't reachable" (with or without the `PIPELINE_UNREACHABLE` code); retry after a few seconds.
 - In Git Bash, long `python - <<'EOF'` heredocs sometimes fail to parse; write the script to a file first.
 - `script eval` prints numbers in the Editor's culture (decimal commas).
+- If play mode runs but `GameRoot.Data` is null, a script recompile happened during play (check `Logs/Editor.log` for "Requested script compilation"): stop play mode, let it settle, start again. A changing define (Steamworks.NET's `STEAMWORKS_NET`) caused it once; it is now set in ProjectSettings.

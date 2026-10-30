@@ -55,6 +55,7 @@ namespace HeadLoss.Unity.UI
             var palettes = new List<string>(data.Balancing.Heatmap.Palettes.Keys);
             var pal = new DropdownField("Heatmap palette", palettes, Math.Max(0, palettes.IndexOf(_s.Palette)));
             pal.AddToClassList("hl-dropdown");
+            ui.StyleField(pal);
             pal.RegisterValueChangedCallback(e => { _s.Palette = e.newValue; Notify(); });
             scroll.Add(pal);
             VisualElement theme = UiKit.Row(scroll);

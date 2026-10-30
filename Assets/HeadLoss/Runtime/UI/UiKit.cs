@@ -48,6 +48,17 @@ namespace HeadLoss.Unity.UI
             b.EnableInClassList("hl-button--active", active);
         }
 
+        /// <summary>Gives a dropdown (or other input field) the theme's paper and text colours instead of the default light style.</summary>
+        public void StyleField(VisualElement field)
+        {
+            field.style.color = P.Text;
+            VisualElement? input = field.Q(className: "unity-base-field__input");
+            if (input == null) return;
+            input.style.backgroundColor = P.Paper;
+            input.style.color = P.Text;
+            Border(input, P.Walls);
+        }
+
         public static Label Text(VisualElement parent, string text, string cls)
         {
             var l = new Label(text);
