@@ -123,8 +123,15 @@ namespace HeadLoss.Sim.Rooms
             };
         }
 
+        /// <summary>Bumped by <see cref="Clear"/> (and <see cref="Touch"/>): steppers may reuse work while it is unchanged.</summary>
+        public int Revision { get; private set; }
+
+        /// <summary>Marks the inputs as changed after editing the arrays directly.</summary>
+        public void Touch() => Revision++;
+
         public void Clear()
         {
+            Revision++;
             Array.Clear(SupplyFlow, 0, SupplyFlow.Length);
             Array.Clear(SupplyTemperature, 0, SupplyTemperature.Length);
             Array.Clear(HeatLower, 0, HeatLower.Length);

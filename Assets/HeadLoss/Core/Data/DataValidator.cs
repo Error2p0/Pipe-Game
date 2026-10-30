@@ -64,7 +64,11 @@ namespace HeadLoss.Core.Data
         static void ValidateGame(DataRepository data, List<string> errors)
         {
             if (string.IsNullOrWhiteSpace(data.Game.DisplayName)) errors.Add("game.json: displayName is empty");
-            ThemeDef t = data.Game.Theme;
+            foreach (ThemeDef t in new[] { data.Game.Theme, data.Game.ThemeDark }) ValidateTheme(data, t, errors);
+        }
+
+        static void ValidateTheme(DataRepository data, ThemeDef t, List<string> errors)
+        {
             Colour("game.json theme.paper", t.Paper, errors);
             Colour("game.json theme.gridLines", t.GridLines, errors);
             Colour("game.json theme.walls", t.Walls, errors);

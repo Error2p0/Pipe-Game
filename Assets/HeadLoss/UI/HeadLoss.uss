@@ -415,3 +415,11 @@
     width: 560px;
     padding: 24px;
 }
+
+.hl-settings {
+    position: absolute;
+    left: 50%; top: 70px; bottom: 70px;
+    translate: -50% 0;
+    width: 760px;
+    padding: 20px;
+}

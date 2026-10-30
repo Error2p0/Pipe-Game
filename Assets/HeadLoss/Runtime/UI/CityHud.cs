@@ -34,6 +34,7 @@ namespace HeadLoss.Unity.UI
         public string? OpenRequested;
         public bool MenuRequested;
         public bool ShopRequested;
+        public bool SettingsRequested;
 
         public CityHud(VisualElement root, UiKit ui, GameContext ctx, CameraController camera)
         {
@@ -70,6 +71,7 @@ namespace HeadLoss.Unity.UI
             _layer.Add(bottom);
             ui.Button(bottom, "Menu", () => MenuRequested = true);
             ui.Button(bottom, "Shop", () => ShopRequested = true);
+            ui.Button(bottom, "Settings", () => SettingsRequested = true);
         }
 
         public void Dispose() => _layer.RemoveFromHierarchy();

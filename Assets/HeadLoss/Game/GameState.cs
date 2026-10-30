@@ -54,7 +54,7 @@ namespace HeadLoss.Game
         public int UnlockedTier = 1;
     }
 
-    /// <summary>Player settings kept in the save.</summary>
+    /// <summary>Phase 2 settings kept in the save (unused since Phase 3: settings live in settings.json, D68).</summary>
     public sealed class SettingsState
     {
         /// <summary>Master volume, 0–1 (−1 = use the data default).</summary>

@@ -134,6 +134,23 @@ namespace HeadLoss.PlayMode.Tests
         }
 
         [UnityTest]
+        public IEnumerator Settings_OpenFromTheCity_ApplyLive_EscCloses()
+        {
+            yield return StartCity();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            root.City!.Hud.SettingsRequested = true;
+            yield return null;
+            Assert.IsNotNull(root.SettingsOpen);
+            root.SettingsOpen!.Settings.ReduceMotion = true;
+            root.SettingsOpen.Settings.Palette = "magma";
+            yield return Tap(_keyboard.escapeKey);
+            Assert.IsNull(root.SettingsOpen, "Esc closed the settings");
+            Assert.IsTrue(root.InCity, "and stayed in the city");
+            Assert.IsTrue(root.Settings.ReduceMotion);
+            Assert.AreEqual("magma", root.Heatmap!.Palette, "the palette applied");
+        }
+
+        [UnityTest]
         public IEnumerator Offline_ShowsTheReport_EnterClosesIt()
         {
             yield return StartCity();

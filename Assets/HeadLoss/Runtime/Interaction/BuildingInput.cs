@@ -56,6 +56,21 @@ namespace HeadLoss.Unity.Interaction
 
         public Vector2 PointerPosition => Point.ReadValue<Vector2>();
 
+        /// <summary>Keys the settings screen can rebind: action, binding index, label. Esc and the mouse stay fixed.</summary>
+        public System.Collections.Generic.List<(InputAction action, int binding, string label)> Rebindable()
+        {
+            var list = new System.Collections.Generic.List<(InputAction, int, string)>
+            {
+                (Pan, 1, "Pan up"), (Pan, 2, "Pan down"), (Pan, 3, "Pan left"), (Pan, 4, "Pan right"),
+                (Crank, 0, "Crank"), (Commit, 0, "Commit design"), (Sheet, 0, "Requirement sheet"), (Rotate, 0, "Turn a part around"),
+                (Delete, 0, "Delete selection"), (Undo, 2, "Undo (with Ctrl)"), (Redo, 2, "Redo (with Ctrl)"), (RoomLayer, 0, "Room layer"),
+                (Plain, 0, "Plain view"),
+            };
+            string[] names = { "Velocity", "Pressure", "Flow rate", "Temperature", "Density", "Concentration", "Stress" };
+            for (int i = 0; i < HeatmapKeys.Length; i++) list.Add((HeatmapKeys[i], 0, names[i] + " heatmap"));
+            return list;
+        }
+
         public void Dispose()
         {
             MouseKeyboard.Disable();

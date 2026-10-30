@@ -12,6 +12,7 @@ using HeadLoss.Unity.Interaction;
 using HeadLoss.Unity.UI;
 using HeadLoss.Unity.View;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UIElements;
 
 namespace HeadLoss.Unity
@@ -35,6 +36,9 @@ namespace HeadLoss.Unity
 
         DataRepository? _data;
         SaveStore? _store;
+        SettingsStore? _settingsStore;
+        PlayerSettings _settings = new PlayerSettings();
+        SettingsScreen? _settingsScreen;
         GameContext? _ctx;
         GameLoop? _loop;
         bool _saving;
@@ -76,6 +80,9 @@ namespace HeadLoss.Unity
         public bool InCity => _screen == ScreenKind.City;
         public CityScene? City => _city;
         public ShopScreen? Shop => _shop;
+        public SettingsScreen? SettingsOpen => _settingsScreen;
+        /// <summary>The settings in force.</summary>
+        public PlayerSettings Settings => _settings;
         public AwayScreen? Away => _away;
 
         void Awake()
@@ -96,7 +103,9 @@ namespace HeadLoss.Unity
             _data = catalog.Load();
             foreach (string e in DataValidator.Validate(_data)) Debug.LogError("Data: " + e);
             _store = new SaveStore(Path.Combine(Application.persistentDataPath, "saves"), _data.Balancing.Save);
-            _palette = new ViewPalette(_data);
+            _settingsStore = new SettingsStore(Path.Combine(Application.persistentDataPath, "saves"));
+            _settings = _settingsStore.Load(_data);
+            _palette = new ViewPalette(_data, _settings.Theme);
             _ui = new UiKit(_palette);
             _heatmap = new HeatmapState(_data.Balancing.Heatmap);
 
@@ -137,7 +146,84 @@ namespace HeadLoss.Unity
             // Every button press gives a soft click.
             _uiRoot.RegisterCallback<ClickEvent>(e => { if (e.target is Button) _audio.PlayClick(); }, TrickleDown.TrickleDown);
 
+            ApplySettings(_settings);
             ShowMenu();
+        }
+
+        // ---------- settings ----------
+
+        /// <summary>Applies everything except the theme (which rebuilds the screens, <see cref="ApplyTheme"/>).</summary>
+        void ApplySettings(PlayerSettings s)
+        {
+            _audio!.SetVolumes((float)s.MasterVolume, (float)s.AmbienceVolume, (float)s.UiVolume);
+            _heatmap!.SetPalette(s.Palette);
+            if (panelSettings != null) panelSettings.scale = (float)s.UiScale;
+            if (_scene != null) _scene.ReduceMotion = s.ReduceMotion;
+            try
+            {
+                if (s.Bindings.Length > 0) _input!.MouseKeyboard.LoadBindingOverridesFromJson(s.Bindings);
+                else _input!.MouseKeyboard.RemoveAllBindingOverrides();
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("Head Loss: key bindings could not be read, using the defaults: " + e.Message);
+                _input!.MouseKeyboard.RemoveAllBindingOverrides();
+            }
+        }
+
+        void OpenSettings()
+        {
+            CloseSettings();
+            _settingsScreen = new SettingsScreen(_uiRoot!, _ui!, _data!, _input!, _settings.Clone(), ApplySettings, CloseSettings);
+            _topBar?.BringToFront();
+        }
+
+        void CloseSettings()
+        {
+            if (_settingsScreen == null) return;
+            PlayerSettings s = _settingsScreen.Settings;
+            s.Sanitize(_data!);
+            _settingsScreen.Dispose();
+            _settingsScreen = null;
+            bool themeChanged = s.Theme != _settings.Theme;
+            _settings = s;
+            try
+            {
+                // Test games (saving off) never touch the player's files.
+                if (_ctx == null || _saving) _settingsStore!.Save(_settings);
+            }
+            catch (Exception e) when (e is IOException || e is UnauthorizedAccessException)
+            {
+                Debug.LogWarning("Head Loss: could not save the settings: " + e.Message);
+            }
+            ApplySettings(_settings);
+            if (themeChanged) ApplyTheme();
+        }
+
+        /// <summary>A new theme: new palette and UI kit, then the current screen is built again in it.</summary>
+        void ApplyTheme()
+        {
+            _palette = new ViewPalette(_data!, _settings.Theme);
+            _ui = new UiKit(_palette);
+            _camera!.Camera.backgroundColor = _palette.Paper;
+            _uiRoot!.style.color = _palette.Text;
+            Color particleTint = _palette.Paper;
+            particleTint.a = 0.9f;
+            _materials.Particles.SetColor("_Tint", particleTint);
+            if (_ctx == null)
+            {
+                _menu?.Dispose();
+                _menu = null;
+                ShowMenu();
+                return;
+            }
+            _topBar?.Root.RemoveFromHierarchy();
+            _topBar = new TopBar(_uiRoot!, _ui!, _ctx);
+            _notice?.Root.RemoveFromHierarchy();
+            _notice = new Notice(_uiRoot!, _ui!);
+            if (_scene != null) OpenBuilding(_scene.Session.Record.BuildingId);
+            else if (_city != null) ShowCity();
+            else ShowList();
         }
 
         // ---------- screens ----------
@@ -152,7 +238,7 @@ namespace HeadLoss.Unity
                 LoadResult? peek = _store.Load(Profile, _data!);
                 if (peek != null) info = $"Played {FormatDuration(peek.File.PlayTimeSeconds)} · wallet {Units.FormatMoney(peek.File.GameState.Wallet, _data!.Game.CurrencySymbol)}";
             }
-            _menu = new MenuScreen(_uiRoot!, _ui!, _data!.Game.DisplayName, info, Continue, () => StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true), Quit);
+            _menu = new MenuScreen(_uiRoot!, _ui!, _data!.Game.DisplayName, info, Continue, () => StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true), OpenSettings, Quit);
         }
 
         /// <summary>A random seed for a new city (the only randomness outside the seeded generators; never used in game rules).</summary>
@@ -216,7 +302,7 @@ namespace HeadLoss.Unity
             _audio!.SetAirflow(_data!.Balancing.Audio.AirflowFullM3h * 0.06);
             _audio.ClearFans();
             _screen = ScreenKind.City;
-            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, () => false);
+            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, () => _settings.ReduceMotion);
             _topBar!.BringToFront();
         }
 
@@ -248,6 +334,7 @@ namespace HeadLoss.Unity
             _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild, _burstRooms);
             GameContext ctx = _ctx;
             _scene.Hud.UnlockCondition = tier => Game.Progression.Tech.Condition(ctx.Data, ctx, tier);
+            _scene.ReduceMotion = _settings.ReduceMotion;
             _topBar!.BringToFront();
             _screen = ScreenKind.Building;
         }
@@ -397,9 +484,16 @@ namespace HeadLoss.Unity
             if (_saving)
             {
                 _sinceSave += dt;
-                if (_sinceSave >= _data!.Balancing.Save.AutosaveSeconds) SaveNow();
+                if (_sinceSave >= _settings.AutosaveSeconds) SaveNow();
             }
             _notice?.Update(Time.unscaledTime);
+            if (_settingsScreen != null)
+            {
+                // Modal: Esc closes it (unless a key is being rebound, when Esc cancels the rebind).
+                if (!_settingsScreen.Rebinding && _input!.Cancel.WasPressedThisFrame()) CloseSettings();
+                _topBar?.Update(Time.unscaledTime);
+                return;
+            }
             if (_away != null)
             {
                 if (_input!.Cancel.WasPressedThisFrame() || _input.Commit.WasPressedThisFrame()) CloseAway();
@@ -447,6 +541,12 @@ namespace HeadLoss.Unity
                 {
                     _city.Hud.ShopRequested = false;
                     OpenShop();
+                    return;
+                }
+                if (_city.Hud.SettingsRequested)
+                {
+                    _city.Hud.SettingsRequested = false;
+                    OpenSettings();
                     return;
                 }
             }

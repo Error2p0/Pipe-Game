@@ -111,6 +111,13 @@ namespace HeadLoss.Unity
             return back;
         }
 
+        /// <summary>Reduce motion (settings): steady particle speed.</summary>
+        public bool ReduceMotion
+        {
+            get => _particles.ReduceMotion;
+            set => _particles.ReduceMotion = value;
+        }
+
         public void LateUpdate(float dt)
         {
             _particles.Draw(Ducts.Geometry, View.Snapshot, dt);

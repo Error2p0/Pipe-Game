@@ -14,7 +14,7 @@ namespace HeadLoss.Unity.UI
         readonly VisualElement _panel;
         readonly VisualElement _confirm;
 
-        public MenuScreen(VisualElement parent, UiKit ui, string title, string? continueInfo, Action onContinue, Action onNew, Action onQuit)
+        public MenuScreen(VisualElement parent, UiKit ui, string title, string? continueInfo, Action onContinue, Action onNew, Action onSettings, Action onQuit)
         {
             _panel = ui.Panel(parent, "hl-menu");
             UiKit.Text(_panel, title, "hl-menu-title");
@@ -36,10 +36,7 @@ namespace HeadLoss.Unity.UI
             VisualElement row = UiKit.Row(_confirm);
             ui.Button(row, "Start a new city", onNew);
             ui.Button(row, "Keep playing", () => _confirm.style.display = DisplayStyle.None);
-            Button settings = ui.Button(_panel, "Settings", () => { });
-            settings.AddToClassList("hl-menu-button");
-            settings.SetEnabled(false);
-            UiKit.Text(_panel, "Settings arrive with the city (Phase 3).", "hl-subtitle");
+            ui.Button(_panel, "Settings", onSettings).AddToClassList("hl-menu-button");
             ui.Button(_panel, "Quit", onQuit).AddToClassList("hl-menu-button");
         }
 

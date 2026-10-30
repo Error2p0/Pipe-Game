@@ -17,6 +17,8 @@ namespace HeadLoss.Unity.Jobs
     {
         RoomGridLayout? _layout;
         RoomGridState? _state;
+        RoomGridInputs? _inputs;
+        int _inputsRevision = -1;
         NativeArray<int> _room;
         NativeArray<byte> _openE, _openN, _door, _stair;
         NativeArray<float> _ext, _t, _co2, _o2, _phi, _vx, _vy, _net, _supply, _supplyT, _heatL, _heatU, _co2L, _a, _b;
@@ -60,19 +62,26 @@ namespace HeadLoss.Unity.Jobs
         public void Step(RoomGridLayout l, RoomGridState s, RoomGridInputs inp, RoomGridParams p, float dt)
         {
             if (_layout != l) Allocate(l);
-            RoomGridMath.NetSources(l, inp, s.NetSource);
+            bool fresh = _inputs != inp || _inputsRevision != inp.Revision || _layout != l;
             _t.CopyFrom(s.T);
             _co2.CopyFrom(s.Co2);
             _o2.CopyFrom(s.O2);
             // The potential only warm-starts the next solve: it stays native while the same state is stepped.
             if (_state != s) _phi.CopyFrom(s.Phi);
             _state = s;
-            _net.CopyFrom(s.NetSource);
-            _supply.CopyFrom(inp.SupplyFlow);
-            _supplyT.CopyFrom(inp.SupplyTemperature);
-            _heatL.CopyFrom(inp.HeatLower);
-            _heatU.CopyFrom(inp.HeatUpper);
-            _co2L.CopyFrom(inp.Co2Lower);
+            if (fresh)
+            {
+                // Sub-steps with the same inputs reuse the room balance and the native copies.
+                RoomGridMath.NetSources(l, inp, s.NetSource);
+                _net.CopyFrom(s.NetSource);
+                _supply.CopyFrom(inp.SupplyFlow);
+                _supplyT.CopyFrom(inp.SupplyTemperature);
+                _heatL.CopyFrom(inp.HeatLower);
+                _heatU.CopyFrom(inp.HeatUpper);
+                _co2L.CopyFrom(inp.Co2Lower);
+                _inputs = inp;
+                _inputsRevision = inp.Revision;
+            }
             if (_jets.Length < inp.Jets.Count)
             {
                 _jets.Dispose();
@@ -117,6 +126,7 @@ namespace HeadLoss.Unity.Jobs
         public void Dispose()
         {
             _state = null;
+            _inputs = null;
             if (!_room.IsCreated) return;
             _room.Dispose(); _openE.Dispose(); _openN.Dispose(); _door.Dispose(); _stair.Dispose(); _ext.Dispose();
             _t.Dispose(); _co2.Dispose(); _o2.Dispose(); _a.Dispose(); _b.Dispose(); _phi.Dispose(); _vx.Dispose(); _vy.Dispose();

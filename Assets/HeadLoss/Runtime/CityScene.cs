@@ -49,7 +49,7 @@ namespace HeadLoss.Unity
             _reduceMotion = reduceMotion;
             _root = new GameObject("City " + _city.Name);
             _renderer = _root.AddComponent<CityRenderer>();
-            _renderer.Build(_city, ctx.Data.Game.Theme.City, materials.Building, materials.Ducts, materials.Overlay);
+            _renderer.Build(_city, palette.Theme.City, materials.Building, materials.Ducts, materials.Overlay);
             Hud = new CityHud(uiRoot, ui, ctx, camera);
             _starter = _city.Starter != null ? _city.Plots.IndexOf(_city.Starter) : -1;
             for (int i = 0; i < _city.Plots.Count; i++) _looks.Add(PlotLook.Offline);

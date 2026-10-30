@@ -23,6 +23,7 @@ namespace HeadLoss.Unity.Audio
         // Main thread → audio thread.
         volatile float _airLevel;
         volatile float _master;
+        volatile float _ambience = 1, _ui = 1;
         readonly float[] _fanSpeed = new float[MaxFans];
         int _clickRequests, _tockRequests, _chimeRequests;
 
@@ -50,6 +51,14 @@ namespace HeadLoss.Unity.Audio
         }
 
         /// <summary>Total air throughput in the open building, m³/h (0 outside a building).</summary>
+        /// <summary>Settings volumes, 0–1: ambience scales airflow and fan hum, UI scales clicks, tocks and chimes.</summary>
+        public void SetVolumes(float master, float ambience, float ui)
+        {
+            _master = Mathf.Clamp01(master);
+            _ambience = Mathf.Clamp01(ambience);
+            _ui = Mathf.Clamp01(ui);
+        }
+
         public void SetAirflow(double m3h)
         {
             double full = Math.Max(1, _def.AirflowFullM3h);
@@ -125,6 +134,8 @@ namespace HeadLoss.Unity.Audio
                     s += (float)((Math.Sin(ph) + 0.3 * Math.Sin(2 * ph)) * _def.HumGain * sp);
                 }
 
+                float ambientPart = s;
+
                 // UI click: 1 kHz blip, ~30 ms.
                 if (_clickEnv > 1e-4f)
                 {
@@ -152,6 +163,7 @@ namespace HeadLoss.Unity.Audio
                 }
 
                 // Soft limiter.
+                s = ambientPart * _ambience + (s - ambientPart) * _ui;
                 float y = ceiling * (float)Math.Tanh(s * master / Math.Max(1e-3f, ceiling));
                 for (int c = 0; c < channels; c++) data[i + c] += y;
             }

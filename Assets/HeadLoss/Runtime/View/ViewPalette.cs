@@ -14,9 +14,13 @@ namespace HeadLoss.Unity.View
         readonly Dictionary<string, Color> _fluids = new Dictionary<string, Color>();
         readonly Dictionary<string, Color[]> _ramps = new Dictionary<string, Color[]>();
 
-        public ViewPalette(DataRepository data)
+        /// <summary>The theme the colours come from (light or dark, settings).</summary>
+        public HeadLoss.Core.Data.Defs.ThemeDef Theme { get; }
+
+        public ViewPalette(DataRepository data, string theme = "light")
         {
-            var t = data.Game.Theme;
+            var t = data.Game.ThemeFor(theme);
+            Theme = t;
             Paper = Parse(t.Paper);
             GridLines = Parse(t.GridLines);
             Walls = Parse(t.Walls);

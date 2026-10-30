@@ -52,5 +52,63 @@
       "cloud": "#3E4A57",
       "cloudAlpha": 0.05
     }
+  },
+  "themeDark": {
+    "paper": "#1D232A",
+    "gridLines": "#2C343D",
+    "walls": "#B9C3CC",
+    "text": "#E4DFD4",
+    "warning": "#D9A04A",
+    "danger": "#D2695A",
+    "good": "#6DB088",
+    "roomFillAlpha": 0.14,
+    "roomFills": {
+      "bedroom": "#7B8FC7",
+      "living": "#5B9BB0",
+      "kitchen": "#C7A35B",
+      "bathroom": "#5BB0A2",
+      "hall": "#9A9A8A",
+      "corridor": "#9A9A8A",
+      "office": "#8A7BC7",
+      "storage": "#A08A6E",
+      "shop-floor": "#B07B9A",
+      "warehouse-hall": "#8C8C7A",
+      "workshop": "#A6835B",
+      "lab": "#5BA0C7",
+      "ward": "#7BB08A",
+      "electrical-room": "#C7B05B",
+      "plant-room": "#8A9AA6",
+      "protected-room": "#A65B5B"
+    },
+    "city": {
+      "ground": "#22292F",
+      "countryside": "#1B2025",
+      "districts": {
+        "residential": "#8FB08A",
+        "commercial": "#8A9FC2",
+        "industrial": "#B59B7A"
+      },
+      "districtAlpha": 0.12,
+      "road": "#3A424A",
+      "mainRoad": "#4A535C",
+      "rail": "#9AA3AB",
+      "park": "#3E5A42",
+      "protected": "#4B6650",
+      "historic": "#8A6A55",
+      "facilities": {
+        "water": "#4F93B8",
+        "gas": "#C9A43B",
+        "heating": "#B86A4F",
+        "special-gas": "#8C7AB8",
+        "power": "#5E6B78"
+      },
+      "plotOffline": "#59616A",
+      "plotLocked": "#3B4148",
+      "plotOnline": "#F0CF7E",
+      "glow": "#F7C65E",
+      "sideShade": 0.7,
+      "cloud": "#000000",
+      "cloudAlpha": 0.08
+    }
   }
 }

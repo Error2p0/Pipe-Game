@@ -12,6 +12,11 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>What the building toolbox offers until tech unlocks arrive (Phase 3).</summary>
         public ToolboxDef Toolbox = new ToolboxDef();
         public ThemeDef Theme = new ThemeDef();
+        /// <summary>The dark theme (settings).</summary>
+        public ThemeDef ThemeDark = new ThemeDef();
+
+        /// <summary>The theme for a settings value: dark, else light.</summary>
+        public ThemeDef ThemeFor(string id) => id == "dark" ? ThemeDark : Theme;
     }
 
     public sealed class ToolboxDef
