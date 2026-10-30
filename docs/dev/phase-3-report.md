@@ -70,8 +70,8 @@ A tier-1 house earns about $0.25/s, a tier-2 house about $2.0/s.
 ## Known issues
 
 - The 10-floor room grid budget (2 ms with Burst) passes in the Editor with little margin (D66); a player build is faster.
-- Company and product name are still the template's (`DefaultCompany`, `Pipe Game`), so saves and settings live in `AppData/LocalLow/DefaultCompany/Pipe Game/saves/`. Renaming moves that folder; tell me the names you want before Steam Cloud is set up.
-- Steam Cloud: Auto-Cloud has to be configured on your app in Steamworks: root `WinAppDataLocalLow`, subdirectory `DefaultCompany/Pipe Game/saves`, pattern `*`, recursive (D69). App id 480 cannot be configured.
+- Saves and settings live in `AppData/LocalLow/Elevate Studios/Pipe Game/saves/` (D70). Saves from Phase 2 builds are in the old `DefaultCompany` folder; copy `profile-1.json*` across to continue one.
+- Steam Cloud: Auto-Cloud has to be configured on your app in Steamworks: root `WinAppDataLocalLow`, subdirectory `Elevate Studios/Pipe Game/saves`, pattern `*`, recursive (D69). App id 480 cannot be configured.
 - Larger equipment (centrifugal blower 2×1, EC fan 2×2) is drawn at the intake but does not take floor space yet (floor layer in Phase 4, D62).
 - Rooms change temperature slowly by design (5× air heat capacity), so the temperature heatmap needs a few minutes to show a pattern.
 - Tier 3–5 plots cannot be opened until their phases (D47).
@@ -85,10 +85,6 @@ A tier-1 house earns about $0.25/s, a tier-2 house about $2.0/s.
 7. **Tech unlocks:** tier N+1 unlocks with 2 / 3 / 3 / 2 tier-N buildings online at the same time; unlocks stay for the city.
 8. **Offline cap:** 72 h.
 
-`NEEDS CONFIRMATION` decisions (`docs/dev/decisions.md`):
-- **D46** Which rooms get vents: every occupied room (bedroom, living, kitchen, bathroom, office, shop floor, …); halls, corridors, storage none.
-- **D47** Tier 3–5 plots exist in the city but open in later phases.
-- **D59** Insulation price on ducts scaled from the 100 mm duct reference.
-- **D61** Tier 2 base pay $0.20 per vent instead of 13's $0.90 (payback 6 min, electricity 24%).
+Confirmed at review: D46, D47, D59, D61; company name set (D70).
 
 Also worth a look (not blocking): D44 duct sizes by tier (you chose this), D48 auto-router rules, D52 the city controls, D56 duct leakage on, D60 tier 2 references use a speed drive, D67 offline catch-up details, D68 settings in their own file.
