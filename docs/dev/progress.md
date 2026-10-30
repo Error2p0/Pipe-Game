@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **3 · Idle city** (all tasks done; waiting for the gate playtest) (`docs/spec/14-roadmap.md`).
+Current phase: **3 · Idle city** (gate passed 2026-10-30; Phase 4 starts on the user's go) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -53,9 +53,9 @@ Task list from `14-roadmap.md` §Phase 3:
 - [x] 9. Steamworks.NET integration (app id 480 placeholder until the user provides one), Steam Cloud for saves, playtest build.
 - [x] 10. Settings screen (audio, palette, UI scale, theme, reduce motion, keys).
 - [x] Phase end: all tests green (EditMode 231, PlayMode 25), Windows build in `Builds/phase-3/`, `docs/dev/phase-3-report.md`.
-- [ ] Gate playtest by the user.
+- [x] Gate playtest by the user: **passed 2026-10-30**.
 - [x] Carry-over (done: city view replaces the building list; tier 2 tuned with the report, D61; hand-made references retired, D45): the building list (D34) gives way to the city view; tune tier 2+ prices and base pay with the balancing report on generated buildings (D23, D36); retire the hand-made reference layouts as the auto-router takes over (D28).
 
 ### Session notes (2026-10-30)
 
-- Phase 3 complete and merged; report in `docs/dev/phase-3-report.md`. Waiting for the gate playtest.
+- Phase 3 complete and merged; report in `docs/dev/phase-3-report.md`. Gate passed 2026-10-30.
