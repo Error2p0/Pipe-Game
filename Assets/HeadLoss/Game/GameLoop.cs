@@ -90,10 +90,10 @@ namespace HeadLoss.Game
         public event System.Action<int>? TierUnlocked;
 
         /// <summary>Checks the unlock conditions (<see cref="Progression.Tech.Update"/>) and raises <see cref="TierUnlocked"/>.</summary>
-        public void UpdateUnlocks()
+        public void UpdateUnlocks(System.Func<BuildingSession, bool>? online = null)
         {
             int before = Progression.Tech.UnlockedTier(Game);
-            int now = Progression.Tech.Update(this);
+            int now = Progression.Tech.Update(this, online);
             for (int t = before + 1; now > 0 && t <= now; t++) TierUnlocked?.Invoke(t);
         }
 

@@ -109,7 +109,9 @@
     "gzipThresholdBytes": 1048576
   },
   "offline": {
-    "maxHours": 72
+    "maxHours": 72,
+    "climateStepHours": 6,
+    "reportMinimumSeconds": 60
   },
   "targets": {
     "starterCrankPaysFanMinutes": [2, 3],

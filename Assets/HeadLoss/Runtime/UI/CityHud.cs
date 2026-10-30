@@ -87,7 +87,6 @@ namespace HeadLoss.Unity.UI
         /// <param name="selected">The plot is selected (the Open button shows).</param>
         public void Update(float time, string plotId, bool selected)
         {
-            PositionStartHere();
             int state = (selected ? 1 : 0) + (plotId == _shownPlot ? 0 : 2);
             if (time < _next && plotId == _shownPlot && state == _shownState) return;
             _next = time + 0.25f;
@@ -165,7 +164,8 @@ namespace HeadLoss.Unity.UI
             _ => u,
         };
 
-        void PositionStartHere()
+        /// <summary>Keeps the "Start here" label over the starter house (every frame, also under a modal screen).</summary>
+        public void PositionStartHere()
         {
             Plot? p = _ctx.City!.Starter;
             BuildingSession? s = p != null ? _ctx.FindSession(p.Id) : null;

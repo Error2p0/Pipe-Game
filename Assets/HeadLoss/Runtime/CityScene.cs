@@ -127,6 +127,7 @@ namespace HeadLoss.Unity
                 BuildingSession? s = _ctx.FindSession(p.Id);
                 _looks[i] = !_ctx.CityBuildings!.Available(p) ? PlotLook.Locked : s != null && s.CommittedEvaluation.Online ? PlotLook.Online : PlotLook.Offline;
             }
+            Hud.PositionStartHere();
             bool still = _reduceMotion();
             _renderer.DrawPlots(_looks, Hovered, Selected, _starter, time, still, _palette.Walls);
             _renderer.DrawClouds(dt, still);

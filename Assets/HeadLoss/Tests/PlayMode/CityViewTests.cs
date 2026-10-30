@@ -132,5 +132,17 @@ namespace HeadLoss.PlayMode.Tests
             Assert.IsNull(root.Shop, "Esc closed the shop");
             Assert.IsFalse(root.InCity, "and stayed in the building");
         }
+
+        [UnityTest]
+        public IEnumerator Offline_ShowsTheReport_EnterClosesIt()
+        {
+            yield return StartCity();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            root.RunCatchUp(2 * 3600, 12);
+            Assert.IsNotNull(root.Away, "the While you were away report shows");
+            yield return Tap(_keyboard.enterKey);
+            Assert.IsNull(root.Away);
+            Assert.IsTrue(root.InCity, "Enter only closed the report");
+        }
     }
 }

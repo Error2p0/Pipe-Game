@@ -54,6 +54,7 @@ namespace HeadLoss.Unity
         BuildingScene? _scene;
         Jobs.BurstRoomGridStepper? _burstRooms;
         ShopScreen? _shop;
+        AwayScreen? _away;
         Notice? _notice;
         readonly System.Collections.Generic.HashSet<BuildingSession> _online = new System.Collections.Generic.HashSet<BuildingSession>();
         readonly Materials _materials = new Materials();
@@ -75,6 +76,7 @@ namespace HeadLoss.Unity
         public bool InCity => _screen == ScreenKind.City;
         public CityScene? City => _city;
         public ShopScreen? Shop => _shop;
+        public AwayScreen? Away => _away;
 
         void Awake()
         {
@@ -168,9 +170,8 @@ namespace HeadLoss.Unity
                 return;
             }
             foreach (string note in r.Notes) Debug.Log("Save: " + note);
-            if (r.OfflineSeconds > 1)
-                Debug.Log($"Save: away for {FormatDuration(r.OfflineSeconds)}. Offline earnings arrive with Phase 3.");
             StartGame(r.File.GameState, saving: true);
+            CatchUp(r);
         }
 
         /// <summary>Starts playing a game state. <paramref name="saving"/> = false keeps tests from touching the save.</summary>
@@ -269,6 +270,7 @@ namespace HeadLoss.Unity
             _city?.Dispose();
             _city = null;
             CloseShop();
+            CloseAway();
             _notice?.Root.RemoveFromHierarchy();
             _notice = null;
             _topBar?.Root.RemoveFromHierarchy();
@@ -285,6 +287,40 @@ namespace HeadLoss.Unity
 #else
             Application.Quit();
 #endif
+        }
+
+        /// <summary>
+        /// Offline progress (<c>12-save-offline.md</c>): the time since the save is credited at steady state, then the
+        /// "While you were away" report shows (after at least <c>offline.reportMinimumSeconds</c>).
+        /// </summary>
+        void CatchUp(LoadResult r)
+        {
+            if (_ctx == null || r.AwaySeconds <= 0) return;
+            double startHour = 12;
+            if (DateTime.TryParse(r.File.SavedAtUtc, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind, out DateTime saved))
+            {
+                DateTime local = saved.ToLocalTime();
+                startHour = local.Hour + local.Minute / 60.0;
+            }
+            RunCatchUp(r.AwaySeconds, startHour);
+        }
+
+        /// <summary>Credits <paramref name="awaySeconds"/> of offline time from <paramref name="startHour"/> (local) and shows the report.</summary>
+        public void RunCatchUp(double awaySeconds, double startHour)
+        {
+            if (_ctx == null) return;
+            Game.Offline.OfflineReport report = Game.Offline.OfflineCatchUp.Run(_ctx, awaySeconds, startHour);
+            Debug.Log($"Head Loss: away {FormatDuration(report.AwaySeconds)}, credited {FormatDuration(report.Seconds)}, net {Units.FormatMoney(report.Net, _data!.Game.CurrencySymbol)} ({report.ComputeMilliseconds:0} ms).");
+            SaveNow();
+            if (report.AwaySeconds < _data!.Balancing.Offline.ReportMinimumSeconds) return;
+            _away = new AwayScreen(_uiRoot!, _ui!, _ctx, report, CloseAway);
+            _topBar?.BringToFront();
+        }
+
+        void CloseAway()
+        {
+            _away?.Dispose();
+            _away = null;
         }
 
         // ---------- shop and notices ----------
@@ -364,6 +400,12 @@ namespace HeadLoss.Unity
                 if (_sinceSave >= _data!.Balancing.Save.AutosaveSeconds) SaveNow();
             }
             _notice?.Update(Time.unscaledTime);
+            if (_away != null)
+            {
+                if (_input!.Cancel.WasPressedThisFrame() || _input.Commit.WasPressedThisFrame()) CloseAway();
+                _topBar?.Update(Time.unscaledTime);
+                return;
+            }
             if (_shop != null)
             {
                 // The shop is modal: Esc closes it, the scenes wait.

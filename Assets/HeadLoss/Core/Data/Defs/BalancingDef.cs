@@ -349,6 +349,10 @@ namespace HeadLoss.Core.Data.Defs
     {
         /// <summary>Offline progress cap, h [confirm].</summary>
         public double MaxHours;
+        /// <summary>Offline catch-up re-solves each building at the outside temperature every this many hours.</summary>
+        public double ClimateStepHours;
+        /// <summary>The "While you were away" report shows after at least this long away, s.</summary>
+        public double ReportMinimumSeconds;
     }
 
     /// <summary>Procedural audio levels and ranges (<c>11-ui-visuals-audio.md</c> §Procedural audio).</summary>

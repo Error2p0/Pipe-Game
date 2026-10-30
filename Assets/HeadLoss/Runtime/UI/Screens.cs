@@ -109,4 +109,56 @@ namespace HeadLoss.Unity.UI
 
         public void Dispose() => _panel.RemoveFromHierarchy();
     }
+
+    /// <summary>
+    /// "While you were away" (<c>11-ui-visuals-audio.md</c> §Screens, <c>12-save-offline.md</c>): how long, what the
+    /// buildings earned and paid for electricity, the result in the wallet, unlocks, and that nothing broke (bursts,
+    /// events and timers arrive with later phases). Continue (Enter or Esc) closes it.
+    /// </summary>
+    public sealed class AwayScreen
+    {
+        readonly VisualElement _panel;
+
+        public AwayScreen(VisualElement parent, UiKit ui, GameContext ctx, Game.Offline.OfflineReport r, Action onClose)
+        {
+            string sym = ctx.Data.Game.CurrencySymbol;
+            _panel = ui.Panel(parent, "hl-away");
+            UiKit.Text(_panel, "While you were away", "hl-title");
+            string time = Duration(r.Seconds);
+            UiKit.Text(_panel, r.Capped
+                ? $"You were away {Duration(r.AwaySeconds)}. Your buildings worked for the first {time} (the offline limit)."
+                : $"You were away {time}. Your buildings kept working.", "hl-subtitle");
+            UiKit.Text(_panel, "Money", "hl-section");
+            UiKit.Text(_panel, $"Outlets earned  {Units.FormatMoney(r.Gross, sym)}", "hl-readout-line");
+            UiKit.Text(_panel, $"Electricity  −{Units.FormatMoney(r.Electricity, sym)}", "hl-readout-line");
+            if (r.Fines > 0) UiKit.Text(_panel, $"Fines  −{Units.FormatMoney(r.Fines, sym)}", "hl-readout-line");
+            if (r.Premiums > 0) UiKit.Text(_panel, $"Premiums  −{Units.FormatMoney(r.Premiums, sym)}", "hl-readout-line");
+            Label net = UiKit.Text(_panel, $"Net  {(r.Net >= 0 ? "+" : "")}{Units.FormatMoney(r.Net, sym)}", "hl-readout-line");
+            net.style.unityFontStyleAndWeight = UnityEngine.FontStyle.Bold;
+            net.style.color = r.Net >= 0 ? ui.P.Good : ui.P.Warning;
+            string wallet = $"Wallet  {Units.FormatMoney(r.WalletBefore, sym)} → {Units.FormatMoney(r.WalletAfter, sym)}";
+            if (r.DebtAfter > 0) wallet += $" · debt {Units.FormatMoney(r.DebtAfter, sym)}";
+            UiKit.Text(_panel, wallet, "hl-readout-line");
+            if (r.Buildings.Count > 0)
+            {
+                UiKit.Text(_panel, "Buildings", "hl-section");
+                int shown = 0;
+                foreach (Game.Offline.OfflineBuildingLine b in r.Buildings)
+                {
+                    if (shown++ == 6) break;
+                    string online = b.OnlineSeconds <= 0 ? " · offline (crank buildings rest while you are away)" : "";
+                    UiKit.Text(_panel, $"{b.Name}  {Units.FormatMoney(b.Net, sym)}{online}", "hl-readout-line");
+                }
+                if (r.Buildings.Count > 6) UiKit.Text(_panel, $"and {r.Buildings.Count - 6} more", "hl-subtitle");
+            }
+            foreach (int t in r.Unlocked) UiKit.Text(_panel, $"Tier {t} unlocked: new equipment, sizes and upgrades in the shop.", "hl-readout-line");
+            UiKit.Text(_panel, "Nothing broke while you were away.", "hl-subtitle");
+            ui.Button(_panel, "Continue", onClose).style.alignSelf = Align.FlexEnd;
+        }
+
+        static string Duration(double s) =>
+            s < 3600 ? $"{s / 60:0} min" : s < 48 * 3600 ? $"{s / 3600:0.#} h" : $"{s / 86400:0.#} days";
+
+        public void Dispose() => _panel.RemoveFromHierarchy();
+    }
 }

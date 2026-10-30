@@ -38,6 +38,9 @@ namespace HeadLoss.Game.Thermal
         /// <summary>Outside air temperature now, °C.</summary>
         public double OutsideTemperatureC => FixedTemperatureC ?? OutsideTemperatureAt(LocalHour);
 
+        /// <summary>Outside temperature at a local hour, honouring a fixed temperature, °C.</summary>
+        public double TemperatureAt(double hour) => FixedTemperatureC ?? OutsideTemperatureAt(hour);
+
         /// <summary>Outside air temperature at a local hour, °C.</summary>
         public double OutsideTemperatureAt(double hour) =>
             _def.MeanTemperatureC + _shift + _def.DailyAmplitudeK * Math.Cos(2 * Math.PI * (hour - _def.WarmestHour) / 24);

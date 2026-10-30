@@ -407,3 +407,11 @@
     translate: -50% 0;
     padding: 8px 16px;
 }
+
+.hl-away {
+    position: absolute;
+    left: 50%; top: 120px;
+    translate: -50% 0;
+    width: 560px;
+    padding: 24px;
+}

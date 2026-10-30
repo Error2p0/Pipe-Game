@@ -19,6 +19,8 @@ namespace HeadLoss.Game.Save
         public string Path = "";
         /// <summary>Real time since the save, capped at <c>offline.maxHours</c>, s (0 if the clock went back).</summary>
         public double OfflineSeconds;
+        /// <summary>Real time since the save before the cap, s (0 if the clock went back).</summary>
+        public double AwaySeconds;
         /// <summary>Notes for the log: migrations, backups used, clock moved back, dropped edits.</summary>
         public readonly List<string> Notes = new List<string>();
     }
@@ -128,7 +130,8 @@ namespace HeadLoss.Game.Save
             if (r.File.GeneratorVersion != SaveSerializer.CurrentGeneratorVersion)
                 r.Notes.Add($"Generator version changed ({r.File.GeneratorVersion} → {SaveSerializer.CurrentGeneratorVersion}); keeping edits that still fit");
             if (r.File.DataVersion != data.Version) r.Notes.Add("Data files changed since this save");
-            r.OfflineSeconds = OfflineSeconds(r.File.SavedAtUtc, data.Balancing.Offline.MaxHours, r.Notes);
+            r.AwaySeconds = OfflineSeconds(r.File.SavedAtUtc, double.PositiveInfinity, r.Notes);
+            r.OfflineSeconds = Math.Min(r.AwaySeconds, data.Balancing.Offline.MaxHours * 3600.0);
             // Edits that no longer fit are dropped when the game context opens (it regenerates the city first).
             return r;
         }

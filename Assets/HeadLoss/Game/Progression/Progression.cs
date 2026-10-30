@@ -21,12 +21,12 @@ namespace HeadLoss.Game.Progression
 
         public static bool Unlocked(GameState g, int tier) => tier <= UnlockedTier(g);
 
-        /// <summary>Buildings of a tier online right now.</summary>
-        public static int OnlineCount(IReadOnlyList<BuildingSession> sessions, int tier)
+        /// <summary>Buildings of a tier online right now (or by <paramref name="online"/> when given).</summary>
+        public static int OnlineCount(IReadOnlyList<BuildingSession> sessions, int tier, Func<BuildingSession, bool>? online = null)
         {
             int n = 0;
             foreach (BuildingSession s in sessions)
-                if (s.Layout.Tier == tier && s.CommittedEvaluation.Online) n++;
+                if (s.Layout.Tier == tier && (online != null ? online(s) : s.CommittedEvaluation.Online)) n++;
             return n;
         }
 
@@ -38,7 +38,8 @@ namespace HeadLoss.Game.Progression
         }
 
         /// <summary>Unlocks every tier whose condition is met now. Returns the highest tier newly unlocked, or 0.</summary>
-        public static int Update(GameContext ctx)
+        /// <param name="online">Which buildings count as online (the offline catch-up's own results); default: in game.</param>
+        public static int Update(GameContext ctx, Func<BuildingSession, bool>? online = null)
         {
             if (ctx.Game.City == null) return 0;
             int unlocked = 0;
@@ -46,7 +47,7 @@ namespace HeadLoss.Game.Progression
             {
                 int tier = ctx.Game.City.UnlockedTier;
                 int need = Needed(ctx.Data, tier);
-                if (need <= 0 || OnlineCount(ctx.Sessions, tier) < need) break;
+                if (need <= 0 || OnlineCount(ctx.Sessions, tier, online) < need) break;
                 ctx.Game.City.UnlockedTier = tier + 1;
                 unlocked = tier + 1;
             }

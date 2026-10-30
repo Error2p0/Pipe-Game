@@ -131,6 +131,7 @@ namespace HeadLoss.Game.Session
             _settings = SolverSettings.FromBalancing(data.Balancing);
             _designSolver = new NetworkSolver(_settings);
             _committedSolver = new NetworkSolver(_settings);
+            _offlineSolver = new NetworkSolver(_settings);
             Climate = climate ?? Climate.Fixed(data, data.Balancing.Physics.DefaultAirTemperatureC);
             Rooms = new BuildingClimate(data, layout, Climate);
             Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
@@ -330,6 +331,19 @@ namespace HeadLoss.Game.Session
             NetworkSnapshot snap = SolveState(copy, null, new NetworkSolver(_settings), CrankSpeed);
             return BuildingEconomy.Evaluate(Data, Layout, snap.Compiled, snap.Result);
         }
+
+        /// <summary>
+        /// What is built, at steady state: crank at 0, intake air at <paramref name="outsideTemperatureC"/> along every
+        /// duct (offline catch-up, <c>12-save-offline.md</c>). Runs on the calling thread; the session is untouched.
+        /// </summary>
+        public BuildingEvaluation SteadyState(double outsideTemperatureC)
+        {
+            var none = new Dictionary<int, double>();
+            NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot?.Result, _offlineSolver, 0, Units.CToK(outsideTemperatureC), none, none);
+            return BuildingEconomy.Evaluate(Data, Layout, snap.Compiled, snap.Result);
+        }
+
+        readonly NetworkSolver _offlineSolver;
 
         /// <summary>Volumetric flow delivered by an outlet in the design, m³/s (0 when not connected).</summary>
         public double OutletFlow(string outletId)
