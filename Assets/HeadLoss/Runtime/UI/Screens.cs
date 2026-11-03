@@ -130,6 +130,8 @@ namespace HeadLoss.Unity.UI
             UiKit.Text(_panel, $"Electricity  −{Units.FormatMoney(r.Electricity, sym)}", "hl-readout-line");
             if (r.Fines > 0) UiKit.Text(_panel, $"Fines  −{Units.FormatMoney(r.Fines, sym)}", "hl-readout-line");
             if (r.Premiums > 0) UiKit.Text(_panel, $"Premiums  −{Units.FormatMoney(r.Premiums, sym)}", "hl-readout-line");
+            if (r.Bursts > 0) UiKit.Text(_panel, $"Bursts  {r.Bursts} · income cut by 75% until repaired", "hl-readout-line");
+            if (r.RepairsDone > 0) UiKit.Text(_panel, $"Repairs done  {r.RepairsDone}" + (r.RepairCosts > 0 ? $" · crews charged {Units.FormatMoney(r.RepairCosts, sym)}" : ""), "hl-readout-line");
             Label net = UiKit.Text(_panel, $"Net  {(r.Net >= 0 ? "+" : "")}{Units.FormatMoney(r.Net, sym)}", "hl-readout-line");
             net.style.unityFontStyleAndWeight = UnityEngine.FontStyle.Bold;
             net.style.color = r.Net >= 0 ? ui.P.Good : ui.P.Warning;

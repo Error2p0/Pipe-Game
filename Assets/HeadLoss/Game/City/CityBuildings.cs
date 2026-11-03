@@ -121,6 +121,7 @@ namespace HeadLoss.Game.City
             h.Tier = l.Tier;
             h.WidthM = l.Width;
             h.HeightM = l.Height;
+            h.Floors = l.Floors;
             h.Outlets = l.Outlets.Count;
             h.Codes = l.Codes.Count;
             h.MaxPathMetres = g.Reference.MaxPathMetres;
@@ -129,7 +130,7 @@ namespace HeadLoss.Game.City
             {
                 OutletDef def = Data.Outlet(o.Type);
                 if (!h.Fluids.Contains(def.Fluid)) h.Fluids.Add(def.Fluid);
-                h.FlowDemand += BuildingEconomy.Requirement(Data, l, o).Min;
+                h.FlowDemand += def.Measured == "pressure" ? Networks.NetworkCompiler.DesignFlow(Data, l, o) : BuildingEconomy.Requirement(Data, l, o).Min;
             }
             AddFacilities(h, p);
             h.Dots = Dots(Data.Balancing.Difficulty, h);

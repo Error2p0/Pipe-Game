@@ -15,6 +15,8 @@ namespace HeadLoss.Unity.Interaction
 
         public readonly InputAction Point, Primary, Secondary, Middle, Scroll, Pan, Cancel, Delete, DebugOverlay, Plain;
         public readonly InputAction Undo, Redo, Commit, Sheet, Crank, Rotate, RoomLayer;
+        /// <summary>Floor up / down (PageUp / PageDown) and the layer cycle (L).</summary>
+        public readonly InputAction FloorUp, FloorDown, Layer;
         public readonly InputAction[] HeatmapKeys = new InputAction[7];
 
         public BuildingInput()
@@ -41,6 +43,9 @@ namespace HeadLoss.Unity.Interaction
             Crank = MouseKeyboard.AddAction("Crank", InputActionType.Button, "<Keyboard>/c");
             Rotate = MouseKeyboard.AddAction("Rotate", InputActionType.Button, "<Keyboard>/r");
             RoomLayer = MouseKeyboard.AddAction("RoomLayer", InputActionType.Button, "<Keyboard>/h");
+            FloorUp = MouseKeyboard.AddAction("FloorUp", InputActionType.Button, "<Keyboard>/pageUp");
+            FloorDown = MouseKeyboard.AddAction("FloorDown", InputActionType.Button, "<Keyboard>/pageDown");
+            Layer = MouseKeyboard.AddAction("Layer", InputActionType.Button, "<Keyboard>/l");
             Plain = MouseKeyboard.AddAction("HeatmapPlain", InputActionType.Button, "<Keyboard>/0");
             Plain.AddBinding("<Keyboard>/backquote");
             Plain.AddBinding("<Keyboard>/numpad0");
@@ -64,7 +69,7 @@ namespace HeadLoss.Unity.Interaction
                 (Pan, 1, "Pan up"), (Pan, 2, "Pan down"), (Pan, 3, "Pan left"), (Pan, 4, "Pan right"),
                 (Crank, 0, "Crank"), (Commit, 0, "Commit design"), (Sheet, 0, "Requirement sheet"), (Rotate, 0, "Turn a part around"),
                 (Delete, 0, "Delete selection"), (Undo, 2, "Undo (with Ctrl)"), (Redo, 2, "Redo (with Ctrl)"), (RoomLayer, 0, "Room layer"),
-                (Plain, 0, "Plain view"),
+                (Plain, 0, "Plain view"), (FloorUp, 0, "Floor up"), (FloorDown, 0, "Floor down"), (Layer, 0, "Cycle layer"),
             };
             string[] names = { "Velocity", "Pressure", "Flow rate", "Temperature", "Density", "Concentration", "Stress" };
             for (int i = 0; i < HeatmapKeys.Length; i++) list.Add((HeatmapKeys[i], 0, names[i] + " heatmap"));

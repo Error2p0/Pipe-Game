@@ -207,6 +207,29 @@ namespace HeadLoss.Game.Tests
             Assert.IsTrue(r.Notes.Exists(n => n.Contains("Migrated")));
         }
 
+        /// <summary>Phase 3 saves (generator 2): tier 2+ buildings are rebuilt with floors and water, their spending refunded (D83).</summary>
+        [Test]
+        public void Regeneration_OlderGenerator_RefundsAndResetsTierTwoBuildings()
+        {
+            GameState g = GameContext.NewGame(Data, 424242);
+            var probe = new GameContext(Data, g);
+            Game.City.Plot two = probe.City!.Plots.Find(p => p.Tier == 2)!;
+            Game.City.Plot one = probe.City.Starter!;
+            g.GeneratorVersion = 2;
+            g.Wallet = 10;
+            g.Buildings.Add(new BuildingRecord { BuildingId = two.Id, SpentTotal = 120, EverOnline = true, LifetimeIncome = 55 });
+            g.Buildings.Add(new BuildingRecord { BuildingId = one.Id, SpentTotal = 30, EverOnline = true });
+            var ctx = new GameContext(Data, g);
+            Assert.AreEqual(130, g.Wallet, 1e-9, "the tier 2 spending comes back; tier 1 keeps its build");
+            BuildingRecord r = g.FindBuilding(two.Id)!;
+            Assert.AreEqual(0, r.SpentTotal);
+            Assert.IsFalse(r.EverOnline);
+            Assert.AreEqual(55, r.LifetimeIncome, 1e-9);
+            Assert.AreEqual(30, g.FindBuilding(one.Id)!.SpentTotal, 1e-9);
+            Assert.AreEqual(SaveSerializer.CurrentGeneratorVersion, g.GeneratorVersion);
+            Assert.IsTrue(ctx.Notes.Count > 0);
+        }
+
         [Test]
         public void Sanitize_DropsWhatNoLongerFits()
         {

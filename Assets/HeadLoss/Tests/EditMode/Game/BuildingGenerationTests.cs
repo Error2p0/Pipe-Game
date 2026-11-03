@@ -16,7 +16,7 @@ namespace HeadLoss.Game.Tests
 {
     public class BuildingGenerationTests
     {
-        static readonly string[] Types = { "small-house", "kiosk", "family-house", "shop" };
+        static readonly string[] Types = { "small-house", "kiosk", "family-house", "shop", "apartment-block", "restaurant" };
 
         static BuildingRequest Req(string type, ulong seed, string street = "south") => new BuildingRequest("plot-1", type, seed, street);
 
@@ -47,34 +47,58 @@ namespace HeadLoss.Game.Tests
                 Assert.That(small, Is.InRange(Math.Min(tier.FootprintMin[0], tier.FootprintMin[1]), Math.Max(tier.FootprintMax[0], tier.FootprintMax[1])));
                 Assert.That(large, Is.InRange(Math.Min(tier.FootprintMin[0], tier.FootprintMin[1]), Math.Max(tier.FootprintMax[0], tier.FootprintMax[1])));
 
-                // Rooms tile the whole footprint; doors form a tree joining every room.
-                int area = 0;
-                foreach (RoomDef r in def.Rooms) area += r.Width * r.Height;
-                Assert.AreEqual(def.Width * def.Height, area, $"{type} seed {seed}: rooms cover the footprint");
-                Assert.AreEqual(def.Rooms.Count - 1, def.Doors.Count, $"{type} seed {seed}: one door per room");
-                var layout = new BuildingLayout(def);
-                var seen = new HashSet<int> { 0 };
-                var queue = new Queue<TilePos>();
-                queue.Enqueue(new TilePos(def.Rooms[0].X, def.Rooms[0].Y));
-                var visited = new HashSet<TilePos> { queue.Peek() };
-                while (queue.Count > 0)
+                // Every floor has the same footprint, tiled by rooms (L and U shapes from tier 3 leave a cut-out); per
+                // floor the doors form a tree joining every room but the shafts.
+                Assert.That(def.Floors, Is.InRange(t.FloorsMin > 0 ? t.FloorsMin : tier.FloorsMin, t.FloorsMax > 0 ? t.FloorsMax : tier.FloorsMax));
+                var layout = BuildingLayout.From(Data, def);
+                int ground = 0;
+                for (int f = 0; f < def.Floors; f++)
                 {
-                    TilePos u = queue.Dequeue();
-                    seen.Add(layout.RoomIndexAt(u));
-                    foreach (TilePos v in new[] { new TilePos(u.X + 1, u.Y), new TilePos(u.X - 1, u.Y), new TilePos(u.X, u.Y + 1), new TilePos(u.X, u.Y - 1) })
-                        if (layout.IsInside(v) && layout.CanPass(u, v) && visited.Add(v)) queue.Enqueue(v);
+                    int area = 0, rooms = 0;
+                    foreach (RoomDef r in def.Rooms)
+                        if (r.Floor == f)
+                        {
+                            area += r.Width * r.Height;
+                            if (r.Type != "shaft") rooms++;
+                        }
+                    if (f == 0) ground = area;
+                    Assert.AreEqual(ground, area, $"{type} seed {seed}: floor {f} has the ground floor's footprint");
+                    if (t.Tier < Data.Buildings.Generation.LShapeFromTier) Assert.AreEqual(def.Width * def.Height, area, $"{type} seed {seed}: rooms cover the footprint");
+                    else Assert.GreaterOrEqual(area, def.Width * def.Height / 2, $"{type} seed {seed}: the cut-out leaves most of the footprint");
+                    Assert.AreEqual(rooms - 1, def.Doors.FindAll(d => d.Floor == f).Count, $"{type} seed {seed}: one door per room on floor {f}");
+                    RoomDef first = def.Rooms.Find(r => r.Floor == f && r.Type != "shaft")!;
+                    var seen = new HashSet<int>();
+                    var queue = new Queue<TilePos>();
+                    queue.Enqueue(new TilePos(first.X, first.Y, f));
+                    var visited = new HashSet<TilePos> { queue.Peek() };
+                    while (queue.Count > 0)
+                    {
+                        TilePos u = queue.Dequeue();
+                        seen.Add(layout.RoomIndexAt(u));
+                        foreach (TilePos v in new[] { new TilePos(u.X + 1, u.Y, f), new TilePos(u.X - 1, u.Y, f), new TilePos(u.X, u.Y + 1, f), new TilePos(u.X, u.Y - 1, f) })
+                            if (layout.IsInside(v) && (layout.RoomIndexAt(v) == layout.RoomIndexAt(u) || layout.HasDoor(u, v)) && visited.Add(v)) queue.Enqueue(v);
+                    }
+                    Assert.AreEqual(rooms, seen.Count, $"{type} seed {seed}: every room on floor {f} reachable through doors");
                 }
-                Assert.AreEqual(def.Rooms.Count, seen.Count, $"{type} seed {seed}: every room reachable through doors");
 
-                Assert.AreEqual(1, def.EntryOpenings.Count);
-                Assert.AreEqual("air", def.EntryOpenings[0].Utility);
+                // Openings: the air intake and the power connection, and a water connection when there are taps.
+                bool taps = def.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == "water");
+                Assert.AreEqual(taps ? 3 : 2, def.EntryOpenings.Count);
+                Assert.AreEqual(1, def.EntryOpenings.FindAll(o => o.Utility == "air").Count);
+                Assert.AreEqual(1, def.EntryOpenings.FindAll(o => o.Utility == "power").Count);
+                Assert.AreEqual(taps ? 1 : 0, def.EntryOpenings.FindAll(o => o.Utility == "water").Count);
+                Assert.IsTrue(def.EntryOpenings.TrueForAll(o => o.Floor == 0), "openings on the ground floor");
+                Assert.IsTrue(def.Equipment.Exists(e => e.EquipmentId == "panel-basic"), "the basic panel is pre-placed");
+                Assert.AreEqual(t.Tier >= 2, taps, "taps from tier 2");
                 Assert.IsNotEmpty(def.Outlets);
                 foreach (OutletPlacementDef o in def.Outlets)
                 {
                     Assert.Greater(o.Min, 0);
-                    OutletRequirementDef baseReq = Data.Outlet(o.Type).Tiers[def.Tier.ToString()];
-                    Assert.That(o.Min, Is.InRange(baseReq.Min * 0.9 - 2.5, baseReq.Min * 1.1 + 2.5), "±10% then rounded to 5 m³/h");
-                    Assert.AreEqual(0, o.Min % 5, 1e-9);
+                    OutletDef od = Data.Outlet(o.Type);
+                    OutletRequirementDef baseReq = od.Tiers[def.Tier.ToString()];
+                    double step = Data.Buildings.Generation.RoundingSteps[od.Unit];
+                    Assert.That(o.Min, Is.InRange(baseReq.Min * 0.9 - step / 2, baseReq.Min * 1.1 + step / 2), "±10% then rounded");
+                    Assert.AreEqual(0, Math.Round(o.Min / step, 6) % 1, 1e-6);
                 }
                 Assert.Contains("noise", def.Codes);
             }
@@ -120,6 +144,7 @@ namespace HeadLoss.Game.Tests
         /// <summary>15-testing: every generated tier-1–3 building passes the solvability check (200 seeds per tier).</summary>
         [TestCase(1)]
         [TestCase(2)]
+        [TestCase(3)]
         public void Solvability_EveryGeneratedBuildingOfTheTierPasses(int tier)
         {
             var failures = new List<string>();
@@ -144,13 +169,19 @@ namespace HeadLoss.Game.Tests
         {
             for (ulong seed = 1; seed <= 30; seed++)
             {
-                GeneratedBuilding g = BuildingFactory.Create(Data, Req(Types[seed % 4], seed), DistrictKind.Residential)!;
-                DuctNetworkState net = g.Reference.State.Air;
-                int used = net.Nodes.FindAll(n => net.Degree(n.Id) > 0).Count;
-                Assert.AreEqual(used - 1, net.Segments.Count, $"seed {seed}: a tree");
-                Assert.IsFalse(net.Nodes.Exists(n => n.Kind == DuctNodeKind.Free && net.Degree(n.Id) == 1), $"seed {seed}: open end");
+                GeneratedBuilding g = BuildingFactory.Create(Data, Req(Types[seed % (ulong)Types.Length], seed), DistrictKind.Residential)!;
+                foreach (DuctNetworkState net in g.Reference.State.Networks)
+                {
+                    int used = net.Nodes.FindAll(n => net.Degree(n.Id) > 0).Count;
+                    if (used == 0) continue;
+                    Assert.AreEqual(used - 1, net.Segments.Count, $"seed {seed}: {net.FluidId} is a tree");
+                    Assert.IsFalse(net.Nodes.Exists(n => n.Kind == DuctNodeKind.Free && net.Degree(n.Id) == 1), $"seed {seed}: {net.FluidId} open end");
+                }
                 foreach (OutletPlacementDef o in g.Layout.Outlets)
+                {
+                    DuctNetworkState net = g.Reference.State.Net(BuildingState.OutletFluid(o.Type));
                     Assert.AreEqual(1, net.Degree(net.Nodes.Find(n => n.AnchorId == o.Id)!.Id), $"seed {seed}: {o.Id} connected");
+                }
                 Assert.Greater(g.Reference.Cost, 0);
                 Assert.AreEqual(g.BudgetCap, Data.Balancing.Building.BudgetCapFactor * g.Reference.Cost, 1e-9);
             }

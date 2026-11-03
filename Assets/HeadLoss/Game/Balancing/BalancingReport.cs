@@ -128,8 +128,13 @@ namespace HeadLoss.Game.Balancing
             }
             string who = $"Tier {tier}";
             Check(r, who, "Reference solvable", $"{rows.Count - unsolvable} of {rows.Count}", "all", unsolvable == 0 && rows.Count > 0);
-            double payback = Mean(rows.ConvertAll(x => x.Payback)), target = t.PaybackMinutes[tier - 1];
-            Check(r, who, "Payback of the reference build (mean)", $"{payback:0.0} min", $"≈ {target:0} min", payback >= target * 0.5 && payback <= target * 1.5);
+            // A first water building also pays for its main (03 §City utility network).
+            double mainCost = 0;
+            PipeFamilyDef? main = Utilities.FamilyFor(data, "water");
+            if (tier >= 2 && main != null) mainCost = t.ReferenceMainTiles * Utilities.PricePerTile(data, main, main.Sizes[0].DiameterMm, 0);
+            double payback = Mean(rows.ConvertAll(x => x.Net > 0 ? (x.Cost + mainCost) / x.Net / 60 : double.PositiveInfinity)), target = t.PaybackMinutes[tier - 1];
+            string withMain = mainCost > 0 ? $" with a {t.ReferenceMainTiles}-tile main ({Units.FormatMoney(mainCost, sym)})" : "";
+            Check(r, who, $"Payback of the reference build{withMain} (mean)", $"{payback:0.0} min", $"≈ {target:0} min", payback >= target * 0.5 && payback <= target * 1.5);
             double share = Mean(rows.ConvertAll(Share));
             Check(r, who, "Electricity share of gross (mean)", $"{share:P0}", $"{t.ElectricityShare[0]:P0}–{t.ElectricityShare[1]:P0}",
                 share >= t.ElectricityShare[0] && share <= t.ElectricityShare[1]);

@@ -294,6 +294,8 @@ namespace HeadLoss.Unity
         {
             s.DesignCommitted += OnCommitted;
             s.Commands.Executed += OnCommand;
+            s.Failures.Alert += text => _notice?.Show($"{s.Layout.DisplayName}: {text}", Time.unscaledTime);
+            s.PanelTrippedEvent += () => _notice?.Show($"{s.Layout.DisplayName}: panel tripped · reduce the load and reset it", Time.unscaledTime);
             if (s.CommittedEvaluation.Online) _online.Add(s);
         }
 
@@ -308,7 +310,8 @@ namespace HeadLoss.Unity
             _audio!.SetAirflow(_data!.Balancing.Audio.AirflowFullM3h * 0.06);
             _audio.ClearFans();
             _screen = ScreenKind.City;
-            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, () => _settings.ReduceMotion);
+            _audio.SetWater(0);
+            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, _heatmap!, () => _settings.ReduceMotion);
             _topBar!.BringToFront();
         }
 
@@ -543,6 +546,16 @@ namespace HeadLoss.Unity
                     ShowMenu();
                     return;
                 }
+                if (_city.Hud.Clicked)
+                {
+                    _city.Hud.Clicked = false;
+                    _audio?.PlayClick();
+                }
+                if (_city.Hud.Laid)
+                {
+                    _city.Hud.Laid = false;
+                    _audio?.PlayTock();
+                }
                 if (_city.Hud.ShopRequested)
                 {
                     _city.Hud.ShopRequested = false;
@@ -578,7 +591,7 @@ namespace HeadLoss.Unity
             _city?.LateUpdate(Time.deltaTime, Time.unscaledTime);
         }
 
-        /// <summary>Airflow follows the design's total delivered and escaping air; one hum per running fan.</summary>
+        /// <summary>Airflow and water follow the design's throughput; one hum per running fan and pump.</summary>
         void UpdateAudio(BuildingSession s)
         {
             NetworkSnapshot? snap = s.Current;
@@ -587,11 +600,16 @@ namespace HeadLoss.Unity
             foreach (var kv in snap.Compiled.OutletLink) q += Math.Max(0, snap.Result.Flow[kv.Value]);
             foreach (var kv in snap.Compiled.OpenEndLink) q += Math.Max(0, snap.Result.Flow[kv.Value]);
             _audio.SetAirflow(Units.M3sToM3h(q));
+            FluidSolve? water = snap.Water;
+            _audio.SetWater(water != null && water.Compiled.SupplyNode >= 0 ? Math.Max(0, water.Compiled.SupplyFlow(water.Result)) * 1000 : 0);
             int fan = 0;
             _audio.ClearFans();
-            foreach (var kv in snap.Compiled.FanLink) _audio.SetFan(fan++, snap.Compiled.Graph.Links[kv.Value].Speed);
-            foreach (var kv in snap.Compiled.InlineLink)
-                if (snap.Compiled.Graph.Links[kv.Value].Kind == Sim.Network.LinkKind.Fan) _audio.SetFan(fan++, snap.Compiled.Graph.Links[kv.Value].Speed);
+            foreach (FluidSolve fs in snap.All)
+            {
+                foreach (var kv in fs.Compiled.FanLink) _audio.SetFan(fan++, fs.Compiled.Graph.Links[kv.Value].Speed);
+                foreach (var kv in fs.Compiled.InlineLink)
+                    if (fs.Compiled.Graph.Links[kv.Value].Kind == Sim.Network.LinkKind.Fan) _audio.SetFan(fan++, fs.Compiled.Graph.Links[kv.Value].Speed);
+            }
         }
 
         void OnDestroy()

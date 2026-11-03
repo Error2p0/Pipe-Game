@@ -61,18 +61,26 @@ namespace HeadLoss.Unity.View
         }
 
         /// <param name="dt">Seconds since the last frame.</param>
-        public void Draw(DuctGeometry geometry, NetworkSnapshot? snap, float dt)
+        public void Draw(DuctViewInput input, float dt)
         {
-            if (_def == null || _disc == null || snap == null) return;
+            if (_def == null || _disc == null) return;
             _time += dt;
             _matrices.Clear();
-            float size = (float)_def.Size;
+            foreach (NetworkView view in input.Views)
+                if (view.Solve != null) Add(view.Geometry, view.Solve, !ReduceMotion && input.Surging?.Invoke(view.Fluid) == true);
+            if (_matrices.Count > 0) Graphics.RenderMeshInstanced(_params, _disc, 0, _matrices);
+        }
+
+        /// <param name="surge">A surge rides on this network: a short ripple along its pipes (nothing flashes, <c>05-simulation.md</c> §6).</param>
+        void Add(DuctGeometry geometry, Game.Session.FluidSolve solve, bool surge)
+        {
+            float size = (float)_def!.Size;
             float spacing = (float)_def.SpacingMetres;
             var scale = new Vector3(size, size, 1);
             foreach (DuctGeometry.Segment s in geometry.Segments)
             {
-                if (!snap.Compiled.SegmentLink.TryGetValue(s.Id, out int link)) continue;
-                double v = snap.Result.Velocity[link];
+                if (!solve.Compiled.SegmentLink.TryGetValue(s.Id, out int link)) continue;
+                double v = solve.Result.Velocity[link];
                 if (System.Math.Abs(v) < _def.MinVisibleVelocity) continue;
                 float speed = ReduceMotion
                     ? (float)_def.MinSpeed * 2
@@ -87,10 +95,15 @@ namespace HeadLoss.Unity.View
                 {
                     if (_matrices.Count >= _def.MaxParticles) break;
                     Vector2 p = s.A + dir * d;
-                    _matrices.Add(Matrix4x4.TRS(new Vector3(p.x, p.y, Z), Quaternion.identity, scale));
+                    Vector3 sized = scale;
+                    if (surge)
+                    {
+                        float ripple = 1f + 0.9f * Mathf.Max(0f, Mathf.Sin((float)(_time * 6.0) - d * 1.4f));
+                        sized = new Vector3(size * ripple, size * ripple, 1);
+                    }
+                    _matrices.Add(Matrix4x4.TRS(new Vector3(p.x, p.y, Z), Quaternion.identity, sized));
                 }
             }
-            if (_matrices.Count > 0) Graphics.RenderMeshInstanced(_params, _disc, 0, _matrices);
         }
     }
 }

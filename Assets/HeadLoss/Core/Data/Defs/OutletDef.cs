@@ -29,5 +29,7 @@ namespace HeadLoss.Core.Data.Defs
         public double Ideal;
         /// <summary>Code maximum; 0 = none.</summary>
         public double Max;
+        /// <summary>Pressure-measured outlets: the fixed design flow they draw, L/s.</summary>
+        public double DesignFlowLps;
     }
 }

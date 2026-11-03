@@ -116,7 +116,7 @@ namespace HeadLoss.PlayMode.Tests
 
             DuctSegment last = s.State.Air.Segments.Find(x => s.State.Air.FindNode(x.NodeB)!.Kind == DuctNodeKind.Outlet || s.State.Air.FindNode(x.NodeA)!.Kind == DuctNodeKind.Outlet)!;
             double flowBefore = s.OutletFlow("vent-1");
-            Color before = root.Ducts!.SegmentColour(root.View, last.Id);
+            Color before = root.Ducts!.SegmentColour(root.View, root.View.Air, last.Id);
 
             float t0 = Time.realtimeSinceStartup;
             rev = s.SolveRevision;
@@ -125,7 +125,7 @@ namespace HeadLoss.PlayMode.Tests
             float elapsed = Time.realtimeSinceStartup - t0;
 
             double flowAfter = s.OutletFlow("vent-1");
-            Color after = root.Ducts.SegmentColour(root.View, last.Id);
+            Color after = root.Ducts.SegmentColour(root.View, root.View.Air, last.Id);
             float colourDelta = Mathf.Abs(after.r - before.r) + Mathf.Abs(after.g - before.g) + Mathf.Abs(after.b - before.b);
             UnityEngine.Debug.Log($"Gate: {Units.M3sToM3h(flowBefore):F1} → {Units.M3sToM3h(flowAfter):F1} m³/h (+{(flowAfter / flowBefore - 1) * 100:F1}%), colour Δ {colourDelta:F3}, {elapsed * 1000:F0} ms");
             Assert.Less(elapsed, 1f, "heatmap must update within one second");
@@ -221,9 +221,14 @@ namespace HeadLoss.PlayMode.Tests
             Release(_keyboard.digit0Key);
             yield return null;
             Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode);
+            Press(_keyboard.digit6Key);
+            yield return null;
+            Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode, "unbuilt modes (concentration, Phase 5) stay greyed out");
+            Release(_keyboard.digit6Key);
+            yield return null;
             Press(_keyboard.digit7Key);
             yield return null;
-            Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode, "unbuilt modes (stress, Phase 4) stay greyed out");
+            Assert.AreEqual(HeatmapMode.Stress, root.Heatmap.Mode, "stress is built");
             Release(_keyboard.digit7Key);
             yield return null;
             Press(_keyboard.digit3Key);
@@ -241,6 +246,45 @@ namespace HeadLoss.PlayMode.Tests
 
     public class PerformanceTests
     {
+        /// <summary>01-architecture.md: city mains solve (500 segments, all utilities) under 10 ms.</summary>
+        [Test]
+        public void CitySolve_500Segments_Under10ms()
+        {
+            HeadLoss.Core.Data.DataRepository data = HeadLoss.Core.Data.DataRepository.Load(new HeadLoss.Core.Data.FileDataSource(System.IO.Path.Combine(UnityEngine.Application.dataPath, "HeadLoss", "Data")));
+            GameState g = GameContext.NewGame(data, 7);
+            var ctx = new GameContext(data, g);
+            HeadLoss.Game.City.UtilityState u = g.City!.Utilities;
+            foreach (string utility in new[] { "water", "power" })
+            {
+                HeadLoss.Game.City.FacilityPlacement f = ctx.City!.Facilities.Find(x => x.Utility == utility);
+                (int x, int y) at = (f.X, f.Y);
+                // A snake of 250 short lines per utility, each branching on, with demand at every plot it ends on.
+                for (int i = 0; i < 250; i++)
+                {
+                    int row = i / 40;
+                    int step = row % 2 == 0 ? 1 : -1;
+                    (int x, int y) next = i % 40 == 39 ? (at.x, at.y + (at.y > ctx.City.Height / 2 ? -1 : 1)) : (at.x + step, at.y);
+                    if (!ctx.City.InMap(next.x, next.y)) next = (at.x - step, at.y);
+                    var path = new List<(int x, int y)> { at, next };
+                    var quote = new HeadLoss.Game.City.RouteQuote { Destination = ctx.City.PlotAt(next.x, next.y)?.Id ?? "" };
+                    HeadLoss.Game.City.Utilities.Lay(u, utility, HeadLoss.Game.City.Utilities.FamilyFor(data, utility)!.Id, 300, 400, path, true, quote);
+                    at = next;
+                }
+            }
+            Assert.AreEqual(500, u.Mains.Count);
+            HeadLoss.Game.City.CityNetwork.Solve(data, ctx.City!, u, _ => 0.002, _ => 3);  // JIT warm-up
+            var times = new List<double>();
+            for (int i = 0; i < 11; i++)
+            {
+                var sw = Stopwatch.StartNew();
+                HeadLoss.Game.City.CityNetwork.Solve(data, ctx.City!, u, _ => 0.002, _ => 3);
+                times.Add(sw.Elapsed.TotalMilliseconds);
+            }
+            times.Sort();
+            UnityEngine.Debug.Log($"City solve, 500 segments: median {times[5]:0.00} ms");
+            Assert.Less(times[5], 10.0);
+        }
+
         /// <summary>01-architecture.md: building network solve (2,000 segments) under 5 ms.</summary>
         [Test]
         public void NetworkSolve_2000Segments_Under5ms()

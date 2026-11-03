@@ -10,6 +10,25 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Leakage pressure exponent n.</summary>
         public double LeakageExponent;
         public List<InsulationDef> Insulation = new List<InsulationDef>();
+        /// <summary>Meta upgrades (<c>07-equipment.md</c> §Meta upgrades, leak sensors).</summary>
+        public List<MetaUpgradeDef> Meta = new List<MetaUpgradeDef>();
+    }
+
+    /// <summary>A purchase that is not placed: per network, one-off, a city toggle or a per-building contract.</summary>
+    public sealed class MetaUpgradeDef
+    {
+        public string Id = "";
+        public string DisplayName = "";
+        public int Tier;
+        /// <summary>per-network, one-off, toggle or per-building.</summary>
+        public string Kind = "";
+        /// <summary>One-off price, $.</summary>
+        public double Price;
+        /// <summary>Recurring premium as a share of gross income per cycle.</summary>
+        public double PremiumFraction;
+        /// <summary>Insurance: multiplier on fines.</summary>
+        public double FineFactor = 1;
+        public string Notes = "";
     }
 
     public sealed class SealingDef

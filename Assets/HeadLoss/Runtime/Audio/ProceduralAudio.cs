@@ -8,7 +8,8 @@ namespace HeadLoss.Unity.Audio
     /// <summary>
     /// Calm procedural audio (<c>11-ui-visuals-audio.md</c> §Procedural audio), synthesised in
     /// <c>OnAudioFilterRead</c> on the listener: soft airflow (pink noise through a low-pass whose cutoff and gain
-    /// follow air throughput, log scale), a quiet hum per running fan at 40–120 Hz by speed with a soft harmonic,
+    /// follow air throughput, log scale), water (brown noise with a slow random swell, gain by water throughput), a quiet
+    /// hum per running fan or pump at 40–120 Hz by speed with a soft harmonic,
     /// short sine-blip UI clicks, a soft "tock" for placing a part and a two-note chime on Commit. A soft limiter
     /// keeps the sum under the ceiling. No audio files. Parameters are written on the main thread and read on the
     /// audio thread (single floats and counters only).
@@ -22,6 +23,7 @@ namespace HeadLoss.Unity.Audio
 
         // Main thread → audio thread.
         volatile float _airLevel;
+        volatile float _waterLevel;
         volatile float _master;
         volatile float _ambience = 1, _ui = 1;
         readonly float[] _fanSpeed = new float[MaxFans];
@@ -30,6 +32,8 @@ namespace HeadLoss.Unity.Audio
         // Audio thread state.
         uint _rng = 0x9E3779B9u;
         float _b0, _b1, _b2, _b3, _b4, _b5, _b6, _lp, _airSmooth;
+        float _brown, _waterSmooth, _swell = 0.7f, _swellTarget = 0.7f;
+        int _swellLeft;
         readonly double[] _fanPhase = new double[MaxFans];
         readonly float[] _fanSmooth = new float[MaxFans];
         int _clickDone, _tockDone, _chimeDone;
@@ -63,6 +67,13 @@ namespace HeadLoss.Unity.Audio
         {
             double full = Math.Max(1, _def.AirflowFullM3h);
             _airLevel = (float)Math.Min(1, Math.Log10(1 + Math.Max(0, m3h) / 10) / Math.Log10(1 + full / 10));
+        }
+
+        /// <summary>Total water throughput in the open building, L/s (0 outside a building).</summary>
+        public void SetWater(double litresPerSecond)
+        {
+            double full = Math.Max(0.1, _def.WaterFullLps);
+            _waterLevel = (float)Math.Min(1, Math.Log10(1 + Math.Max(0, litresPerSecond) * 10) / Math.Log10(1 + full * 10));
         }
 
         /// <summary>Running fan speeds (0–1, 0 = off); at most four hum.</summary>
@@ -120,6 +131,20 @@ namespace HeadLoss.Unity.Audio
                 float a = 1f - Mathf.Exp(-2f * Mathf.PI * fc * dt);
                 _lp += (pink - _lp) * a;
                 float s = _lp * (float)_def.AirflowGain * _airSmooth;
+
+                // Water: brown noise (a leaky integrator of white) with a slow random swell, gain by throughput.
+                _waterSmooth += (_waterLevel - _waterSmooth) * smooth;
+                if (_waterSmooth > 0.002f)
+                {
+                    _brown = (_brown + w * 0.02f) * 0.998f;
+                    if (--_swellLeft <= 0)
+                    {
+                        _swellLeft = (int)(sr * 0.8f);
+                        _swellTarget = 0.55f + 0.45f * (Noise() * 0.5f + 0.5f);
+                    }
+                    _swell += (_swellTarget - _swell) * dt * 1.5f;
+                    s += _brown * 3f * (float)_def.WaterGain * _waterSmooth * _swell;
+                }
 
                 // Fan hum.
                 for (int f = 0; f < MaxFans; f++)

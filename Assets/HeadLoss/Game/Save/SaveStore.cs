@@ -179,7 +179,18 @@ namespace HeadLoss.Game.Save
         static int SanitizeState(BuildingState s, BuildingLayout layout, DataRepository data)
         {
             int dropped = 0;
-            DuctNetworkState net = s.Air;
+            BuildingState fresh = BuildingState.CreateFor(layout);
+            foreach (string fluid in BuildingState.FluidIds) dropped += SanitizeNetwork(s.Net(fluid), fresh.Net(fluid), layout, data);
+            dropped += s.Equipment.RemoveAll(e => data.FindEquipment(e.EquipmentId) == null || layout.FindOpening(e.OpeningId) == null);
+            // Pre-placed equipment the layout starts with (the basic panel since Phase 4) is added when missing, for free.
+            foreach (EquipmentState e in fresh.Equipment)
+                if (s.EquipmentAt(e.OpeningId) == null) s.Equipment.Add(e.Clone());
+            return dropped;
+        }
+
+        static int SanitizeNetwork(DuctNetworkState net, DuctNetworkState freshNet, BuildingLayout layout, DataRepository data)
+        {
+            int dropped = 0;
             dropped += net.Nodes.RemoveAll(n => !layout.InFootprint(n.Pos)
                 || (n.Kind == DuctNodeKind.Intake && layout.FindOpening(n.AnchorId) == null)
                 || (n.Kind == DuctNodeKind.Outlet && layout.FindOutlet(n.AnchorId) == null));
@@ -193,14 +204,13 @@ namespace HeadLoss.Game.Save
             dropped += net.Segments.RemoveAll(seg =>
             {
                 DuctNode? a = net.FindNode(seg.NodeA), b = net.FindNode(seg.NodeB);
-                if (a == null || b == null || data.FindMaterial(seg.MaterialId) == null) return true;
-                if (a.X != b.X && a.Y != b.Y) return true;
-                (int dx, int dy) = a.Pos.DirectionTo(b.Pos);
-                for (TilePos t = a.Pos; t != b.Pos; t = new TilePos(t.X + dx, t.Y + dy))
-                    if (!layout.CanPass(t, new TilePos(t.X + dx, t.Y + dy))) return true;
+                if (a == null || b == null || data.FindMaterial(seg.MaterialId)?.Fluids.Contains(net.FluidId) != true) return true;
+                int axes = (a.X != b.X ? 1 : 0) + (a.Y != b.Y ? 1 : 0) + (a.Floor != b.Floor ? 1 : 0);
+                if (axes != 1) return true;
+                for (TilePos t = a.Pos; t != b.Pos; t = t.Toward(b.Pos))
+                    if (!layout.CanPass(t, t.Toward(b.Pos))) return true;
                 return false;
             });
-            dropped += s.Equipment.RemoveAll(e => data.FindEquipment(e.EquipmentId) == null || layout.FindOpening(e.OpeningId) == null);
             foreach (DuctNode n in net.Nodes)
             {
                 if (n.Kind != DuctNodeKind.Inline || net.Degree(n.Id) == 2) continue;
@@ -210,8 +220,7 @@ namespace HeadLoss.Game.Save
             net.Nodes.RemoveAll(n => n.Kind == DuctNodeKind.Free && net.Degree(n.Id) == 0);
 
             // Anchors at every opening and outlet, as a fresh state has.
-            BuildingState fresh = BuildingState.CreateFor(layout);
-            foreach (DuctNode anchor in fresh.Air.Nodes)
+            foreach (DuctNode anchor in freshNet.Nodes)
             {
                 if (net.Nodes.Exists(n => n.Kind == anchor.Kind && n.AnchorId == anchor.AnchorId)) continue;
                 anchor.Id = Math.Max(net.NextNodeId, MaxId(net) + 1);

@@ -23,6 +23,13 @@ namespace HeadLoss.Core.Data.Defs
         public List<string> Fluids = new List<string>();
         /// <summary>Source equipment the solvability check may use, smallest first (<c>13-balancing.md</c>).</summary>
         public List<string> ReferenceEquipment = new List<string>();
+        /// <summary>Water source equipment the solvability check may use after mains pressure alone, smallest first.</summary>
+        public List<string> ReferenceWaterEquipment = new List<string>();
+        /// <summary>Pipe materials the reference water layout may use, cheapest first (a pipe moves up when its rating is exceeded).</summary>
+        public List<string> ReferenceWaterMaterials = new List<string>();
+        /// <summary>Shafts (2×2, stacked on every floor) in multi-floor buildings, inclusive range.</summary>
+        public int ShaftsMin;
+        public int ShaftsMax;
         /// <summary>The generator builds this tier now (later tiers arrive with their phase).</summary>
         public bool Available;
         /// <summary>Shown on a plot whose tier is not available yet.</summary>
@@ -43,6 +50,12 @@ namespace HeadLoss.Core.Data.Defs
         public bool Hub;
         /// <summary>Pipes cannot cross the room (server rooms, archives).</summary>
         public bool Protected;
+        /// <summary>A vertical shaft: risers pass between floors here, and pipes may enter it from any side.</summary>
+        public bool Shaft;
+        /// <summary>Blocks pipes on every layer (stairwells).</summary>
+        public bool BlocksPipes;
+        /// <summary>Electrical room (no water pipes above it).</summary>
+        public bool Electrical;
         /// <summary>Relative humidity for the condensation check, 0–1.</summary>
         public double RelativeHumidity;
         public List<RoomOutletRuleDef> Outlets = new List<RoomOutletRuleDef>();
@@ -69,6 +82,9 @@ namespace HeadLoss.Core.Data.Defs
         public Dictionary<string, double> Districts = new Dictionary<string, double>();
         /// <summary>Rooms per floor; the generator splits the footprint by their area weights.</summary>
         public List<ProgramRoomDef> Program = new List<ProgramRoomDef>();
+        /// <summary>Floor count override, inclusive (0 = the tier's range).</summary>
+        public int FloorsMin;
+        public int FloorsMax;
         /// <summary>Footprint override [width, height] (empty = the tier's range).</summary>
         public List<int> FootprintMin = new List<int>();
         public List<int> FootprintMax = new List<int>();
@@ -93,6 +109,8 @@ namespace HeadLoss.Core.Data.Defs
         public double AreaWeight = 1;
         /// <summary>Outlets per room of this kind (0 = the room type's rules).</summary>
         public int Outlets;
+        /// <summary>Which floors get it: "" or ground (the ground floor), upper (each floor above; the ground floor of a one-floor building), each (every floor).</summary>
+        public string Floor = "";
     }
 
     public sealed class BuildingGenerationDef
@@ -113,7 +131,26 @@ namespace HeadLoss.Core.Data.Defs
         public int SolvabilityAttempts;
         /// <summary>Of those, how many move the openings before the rooms are regenerated.</summary>
         public int OpeningNudges;
-        /// <summary>Fluids the generator builds outlets and openings for in this version (water arrives in Phase 4).</summary>
+        /// <summary>Fluids the generator builds outlets and openings for in this version (gas arrives in Phase 5).</summary>
         public List<string> PhaseFluids = new List<string>();
+        /// <summary>Width of the core band (stairwell, shafts and a hall) at one end of a multi-floor building, tiles.</summary>
+        public int CoreBandWidth;
+        /// <summary>Stairwell length along the core band, tiles (its width is the band's).</summary>
+        public int StairwellLength;
+        /// <summary>Shaft side, tiles.</summary>
+        public int ShaftSize;
+        /// <summary>Chance a building of tier ≥ <see cref="LShapeFromTier"/> is L or U shaped.</summary>
+        public double LShapeChance;
+        public int LShapeFromTier;
+        /// <summary>Of the shaped buildings, the share that are U rather than L shaped.</summary>
+        public double UShapeShare;
+        /// <summary>Structural column grid spacing, m (inclusive range), from <see cref="ColumnFromTier"/>.</summary>
+        public int ColumnSpacingMin;
+        public int ColumnSpacingMax;
+        public int ColumnFromTier;
+        /// <summary>Floors larger than this are split by a fire wall, m².</summary>
+        public double FireWallAreaM2;
+        /// <summary>Chance each room gets its furniture.</summary>
+        public double FurnitureChance;
     }
 }

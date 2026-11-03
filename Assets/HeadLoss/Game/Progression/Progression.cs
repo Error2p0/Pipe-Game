@@ -47,6 +47,8 @@ namespace HeadLoss.Game.Progression
             {
                 int tier = ctx.Game.City.UnlockedTier;
                 int need = Needed(ctx.Data, tier);
+                // The next tier waits for its buildings to exist in this version (D104).
+                if (!ctx.Data.BuildingTier(tier + 1).Available) break;
                 if (need <= 0 || OnlineCount(ctx.Sessions, tier, online) < need) break;
                 ctx.Game.City.UnlockedTier = tier + 1;
                 unlocked = tier + 1;
@@ -58,6 +60,7 @@ namespace HeadLoss.Game.Progression
         public static string Condition(DataRepository data, GameContext ctx, int tier)
         {
             if (Unlocked(ctx.Game, tier)) return "Unlocked";
+            if (!data.BuildingTier(tier).Available) return "Arrives with tier-" + tier + " buildings in a later version";
             int below = tier - 1;
             int need = Needed(data, below);
             int have = OnlineCount(ctx.Sessions, below);

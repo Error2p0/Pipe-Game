@@ -38,6 +38,8 @@ namespace HeadLoss.Unity.View
         public float RoomMax;
         /// <summary>Bumped whenever the mode, palette, layer or range changes.</summary>
         public int Revision;
+        /// <summary>Network the heatmap colours (air or water): its anchors and display units.</summary>
+        public string Fluid { get; private set; } = "air";
 
         public HeatmapState(HeatmapDef def)
         {
@@ -59,22 +61,35 @@ namespace HeadLoss.Unity.View
             _ => m.ToString(),
         };
 
-        /// <summary>Unit shown on the legend.</summary>
-        public static string Unit(HeatmapMode m) => m switch
+        /// <summary>Unit shown on the legend (air in Pa and m³/h, water in bar and L/s).</summary>
+        public static string Unit(HeatmapMode m, string fluid = "air") => m switch
         {
             HeatmapMode.Velocity => "m/s",
-            HeatmapMode.Pressure => "Pa",
-            HeatmapMode.Flow => "m³/h",
+            HeatmapMode.Pressure => fluid == "air" ? "Pa" : "bar",
+            HeatmapMode.Flow => fluid == "air" ? "m³/h" : "L/s",
             HeatmapMode.Temperature => "°C",
             HeatmapMode.Density => "kg/m³",
+            HeatmapMode.Stress => "",
             _ => "",
         };
 
-        /// <summary>Modes built so far. Concentration (gases, Phase 5) and stress (bursts, Phase 4) show greyed out.</summary>
-        public static bool IsAvailable(HeatmapMode m) => m != HeatmapMode.Concentration && m != HeatmapMode.Stress;
+        /// <summary>Modes built so far. Concentration (gases, Phase 5) shows greyed out.</summary>
+        public static bool IsAvailable(HeatmapMode m) => m != HeatmapMode.Concentration;
 
-        /// <summary>Modes that also colour the rooms (pressure and flow colour ducts only).</summary>
+        /// <summary>Modes that also colour the rooms (pressure, flow and stress colour pipes only).</summary>
         public static bool ColoursRooms(HeatmapMode m) => m == HeatmapMode.Velocity || m == HeatmapMode.Temperature || m == HeatmapMode.Density;
+
+        /// <summary>The rooms take the heatmap only while the air network is in focus (the room grid is air).</summary>
+        public bool RoomsColoured => Fluid == "air" && ColoursRooms(Mode);
+
+        /// <summary>Switches the network the heatmap colours (its anchors and units).</summary>
+        public void SetFluid(string fluid)
+        {
+            if (Fluid == fluid) return;
+            Fluid = fluid;
+            if (!Locked) ResetRange();
+            Revision++;
+        }
 
         public void SetMode(HeatmapMode m)
         {
@@ -106,13 +121,15 @@ namespace HeadLoss.Unity.View
 
         void ResetRange()
         {
+            bool air = Fluid == "air";
             (RangeMin, RangeMax) = Mode switch
             {
-                HeatmapMode.Pressure => (0f, (float)_def.PressureAnchorMaxAirPa),
-                HeatmapMode.Flow => (0f, (float)_def.FlowAnchorMaxM3h),
+                HeatmapMode.Pressure => (0f, (float)(air ? _def.PressureAnchorMaxAirPa : _def.PressureAnchorMaxWaterBar)),
+                HeatmapMode.Flow => (0f, (float)(air ? _def.FlowAnchorMaxM3h : _def.FlowAnchorMaxWaterLps)),
                 HeatmapMode.Temperature => ((float)_def.TemperatureAnchorC[0], (float)_def.TemperatureAnchorC[1]),
-                HeatmapMode.Density => ((float)_def.DensityAnchor[0], (float)_def.DensityAnchor[1]),
-                _ => (0f, (float)_def.VelocityAnchorMaxAir),
+                HeatmapMode.Density => air ? ((float)_def.DensityAnchor[0], (float)_def.DensityAnchor[1]) : ((float)_def.DensityAnchorWater[0], (float)_def.DensityAnchorWater[1]),
+                HeatmapMode.Stress => (0f, 1f),
+                _ => (0f, (float)(air ? _def.VelocityAnchorMaxAir : _def.VelocityAnchorMaxWater)),
             };
             RoomMax = (float)_def.RoomVelocityAnchorMax;
         }
@@ -127,24 +144,28 @@ namespace HeadLoss.Unity.View
         {
             if (Locked || Mode == HeatmapMode.Plain) return;
             float lo = RangeMin, hi = RangeMax, room = RoomMax;
+            bool air = Fluid == "air";
             switch (Mode)
             {
                 case HeatmapMode.Velocity:
-                    hi = Extend(max, (float)_def.VelocityAnchorMaxAir, (float)_def.AutoRangeStep);
+                    hi = Extend(max, (float)(air ? _def.VelocityAnchorMaxAir : _def.VelocityAnchorMaxWater), (float)_def.AutoRangeStep);
                     room = Extend(roomMax, (float)_def.RoomVelocityAnchorMax, 0.5f);
                     break;
                 case HeatmapMode.Pressure:
-                    hi = Extend(max, (float)_def.PressureAnchorMaxAirPa, (float)_def.PressureStepPa);
+                    hi = air ? Extend(max, (float)_def.PressureAnchorMaxAirPa, (float)_def.PressureStepPa) : Extend(max, (float)_def.PressureAnchorMaxWaterBar, (float)_def.PressureStepWaterBar);
                     break;
                 case HeatmapMode.Flow:
-                    hi = Extend(max, (float)_def.FlowAnchorMaxM3h, (float)_def.FlowStepM3h);
+                    hi = air ? Extend(max, (float)_def.FlowAnchorMaxM3h, (float)_def.FlowStepM3h) : Extend(max, (float)_def.FlowAnchorMaxWaterLps, (float)_def.FlowStepWaterLps);
                     break;
                 case HeatmapMode.Temperature:
                     (lo, hi) = Widen(min, max, _def.TemperatureAnchorC, (float)_def.TemperatureStepK);
                     break;
                 case HeatmapMode.Density:
-                    (lo, hi) = Widen(min, max, _def.DensityAnchor, (float)_def.DensityStep);
+                    (lo, hi) = Widen(min, max, air ? _def.DensityAnchor : _def.DensityAnchorWater, air ? (float)_def.DensityStep : 1f);
                     break;
+                case HeatmapMode.Stress:
+                    // Stress 0 → 1 with anything at or above 1 in the warning colour (11 §Heatmap modes); the scale never moves.
+                    return;
             }
             if (Mathf.Approximately(lo, RangeMin) && Mathf.Approximately(hi, RangeMax) && Mathf.Approximately(room, RoomMax)) return;
             RangeMin = lo;

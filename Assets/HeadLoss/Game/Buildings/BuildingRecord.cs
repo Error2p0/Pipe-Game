@@ -19,6 +19,10 @@ namespace HeadLoss.Game.Buildings
         public bool SheetSeen;
         /// <summary>Gross income earned by this building over its life, $.</summary>
         public double LifetimeIncome;
+        /// <summary>The electrical panel has tripped: everything stops until the player resets it (<c>04-buildings.md</c>).</summary>
+        public bool PanelTripped;
+        /// <summary>Pipe stress, bursts and repairs (<c>08-failures.md</c>).</summary>
+        public Failures.FailureState Failures = new Failures.FailureState();
 
         /// <summary>A fresh record: anchors and pre-placed equipment, committed for free.</summary>
         public static BuildingRecord CreateFor(BuildingLayout layout)

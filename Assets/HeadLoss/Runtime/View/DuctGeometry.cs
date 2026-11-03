@@ -6,8 +6,9 @@ using UnityEngine;
 namespace HeadLoss.Unity.View
 {
     /// <summary>
-    /// Drawn shape of a duct network: straight parts between tile centres (shortened at long-radius
-    /// elbows), arcs at long-radius elbows and square caps at other nodes. Rebuilt when the layout changes.
+    /// Drawn shape of one network on one floor: straight parts between tile centres (shortened at long-radius elbows),
+    /// arcs at long-radius elbows, square caps at other nodes, and riser markers where a vertical run passes through the
+    /// floor or ends on it. Rebuilt when the layout or the floor changes.
     /// </summary>
     public sealed class DuctGeometry
     {
@@ -40,34 +41,64 @@ namespace HeadLoss.Unity.View
             public int SegmentId;
         }
 
+        /// <summary>A riser crossing or ending on this floor: it continues up and/or down from here.</summary>
+        public struct Riser
+        {
+            public int SegmentId;
+            public Vector2 Centre;
+            public float Width;
+            public bool Up, Down;
+        }
+
         public readonly List<Segment> Segments = new List<Segment>();
         public readonly List<Arc> Arcs = new List<Arc>();
         public readonly List<Cap> Caps = new List<Cap>();
+        public readonly List<Riser> Risers = new List<Riser>();
+        /// <summary>Floor this geometry shows.</summary>
+        public int Floor { get; private set; }
 
         public static Vector2 Centre(TilePos t) => new Vector2(t.X + 0.5f, t.Y + 0.5f);
 
         public static float WidthFor(double diameterMm, DrawingDef d) => (float)(d.DuctDisplayWidthBase + diameterMm / 1000.0 * d.DuctDisplayWidthFactor);
 
-        public void Build(DuctNetworkState net, DrawingDef drawing)
+        /// <summary>Pipes are drawn a little wider than their size so a 15 mm pipe stays visible.</summary>
+        public static float WidthFor(double diameterMm, DrawingDef d, bool pipe) =>
+            pipe ? (float)(d.DuctDisplayWidthBase * 0.9 + diameterMm / 1000.0 * d.DuctDisplayWidthFactor * 2.5) : WidthFor(diameterMm, d);
+
+        public void Build(DuctNetworkState net, DrawingDef drawing, int floor = 0)
         {
             Segments.Clear();
             Arcs.Clear();
             Caps.Clear();
+            Risers.Clear();
+            Floor = floor;
+            bool pipe = net.FluidId != "air";
             var smoothElbows = new HashSet<int>();
             foreach (DuctNode n in net.Nodes)
-                if (n.SmoothFittings && DuctEditor.IsElbow(net, n)) smoothElbows.Add(n.Id);
+                if (n.Floor == floor && n.SmoothFittings && DuctEditor.IsElbow(net, n) && FlatElbow(net, n)) smoothElbows.Add(n.Id);
 
             foreach (DuctSegment s in net.Segments)
             {
-                Vector2 a = Centre(net.FindNode(s.NodeA)!.Pos), b = Centre(net.FindNode(s.NodeB)!.Pos);
+                DuctNode na = net.FindNode(s.NodeA)!, nb = net.FindNode(s.NodeB)!;
+                float w = WidthFor(s.DiameterMm, drawing, pipe);
+                if (na.Floor != nb.Floor)
+                {
+                    int lo = System.Math.Min(na.Floor, nb.Floor), hi = System.Math.Max(na.Floor, nb.Floor);
+                    if (floor < lo || floor > hi) continue;
+                    Risers.Add(new Riser { SegmentId = s.Id, Centre = Centre(na.Pos), Width = w, Up = floor < hi, Down = floor > lo });
+                    continue;
+                }
+                if (na.Floor != floor) continue;
+                Vector2 a = Centre(na.Pos), b = Centre(nb.Pos);
                 Vector2 dir = (b - a).normalized;
                 if (smoothElbows.Contains(s.NodeA)) a += dir * SmoothRadius;
                 if (smoothElbows.Contains(s.NodeB)) b -= dir * SmoothRadius;
-                Segments.Add(new Segment { Id = s.Id, A = a, B = b, Width = WidthFor(s.DiameterMm, drawing), DiameterMm = s.DiameterMm });
+                Segments.Add(new Segment { Id = s.Id, A = a, B = b, Width = w, DiameterMm = s.DiameterMm });
             }
 
             foreach (DuctNode n in net.Nodes)
             {
+                if (n.Floor != floor) continue;
                 DuctSegment? first = null, second = null;
                 int count = 0;
                 float maxWidth = 0;
@@ -77,7 +108,7 @@ namespace HeadLoss.Unity.View
                     if (s.NodeA != n.Id && s.NodeB != n.Id) continue;
                     if (count == 0) first = s; else if (count == 1) second = s;
                     count++;
-                    float w = WidthFor(s.DiameterMm, drawing);
+                    float w = WidthFor(s.DiameterMm, drawing, pipe);
                     if (w > maxWidth) { maxWidth = w; widest = s; }
                 }
                 if (count == 0 || widest == null) continue;
@@ -97,6 +128,14 @@ namespace HeadLoss.Unity.View
                     Caps.Add(new Cap { NodeId = n.Id, Centre = p, Size = maxWidth, SegmentId = widest.Id });
                 }
             }
+        }
+
+        /// <summary>True when both legs of an elbow lie on its floor (a bend into a riser is drawn as a cap).</summary>
+        static bool FlatElbow(DuctNetworkState net, DuctNode n)
+        {
+            foreach (DuctSegment s in net.Segments)
+                if ((s.NodeA == n.Id || s.NodeB == n.Id) && net.FindNode(s.Other(n.Id))!.Floor != n.Floor) return false;
+            return true;
         }
 
         /// <summary>Distance from p to a segment's centreline.</summary>

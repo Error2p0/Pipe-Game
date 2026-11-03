@@ -15,6 +15,8 @@ namespace HeadLoss.Game.Offline
         public double Gross, Electricity, Net;
         /// <summary>Seconds the building was online.</summary>
         public double OnlineSeconds;
+        /// <summary>Bursts while away, and repairs that finished.</summary>
+        public int Bursts, RepairsDone;
     }
 
     /// <summary>The "While you were away" report (<c>11-ui-visuals-audio.md</c> §Screens, <c>12-save-offline.md</c>).</summary>
@@ -27,6 +29,9 @@ namespace HeadLoss.Game.Offline
         public bool Capped;
         /// <summary>Totals over the time away, $.</summary>
         public double Gross, Electricity, Fines, Premiums, Net;
+        /// <summary>Bursts while away, repairs that finished, and what contract crews charged, $ (paid on top of the net).</summary>
+        public int Bursts, RepairsDone;
+        public double RepairCosts;
         public double WalletBefore, WalletAfter, DebtBefore, DebtAfter;
         public readonly List<OfflineBuildingLine> Buildings = new List<OfflineBuildingLine>();
         /// <summary>Tiers unlocked during the catch-up.</summary>
@@ -36,11 +41,11 @@ namespace HeadLoss.Game.Offline
     }
 
     /// <summary>
-    /// Offline progress (<c>12-save-offline.md</c> §Offline catch-up), Phase 3 scope. Every building's built network is
-    /// solved at steady state with the crank at 0, then income × time is added analytically in steps of
-    /// <c>offline.climateStepHours</c> (each step at the outside temperature of its middle hour), with electricity
-    /// charged and debt handled as in game. The event timeline's other stops (bursts, leaks, repairs, certificates,
-    /// events) arrive with those systems in Phases 4–6; nothing changes a building's steady state offline yet.
+    /// Offline progress (<c>12-save-offline.md</c> §Offline catch-up). Every building's built network is solved at steady
+    /// state with the crank at 0, then income × time is added analytically between stops: the climate steps of
+    /// <c>offline.climateStepHours</c> (each at the outside temperature of its middle hour), a burst drawn from the Weibull
+    /// model, a crew finishing a repair. City fines and premiums are charged and debt is handled as in game. The other
+    /// stops (gas leaks, certificates, events) arrive with those systems in Phases 5–6.
     /// </summary>
     public static class OfflineCatchUp
     {
@@ -64,6 +69,28 @@ namespace HeadLoss.Game.Offline
             foreach (BuildingSession s in ctx.Sessions)
                 lines[s] = new OfflineBuildingLine { BuildingId = s.Record.BuildingId, Name = s.Layout.DisplayName };
 
+            // Connections from the city, then each building's draw and water use back into a second city solve.
+            ctx.SolveCity();
+            foreach (BuildingSession s in ctx.Sessions) s.PrepareOffline();
+            if (ctx.City != null)
+            {
+                ctx.SolveCity();
+                foreach (BuildingSession s in ctx.Sessions) s.PrepareOffline();
+            }
+            foreach (BuildingSession s in ctx.Sessions)
+            {
+                s.OfflineRules = true;
+                s.Failures.OfflineMode = true;
+                s.Failures.OfflinePay = price =>
+                {
+                    g.ApplyIncome(-price);
+                    r.RepairCosts += price;
+                    return true;
+                };
+                s.Failures.DispatchContract(s.Committed);
+            }
+            GameLoop.FinesPerSecond(ctx, out double finesPerSecond);
+
             double step = Math.Max(60, ctx.Data.Balancing.Offline.ClimateStepHours * 3600);
             for (double t = 0; t < r.Seconds - 1e-9; t += step)
             {
@@ -74,30 +101,77 @@ namespace HeadLoss.Game.Offline
                 onlineAtEnd.Clear();
                 foreach (BuildingSession s in ctx.Sessions)
                 {
-                    BuildingEvaluation ev = s.SteadyState(outside);
                     OfflineBuildingLine line = lines[s];
-                    line.Gross += ev.Gross * dt;
-                    line.Electricity += ev.Electricity * dt;
-                    line.Net += ev.Net * dt;
-                    if (ev.Online)
+                    double premium = GameLoop.PremiumFraction(ctx, s);
+                    double left = dt, now = g.PlayTimeSeconds + t;
+                    BuildingEvaluation ev = s.SteadyState(outside);
+                    while (left > 1e-9)
                     {
-                        onlineAtEnd.Add(s);
-                        line.OnlineSeconds += dt;
-                        s.Record.EverOnline = true;
+                        Failures.BuildingFailures f = s.Failures;
+                        NetworkSnapshot snap = s.LastSteadySnapshot!;
+                        double adv = left;
+                        Failures.OfflineBurstSample? burst = f.SampleNextBurst(snap, s.Committed);
+                        bool bursts = burst != null && burst.Seconds < adv;
+                        if (bursts) adv = burst!.Seconds;
+                        bool repairing = f.State.Repairs.Count > 0;
+                        if (repairing && f.State.Repairs[0].Remaining <= adv)
+                        {
+                            adv = f.State.Repairs[0].Remaining;
+                            bursts = false;
+                        }
+
+                        line.Gross += ev.Gross * adv;
+                        line.Electricity += ev.Electricity * adv;
+                        line.Net += ev.Net * adv;
+                        if (ev.Online)
+                        {
+                            onlineAtEnd.Add(s);
+                            line.OnlineSeconds += adv;
+                            s.Record.EverOnline = true;
+                        }
+                        else onlineAtEnd.Remove(s);
+                        s.Record.LifetimeIncome += ev.Gross * adv;
+                        r.Gross += ev.Gross * adv;
+                        r.Electricity += ev.Electricity * adv;
+                        r.Fines += ev.Fines * adv;
+                        r.Premiums += (ev.Premiums + ev.Gross * premium) * adv;
+                        stepNet += (ev.Net - ev.Gross * premium) * adv;
+
+                        f.AdvanceStress(snap, s.Committed, adv);
+                        left -= adv;
+                        now += adv;
+                        bool changed = false;
+                        if (repairing && f.TickRepairs(adv, s.Record))
+                        {
+                            line.RepairsDone++;
+                            r.RepairsDone++;
+                            changed = true;
+                        }
+                        if (bursts)
+                        {
+                            f.BurstSampled(snap, s.Committed, burst!, now);
+                            line.Bursts++;
+                            r.Bursts++;
+                            changed = true;
+                        }
+                        if (changed) ev = s.SteadyState(outside);
                     }
-                    s.Record.LifetimeIncome += ev.Gross * dt;
-                    r.Gross += ev.Gross * dt;
-                    r.Electricity += ev.Electricity * dt;
-                    r.Fines += ev.Fines * dt;
-                    r.Premiums += ev.Premiums * dt;
-                    stepNet += ev.Net * dt;
                 }
+                r.Fines += finesPerSecond * dt;
+                stepNet -= finesPerSecond * dt;
                 g.ApplyIncome(stepNet);
                 g.LifetimeIncome += stepNet;
             }
+            foreach (BuildingSession s in ctx.Sessions)
+            {
+                s.OfflineRules = false;
+                s.Failures.OfflineMode = false;
+                s.Failures.OfflinePay = null;
+                s.MarkDirty();
+            }
             r.Net = r.Gross - r.Electricity - r.Fines - r.Premiums;
             foreach (BuildingSession s in ctx.Sessions)
-                if (lines[s].Gross > 0 || lines[s].Electricity > 0) r.Buildings.Add(lines[s]);
+                if (lines[s].Gross > 0 || lines[s].Electricity > 0 || lines[s].Bursts > 0 || lines[s].RepairsDone > 0) r.Buildings.Add(lines[s]);
             r.Buildings.Sort((a, b) => b.Net.CompareTo(a.Net));
 
             int before = Progression.Tech.UnlockedTier(g);

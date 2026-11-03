@@ -28,6 +28,22 @@ namespace HeadLoss.Sim.Network
         Valve,
         /// <summary>Duct leakage to the room: Q = C · Δp^n (<c>05-simulation.md</c> §1.1).</summary>
         Leak,
+        /// <summary>Check valve: a valve with fixed K that closes on reverse flow (status check, <c>05-simulation.md</c> §1.3 step 7).</summary>
+        Check,
+        /// <summary>Pressure-reducing regulator: keeps the downstream (To) pressure at or below <see cref="NetworkLink.Setting"/>.</summary>
+        Regulator,
+        /// <summary>Relief valve from a pipe node to a drain: opens when the node pressure exceeds <see cref="NetworkLink.Setting"/>.</summary>
+        Relief,
+    }
+
+    /// <summary>Solver status of a link (control valves change it between iterations).</summary>
+    public enum LinkStatus
+    {
+        Open,
+        /// <summary>Closed by the solver's status check (check valve on reverse flow, relief below its set pressure, regulator on reverse flow).</summary>
+        Closed,
+        /// <summary>A regulator holding its downstream pressure at the setpoint.</summary>
+        Active,
     }
 
     public sealed class NetworkNode
@@ -71,6 +87,8 @@ namespace HeadLoss.Sim.Network
         public double LeakCoefficient;
         /// <summary>Leaks: pressure exponent n.</summary>
         public double LeakExponent = 0.65;
+        /// <summary>Regulators: downstream setpoint; relief valves: opening pressure at the From node. Gauge, Pa.</summary>
+        public double Setting;
         public string Label = "";
 
         /// <summary>True when the link takes part in the solve.</summary>
@@ -162,6 +180,43 @@ namespace HeadLoss.Sim.Network
             });
             return Links.Count - 1;
         }
+
+        /// <summary>Adds a check valve (flow only From → To).</summary>
+        /// <param name="k">Loss coefficient when open.</param>
+        /// <param name="diameter">m.</param>
+        public int AddCheck(int from, int to, double k, double diameter, string label = "")
+        {
+            int i = AddValve(from, to, k, diameter, 1, label);
+            Links[i].Kind = LinkKind.Check;
+            return i;
+        }
+
+        /// <summary>Adds a pressure-reducing regulator (From = upstream).</summary>
+        /// <param name="kOpen">Loss coefficient when fully open.</param>
+        /// <param name="diameter">m.</param>
+        /// <param name="setpoint">Downstream pressure it holds, Pa gauge.</param>
+        public int AddRegulator(int from, int to, double kOpen, double diameter, double setpoint, string label = "")
+        {
+            int i = AddValve(from, to, kOpen, diameter, 1, label);
+            Links[i].Kind = LinkKind.Regulator;
+            Links[i].Setting = setpoint;
+            return i;
+        }
+
+        /// <summary>Adds a relief valve from a network node to a drain (a fixed-pressure node).</summary>
+        /// <param name="kOpen">Discharge loss coefficient when open.</param>
+        /// <param name="diameter">m.</param>
+        /// <param name="setPressure">Opening pressure at <paramref name="from"/>, Pa gauge.</param>
+        public int AddRelief(int from, int drain, double kOpen, double diameter, double setPressure, string label = "")
+        {
+            int i = AddValve(from, drain, kOpen, diameter, 1, label);
+            Links[i].Kind = LinkKind.Relief;
+            Links[i].Setting = setPressure;
+            return i;
+        }
+
+        /// <summary>True for links whose open/closed/active state the solver decides.</summary>
+        public static bool IsControl(LinkKind k) => k == LinkKind.Check || k == LinkKind.Regulator || k == LinkKind.Relief;
 
         /// <summary>Hash of the solve topology (endpoints, kinds, open state) for warm-start reuse.</summary>
         public long TopologyKey()

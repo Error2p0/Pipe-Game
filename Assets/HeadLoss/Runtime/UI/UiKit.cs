@@ -84,6 +84,15 @@ namespace HeadLoss.Unity.UI
             _ => P.Warning,
         };
 
+        /// <summary>An outlet delivery or requirement (SI) in the outlet's display unit.</summary>
+        public static string FormatDelivery(HeadLoss.Core.Data.Defs.OutletDef outlet, double si) => outlet.Unit switch
+        {
+            "bar" => HeadLoss.Core.Units.FormatBar(si),
+            "mbar" => HeadLoss.Core.Units.Number(si / HeadLoss.Core.Units.PaPerMbar, 1) + " mbar",
+            "W" => HeadLoss.Core.Units.FormatPower(si),
+            _ => HeadLoss.Core.Units.FormatAirFlow(si),
+        };
+
         public static string ZoneWord(OutletZone z) => z switch
         {
             OutletZone.NotConnected => "not connected",
@@ -91,6 +100,7 @@ namespace HeadLoss.Unity.UI
             OutletZone.Working => "working",
             OutletZone.Overdelivery => "overdelivery",
             OutletZone.AboveCodeMax => "above code max",
+            OutletZone.Isolated => "isolated",
             _ => z.ToString(),
         };
     }

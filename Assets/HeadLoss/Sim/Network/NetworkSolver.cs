@@ -31,7 +31,8 @@ namespace HeadLoss.Sim.Network
         /// <summary>Solves the graph.</summary>
         /// <param name="fluid">Fluid properties (density updated per iteration for compressible fluids).</param>
         /// <param name="initialFlows">Warm start (previous solution for the same topology), m³/s per link; null = 1 m/s everywhere.</param>
-        public SolveResult Solve(NetworkGraph graph, IFluidProperties fluid, double[]? initialFlows = null)
+        /// <param name="initialStatus">Control-valve statuses of the warm start (same topology); null = check valves open, relief valves closed, regulators active.</param>
+        public SolveResult Solve(NetworkGraph graph, IFluidProperties fluid, double[]? initialFlows = null, LinkStatus[]? initialStatus = null)
         {
             int nodeCount = graph.Nodes.Count;
             int linkCount = graph.Links.Count;
@@ -54,21 +55,21 @@ namespace HeadLoss.Sim.Network
                 Power = new double[linkCount],
                 MachWarning = new bool[linkCount],
                 LinkActive = new bool[linkCount],
+                Status = new LinkStatus[linkCount],
             };
 
-            MarkActive(graph, res);
-
-            // Unknown-pressure node numbering and matrix structure (cached per topology + active set).
-            long key = res.TopologyKey;
-            unchecked
+            LinkStatus[] status = res.Status;
+            bool warmStatus = initialStatus != null && initialStatus.Length == linkCount;
+            int controlLinks = 0;
+            for (int k = 0; k < linkCount; k++)
             {
-                for (int k = 0; k < linkCount; k++) key = (key ^ (res.LinkActive[k] ? k + 1 : -(k + 1))) * 1099511628211L;
+                LinkKind kind = graph.Links[k].Kind;
+                if (!NetworkGraph.IsControl(kind)) continue;
+                controlLinks++;
+                status[k] = warmStatus ? initialStatus![k] : kind == LinkKind.Relief ? LinkStatus.Closed : kind == LinkKind.Regulator ? LinkStatus.Active : LinkStatus.Open;
             }
-            if (_matrix == null || key != _cacheKey || _unknown.Length != nodeCount) BuildStructure(graph, res, key);
-            int[] unknown = _unknown;
-            SparseMatrix a = _matrix!;
-            int n = a.N;
-            int[] posII = _posII, posJJ = _posJJ, posIJ = _posIJ, posJI = _posJI;
+
+            MarkActive(graph, res);
             for (int i = 0; i < nodeCount; i++)
             {
                 NetworkNode node = graph.Nodes[i];
@@ -86,37 +87,55 @@ namespace HeadLoss.Sim.Network
                 rho[k] = fluid.Density(_s.AtmosphericPressure, l.Temperature);
                 mu[k] = fluid.Viscosity(_s.AtmosphericPressure, l.Temperature);
                 if (!res.LinkActive[k]) continue;
-                q[k] = warm ? initialFlows![k] : l.Kind == LinkKind.Leak ? l.LeakCoefficient * Math.Pow(10, l.LeakExponent) : _s.InitialVelocity * l.Area;
+                q[k] = warm ? initialFlows![k] : InitialFlow(l);
             }
 
-            var dp = new double[linkCount];
-            var gk = new double[linkCount];
-            var rhs = new double[n];
-            var p = new double[n];
+            EnsureStructure(graph, res);
             if (!HasDrivingForce(graph, res))
             {
                 // Nothing pushes the fluid: the exact answer is zero flow and hydrostatic pressures.
                 // (Newton only halves a Q|Q| flow per step on the way to zero, so iterating would never converge.)
-                SolveStatic(graph, res, unknown);
+                SolveStatic(graph, res, _unknown);
                 FillResults(graph, fluid, res, mu);
                 return res;
             }
 
+            // Links meeting at each node (continuity of an active regulator's downstream node).
+            int[] incidenceStart = new int[nodeCount + 1];
+            foreach (NetworkLink l in graph.Links) { incidenceStart[l.From + 1]++; incidenceStart[l.To + 1]++; }
+            for (int i = 0; i < nodeCount; i++) incidenceStart[i + 1] += incidenceStart[i];
+            var incidence = new int[incidenceStart[nodeCount]];
+            var fill = new int[nodeCount];
+            for (int k = 0; k < linkCount; k++)
+            {
+                NetworkLink l = graph.Links[k];
+                incidence[incidenceStart[l.From] + fill[l.From]++] = k;
+                incidence[incidenceStart[l.To] + fill[l.To]++] = k;
+            }
+
+            var dp = new double[linkCount];
+            var gk = new double[linkCount];
             double gMin = 0;
             double relax = 1.0;
             double prevResidual = double.PositiveInfinity;
             int growing = 0;
+            int statusChangesLeft = 4 * controlLinks + 4;
             res.Residual = double.PositiveInfinity;
 
             for (int iter = 1; iter <= _s.MaxIterations; iter++)
             {
                 res.Iterations = iter;
+                int[] unknown = _unknown;
+                SparseMatrix a = _matrix!;
+                int n = a.N;
+                if (_rhs.Length < n) { _rhs = new double[n]; _p = new double[n]; }
+                double[] rhs = _rhs, p = _p;
 
-                // 1. Link heads and derivatives.
-                double scale = 0;
+                // 1. Link heads and derivatives (an active regulator has neither: its flow comes from continuity).
+                double scale = 0, maxPk = 0;
                 for (int k = 0; k < linkCount; k++)
                 {
-                    if (!res.LinkActive[k]) continue;
+                    if (!res.LinkActive[k] || IsHeld(graph, status, k)) continue;
                     dp[k] = Evaluate(graph, k, q[k], rho[k], mu[k], out gk[k], out _);
                     if (iter == 1) scale = Math.Max(scale, Math.Abs(gk[k]));
                 }
@@ -129,13 +148,21 @@ namespace HeadLoss.Sim.Network
                 {
                     if (!res.LinkActive[k]) continue;
                     NetworkLink l = graph.Links[k];
+                    int ui = unknown[l.From], uj = unknown[l.To];
+                    if (IsHeld(graph, status, k))
+                    {
+                        // Its current flow leaves From and enters To; To's own row is replaced below.
+                        if (ui >= 0) rhs[ui] -= q[k];
+                        if (uj >= 0) rhs[uj] += q[k];
+                        continue;
+                    }
                     double g = Math.Max(gk[k], gMin);
                     double pk = 1.0 / g;
+                    maxPk = Math.Max(maxPk, pk);
                     double yk = pk * dp[k];
-                    int ui = unknown[l.From], uj = unknown[l.To];
-                    if (posII[k] >= 0) a.Values[posII[k]] += pk;
-                    if (posJJ[k] >= 0) a.Values[posJJ[k]] += pk;
-                    if (posIJ[k] >= 0) { a.Values[posIJ[k]] -= pk; a.Values[posJI[k]] -= pk; }
+                    if (_posII[k] >= 0) a.Values[_posII[k]] += pk;
+                    if (_posJJ[k] >= 0) a.Values[_posJJ[k]] += pk;
+                    if (_posIJ[k] >= 0) { a.Values[_posIJ[k]] -= pk; a.Values[_posJI[k]] -= pk; }
                     if (ui >= 0)
                     {
                         rhs[ui] -= q[k] - yk;
@@ -151,6 +178,16 @@ namespace HeadLoss.Sim.Network
                 {
                     if (unknown[i] >= 0 && graph.Nodes[i].Kind == NodeKind.Demand) rhs[unknown[i]] -= graph.Nodes[i].Demand;
                 }
+                // An active regulator pins its downstream node at the setpoint (EPANET's large-number method).
+                double big = 1e8 * (maxPk > 0 ? maxPk : 1.0);
+                for (int k = 0; k < linkCount; k++)
+                {
+                    if (!res.LinkActive[k] || !IsHeld(graph, status, k)) continue;
+                    int uj = unknown[graph.Links[k].To];
+                    if (uj < 0) continue;
+                    a.Values[a.Diagonal[uj]] += big;
+                    rhs[uj] += big * graph.Links[k].Setting;
+                }
 
                 // 4. Solve for unknown pressures (warm-started from the last iterate).
                 for (int i = 0; i < nodeCount; i++) if (unknown[i] >= 0) p[unknown[i]] = res.NodePressure[i];
@@ -161,7 +198,7 @@ namespace HeadLoss.Sim.Network
                 double sumDq = 0, sumQ = 0;
                 for (int k = 0; k < linkCount; k++)
                 {
-                    if (!res.LinkActive[k]) continue;
+                    if (!res.LinkActive[k] || IsHeld(graph, status, k)) continue;
                     NetworkLink l = graph.Links[k];
                     double g = Math.Max(gk[k], gMin);
                     double pk = 1.0 / g;
@@ -169,6 +206,21 @@ namespace HeadLoss.Sim.Network
                     q[k] += relax * dq;
                     sumDq += Math.Abs(relax * dq);
                     sumQ += Math.Abs(q[k]);
+                }
+                for (int k = 0; k < linkCount; k++)
+                {
+                    if (!res.LinkActive[k] || !IsHeld(graph, status, k)) continue;
+                    int j = graph.Links[k].To;
+                    double need = graph.Nodes[j].Kind == NodeKind.Demand ? graph.Nodes[j].Demand : 0;
+                    for (int e = incidenceStart[j]; e < incidenceStart[j + 1]; e++)
+                    {
+                        int m = incidence[e];
+                        if (m == k || !res.LinkActive[m]) continue;
+                        need += graph.Links[m].From == j ? q[m] : -q[m];
+                    }
+                    sumDq += Math.Abs(need - q[k]);
+                    q[k] = need;
+                    sumQ += Math.Abs(need);
                 }
 
                 // Density follows the ideal gas law at each link's mean pressure.
@@ -183,6 +235,29 @@ namespace HeadLoss.Sim.Network
                 res.Residual = residual;
                 res.MaxImbalance = MaxImbalance(graph, res, unknown);
                 bool settled = residual < _s.FlowTolerance || sumDq < _s.ZeroFlowThreshold;
+
+                // 7. Control-valve statuses (check valves, regulators, relief valves), EPANET style.
+                if (controlLinks > 0 && statusChangesLeft > 0 && (settled || residual < 1e-2 || iter % 4 == 0))
+                {
+                    int changes = UpdateStatuses(graph, res, rho, status);
+                    if (changes > 0)
+                    {
+                        statusChangesLeft -= changes;
+                        bool[] before = (bool[])res.LinkActive.Clone();
+                        Array.Clear(res.NodeActive, 0, nodeCount);
+                        MarkActive(graph, res);
+                        for (int k = 0; k < linkCount; k++)
+                        {
+                            if (res.LinkActive[k] && !before[k]) q[k] = InitialFlow(graph.Links[k]);
+                            if (!res.LinkActive[k]) q[k] = 0;
+                        }
+                        EnsureStructure(graph, res);
+                        prevResidual = double.PositiveInfinity;
+                        growing = 0;
+                        continue;
+                    }
+                }
+
                 if (settled && res.MaxImbalance < _s.MassImbalanceTolerance)
                 {
                     res.Converged = true;
@@ -200,6 +275,89 @@ namespace HeadLoss.Sim.Network
             res.Unstable = !res.Converged;
             FillResults(graph, fluid, res, mu);
             return res;
+        }
+
+        double[] _rhs = Array.Empty<double>(), _p = Array.Empty<double>();
+
+        /// <summary>Initial guess for a link entering the solve: 1 m/s (control valves: a trickle forward).</summary>
+        double InitialFlow(NetworkLink l) => l.Kind switch
+        {
+            LinkKind.Leak => l.LeakCoefficient * Math.Pow(10, l.LeakExponent),
+            LinkKind.Check or LinkKind.Regulator or LinkKind.Relief => 0.01 * _s.InitialVelocity * l.Area,
+            _ => _s.InitialVelocity * l.Area,
+        };
+
+        /// <summary>An active regulator: no head function, its flow follows continuity at its downstream node.</summary>
+        static bool IsHeld(NetworkGraph graph, LinkStatus[] status, int k) =>
+            graph.Links[k].Kind == LinkKind.Regulator && status[k] == LinkStatus.Active;
+
+        /// <summary>Rebuilds the unknown numbering and matrix structure when the active set changed.</summary>
+        void EnsureStructure(NetworkGraph graph, SolveResult res)
+        {
+            long key = res.TopologyKey;
+            unchecked
+            {
+                for (int k = 0; k < graph.Links.Count; k++) key = (key ^ (res.LinkActive[k] ? k + 1 : -(k + 1))) * 1099511628211L;
+            }
+            if (_matrix == null || key != _cacheKey || _unknown.Length != graph.Nodes.Count) BuildStructure(graph, res, key);
+        }
+
+        /// <summary>
+        /// Status checks between iterations (<c>05-simulation.md</c> §1.3 step 7, EPANET 2): check valves close on reverse
+        /// flow and reopen when the head across them turns forward; regulators switch between active, open and closed;
+        /// relief valves open above their set pressure and close when their flow reverses. Returns the number of changes.
+        /// </summary>
+        int UpdateStatuses(NetworkGraph graph, SolveResult res, double[] rho, LinkStatus[] status)
+        {
+            const double hTol = 1.0;  // Pa
+            double qTol = 10 * _s.ZeroFlowThreshold;
+            int changes = 0;
+            for (int k = 0; k < graph.Links.Count; k++)
+            {
+                NetworkLink l = graph.Links[k];
+                if (!NetworkGraph.IsControl(l.Kind)) continue;
+                double pFrom = res.NodePressure[l.From], pTo = res.NodePressure[l.To];
+                bool fromLive = res.NodeActive[l.From], toLive = res.NodeActive[l.To];
+                double elevation = rho[k] * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
+                double flow = res.Flow[k];
+                LinkStatus s = status[k];
+                LinkStatus next = s;
+                switch (l.Kind)
+                {
+                    case LinkKind.Check:
+                        if (s == LinkStatus.Open && flow < -qTol) next = LinkStatus.Closed;
+                        else if (s == LinkStatus.Closed && fromLive && (!toLive || pFrom - pTo - elevation > hTol)) next = LinkStatus.Open;
+                        break;
+                    case LinkKind.Relief:
+                        if (s == LinkStatus.Open && flow < -qTol) next = LinkStatus.Closed;
+                        else if (s == LinkStatus.Closed && fromLive && pFrom - pTo - elevation > l.Setting + hTol) next = LinkStatus.Open;
+                        break;
+                    case LinkKind.Regulator:
+                    {
+                        double set = l.Setting;
+                        if (s == LinkStatus.Active)
+                        {
+                            if (flow < -qTol) next = LinkStatus.Closed;
+                            else if (pFrom < set - hTol) next = LinkStatus.Open;
+                        }
+                        else if (s == LinkStatus.Open)
+                        {
+                            if (flow < -qTol) next = LinkStatus.Closed;
+                            else if (pTo > set + hTol) next = LinkStatus.Active;
+                        }
+                        else if (fromLive)
+                        {
+                            if (pFrom > set + hTol && (!toLive || pTo < set - hTol)) next = LinkStatus.Active;
+                            else if (pFrom < set - hTol && (!toLive || pFrom > pTo + hTol)) next = LinkStatus.Open;
+                        }
+                        break;
+                    }
+                }
+                if (next == s) continue;
+                status[k] = next;
+                changes++;
+            }
+            return changes;
         }
 
         /// <summary>
@@ -287,18 +445,21 @@ namespace HeadLoss.Sim.Network
         {
             int nodeCount = graph.Nodes.Count;
             var adjacencyStart = new int[nodeCount + 1];
-            foreach (NetworkLink l in graph.Links)
+            bool Open(int k) => graph.Links[k].IsOpen && (res.Status.Length == 0 || res.Status[k] != LinkStatus.Closed);
+            for (int k = 0; k < graph.Links.Count; k++)
             {
-                if (!l.IsOpen) continue;
+                if (!Open(k)) continue;
+                NetworkLink l = graph.Links[k];
                 adjacencyStart[l.From + 1]++;
                 adjacencyStart[l.To + 1]++;
             }
             for (int i = 0; i < nodeCount; i++) adjacencyStart[i + 1] += adjacencyStart[i];
             var adjacency = new int[adjacencyStart[nodeCount]];
             var fill = new int[nodeCount];
-            foreach (NetworkLink l in graph.Links)
+            for (int k = 0; k < graph.Links.Count; k++)
             {
-                if (!l.IsOpen) continue;
+                if (!Open(k)) continue;
+                NetworkLink l = graph.Links[k];
                 adjacency[adjacencyStart[l.From] + fill[l.From]++] = l.To;
                 adjacency[adjacencyStart[l.To] + fill[l.To]++] = l.From;
             }
@@ -323,7 +484,7 @@ namespace HeadLoss.Sim.Network
             for (int k = 0; k < graph.Links.Count; k++)
             {
                 NetworkLink l = graph.Links[k];
-                res.LinkActive[k] = l.IsOpen && res.NodeActive[l.From] && res.NodeActive[l.To] && l.From != l.To;
+                res.LinkActive[k] = Open(k) && res.NodeActive[l.From] && res.NodeActive[l.To] && l.From != l.To;
             }
         }
 
@@ -406,8 +567,9 @@ namespace HeadLoss.Sim.Network
                 }
                 default:
                 {
-                    // Vent grille or valve: pure K·ρ/(2A²)·Q|Q|.
-                    double kEff = l.Kind == LinkKind.Valve ? l.SumK / (l.Opening * l.Opening) : l.SumK;
+                    // Vent grille, valve, check valve or open regulator: pure K·ρ/(2A²)·Q|Q|. An open relief valve adds its
+                    // set pressure (it only passes flow above it).
+                    double kEff = l.SumK / (l.Opening * l.Opening);
                     double c = kEff * density / (2.0 * l.Area * l.Area);
                     double absQ = Math.Max(Math.Abs(flow), _s.ZeroFlowThreshold);
                     derivative = 2.0 * c * absQ;
@@ -415,7 +577,8 @@ namespace HeadLoss.Sim.Network
                     loss.FittingsDp = resistance;
                     loss.Velocity = flow / l.Area;
                     loss.Reynolds = density * Math.Abs(flow) * l.Diameter / (l.Area * viscosity);
-                    return resistance + elevation;
+                    double offset = l.Kind == LinkKind.Relief ? l.Setting : 0;
+                    return offset + resistance + elevation;
                 }
             }
         }
@@ -450,7 +613,9 @@ namespace HeadLoss.Sim.Network
                     res.Reynolds[k] = loss.Reynolds;
                     res.FrictionFactor[k] = loss.FrictionFactor;
                     res.DpFriction[k] = loss.FrictionDp;
-                    res.DpFittings[k] = loss.FittingsDp;
+                    res.DpFittings[k] = IsHeld(graph, res.Status, k)
+                        ? res.NodePressure[l.From] - res.NodePressure[l.To] - res.DpElevation[k]
+                        : loss.FittingsDp;
                 }
                 double c = fluid.SpeedOfSound(l.Temperature);
                 res.MachWarning[k] = Math.Abs(res.Velocity[k]) > 0.3 * c;

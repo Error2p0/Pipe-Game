@@ -4,15 +4,15 @@
     "displayName": "Round duct",
     "kind": "duct",
     "sizes": [
-      { "diameterMm": 80, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 100, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 125, "capacityUnits": 2, "tier": 1 },
-      { "diameterMm": 160, "capacityUnits": 2, "tier": 1 },
-      { "diameterMm": 200, "capacityUnits": 2, "tier": 2 },
-      { "diameterMm": 250, "capacityUnits": 3, "tier": 2 },
-      { "diameterMm": 315, "capacityUnits": 3, "tier": 3 },
-      { "diameterMm": 400, "capacityUnits": 4, "tier": 3 },
-      { "diameterMm": 500, "capacityUnits": 4, "tier": 4 }
+      {"diameterMm": 80, "capacityUnits": 1, "tier": 1},
+      {"diameterMm": 100, "capacityUnits": 1, "tier": 1},
+      {"diameterMm": 125, "capacityUnits": 2, "tier": 1},
+      {"diameterMm": 160, "capacityUnits": 2, "tier": 1},
+      {"diameterMm": 200, "capacityUnits": 2, "tier": 2},
+      {"diameterMm": 250, "capacityUnits": 3, "tier": 2},
+      {"diameterMm": 315, "capacityUnits": 3, "tier": 3},
+      {"diameterMm": 400, "capacityUnits": 4, "tier": 3},
+      {"diameterMm": 500, "capacityUnits": 4, "tier": 4}
     ]
   },
   {
@@ -20,14 +20,48 @@
     "displayName": "Pipe",
     "kind": "pipe",
     "sizes": [
-      { "diameterMm": 15, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 22, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 28, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 35, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 42, "capacityUnits": 1, "tier": 1 },
-      { "diameterMm": 54, "capacityUnits": 2, "tier": 1 },
-      { "diameterMm": 76, "capacityUnits": 2, "tier": 1 },
-      { "diameterMm": 108, "capacityUnits": 3, "tier": 1 }
+      {"diameterMm": 15, "capacityUnits": 1, "tier": 2},
+      {"diameterMm": 22, "capacityUnits": 1, "tier": 2},
+      {"diameterMm": 28, "capacityUnits": 1, "tier": 2},
+      {"diameterMm": 35, "capacityUnits": 1, "tier": 2},
+      {"diameterMm": 42, "capacityUnits": 1, "tier": 2},
+      {"diameterMm": 54, "capacityUnits": 2, "tier": 2},
+      {"diameterMm": 76, "capacityUnits": 2, "tier": 3},
+      {"diameterMm": 108, "capacityUnits": 3, "tier": 3}
+    ]
+  },
+  {
+    "id": "water-main",
+    "displayName": "Water main",
+    "kind": "main",
+    "utility": "water",
+    "capacityVelocity": 2.0,
+    "roughnessMm": 0.1,
+    "pricePerTile": 50,
+    "priceReferenceDiameterMm": 100,
+    "sizes": [
+      {"diameterMm": 100, "capacityUnits": 0, "tier": 2},
+      {"diameterMm": 150, "capacityUnits": 0, "tier": 2},
+      {"diameterMm": 200, "capacityUnits": 0, "tier": 3},
+      {"diameterMm": 300, "capacityUnits": 0, "tier": 3},
+      {"diameterMm": 400, "capacityUnits": 0, "tier": 4}
+    ]
+  },
+  {
+    "id": "power-cable",
+    "displayName": "Power cable",
+    "kind": "cable",
+    "utility": "power",
+    "capacityVelocity": 0,
+    "roughnessMm": 0,
+    "pricePerTile": 0,
+    "priceReferenceDiameterMm": 0,
+    "sizes": [
+      {"diameterMm": 0, "capacityUnits": 0, "tier": 3, "capacityKW": 50, "pricePerTile": 40},
+      {"diameterMm": 0, "capacityUnits": 0, "tier": 3, "capacityKW": 150, "pricePerTile": 90},
+      {"diameterMm": 0, "capacityUnits": 0, "tier": 3, "capacityKW": 400, "pricePerTile": 200},
+      {"diameterMm": 0, "capacityUnits": 0, "tier": 4, "capacityKW": 1000, "pricePerTile": 450},
+      {"diameterMm": 0, "capacityUnits": 0, "tier": 5, "capacityKW": 2500, "pricePerTile": 1000}
     ]
   }
 ]

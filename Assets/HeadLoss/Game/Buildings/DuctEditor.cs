@@ -19,6 +19,18 @@ namespace HeadLoss.Game.Buildings
         NotOnStraightDuct,
         /// <summary>The size, material or fitting is not unlocked yet.</summary>
         Locked,
+        /// <summary>A column, the stairwell or a protected room is in the way.</summary>
+        Blocked,
+        /// <summary>A vertical step outside a shaft.</summary>
+        NotInShaft,
+        /// <summary>The ceiling tiles are full (capacity units).</summary>
+        NoCeilingSpace,
+        /// <summary>The material does not carry this network's fluid.</summary>
+        WrongMaterial,
+        /// <summary>The part does not belong on this network (a damper on a water pipe, a pump in a duct).</summary>
+        WrongNetwork,
+        /// <summary>Equipment does not fit the floor space at its opening.</summary>
+        NoFloorSpace,
     }
 
     /// <summary>What occupies a tile of the duct layer.</summary>
@@ -59,6 +71,12 @@ namespace HeadLoss.Game.Buildings
             DrawError.Duplicate => "These points are already connected",
             DrawError.NotOnStraightDuct => "Place it on a straight duct, between fittings",
             DrawError.Locked => "Not unlocked yet (see the shop)",
+            DrawError.Blocked => "A column, the stairwell or a protected room is in the way",
+            DrawError.NotInShaft => "Risers run only through shafts",
+            DrawError.NoCeilingSpace => "Not enough ceiling space here",
+            DrawError.WrongMaterial => "That material does not carry this fluid",
+            DrawError.WrongNetwork => "That part does not fit this network",
+            DrawError.NoFloorSpace => "Not enough floor space here",
             _ => e.ToString(),
         };
 
@@ -70,13 +88,7 @@ namespace HeadLoss.Game.Buildings
             foreach (DuctSegment s in net.Segments)
             {
                 TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
-                (int dx, int dy) = a.DirectionTo(b);
-                var t = new TilePos(a.X + dx, a.Y + dy);
-                while (t != b)
-                {
-                    map[t] = new TileOccupant(0, s.Id);
-                    t = new TilePos(t.X + dx, t.Y + dy);
-                }
+                for (TilePos t = a.Toward(b); t != b; t = t.Toward(b)) map[t] = new TileOccupant(0, s.Id);
             }
             return map;
         }
@@ -95,10 +107,12 @@ namespace HeadLoss.Game.Buildings
             for (int i = 0; i < path.Count; i++)
             {
                 if (!layout.IsInside(path[i])) return DrawError.OutsideBuilding;
+                if (!layout.PipesAllowed(path[i])) return DrawError.Blocked;
                 if (i > 0)
                 {
-                    if (!path[i - 1].IsAdjacentTo(path[i])) return DrawError.NotOrthogonal;
-                    if (!layout.CanPass(path[i - 1], path[i])) return DrawError.CrossesWall;
+                    bool vertical = path[i - 1].IsVerticalNeighbour(path[i]);
+                    if (!vertical && !path[i - 1].IsAdjacentTo(path[i])) return DrawError.NotOrthogonal;
+                    if (!layout.CanPass(path[i - 1], path[i])) return vertical ? DrawError.NotInShaft : DrawError.CrossesWall;
                 }
             }
             var seen = new HashSet<TilePos>();
@@ -145,10 +159,7 @@ namespace HeadLoss.Game.Buildings
         /// </summary>
         static DrawError CrossingError(DuctNetworkState net, IReadOnlyList<TilePos> path, int i, TileOccupant o, int maxFreeDegree)
         {
-            (int ax, int ay) = path[i - 1].DirectionTo(path[i]);
-            (int bx, int by) = path[i].DirectionTo(path[i + 1]);
-            bool straight = ax == bx && ay == by;
-            if (!straight) return DrawError.Overlap;
+            if (!TilePos.Collinear(path[i - 1], path[i], path[i + 1])) return DrawError.Overlap;
             if (o.SegmentId != 0)
             {
                 if (Collinear(net, o.SegmentId, path[i - 1], path[i])) return DrawError.Overlap;
@@ -170,9 +181,72 @@ namespace HeadLoss.Game.Buildings
         {
             DuctSegment s = net.FindSegment(segmentId)!;
             TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
-            bool segHorizontal = a.Y == b.Y;
-            bool stepHorizontal = p.Y == q.Y;
-            return segHorizontal == stepHorizontal;
+            return Axis(a, b) == Axis(p, q);
+        }
+
+        /// <summary>0 = along x, 1 = along y, 2 = vertical (a riser).</summary>
+        public static int Axis(TilePos a, TilePos b) => a.F != b.F ? 2 : a.X != b.X ? 0 : 1;
+
+        /// <summary>True when the segment is a riser (between floors).</summary>
+        public static bool IsRiser(DuctNetworkState net, DuctSegment s) => net.FindNode(s.NodeA)!.Floor != net.FindNode(s.NodeB)!.Floor;
+
+        /// <summary>Every tile a segment covers, both ends included.</summary>
+        public static List<TilePos> Tiles(DuctNetworkState net, DuctSegment s)
+        {
+            TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
+            var list = new List<TilePos> { a };
+            for (TilePos t = a; t != b; ) { t = t.Toward(b); list.Add(t); }
+            return list;
+        }
+
+        /// <summary>
+        /// Ceiling capacity (<c>04-buildings.md</c> §Layers): the units a run would use on each tile, added to what
+        /// the other networks already use there, must fit <paramref name="capacity"/>. Within one network a tile holds
+        /// one run, so it counts the larger of the new pipe and what that network already has there.
+        /// </summary>
+        /// <param name="units">Capacity units of a segment of a network.</param>
+        /// <param name="newUnits">Units of the pipe being drawn.</param>
+        /// <param name="capacity">Units per tile.</param>
+        /// <param name="fullTile">The first tile that does not fit (when the result is false).</param>
+        public static bool FitsCeiling(BuildingState state, DuctNetworkState net, IReadOnlyList<TilePos> path, int newUnits,
+            System.Func<DuctNetworkState, DuctSegment, int> units, int capacity, out TilePos fullTile)
+        {
+            Dictionary<TilePos, int> others = new Dictionary<TilePos, int>(), own = new Dictionary<TilePos, int>();
+            foreach (DuctNetworkState n in state.Networks)
+                AddUsage(n, units, n == net ? own : others);
+            foreach (TilePos t in path)
+            {
+                int o = others.TryGetValue(t, out int a) ? a : 0;
+                int mine = own.TryGetValue(t, out int b) ? System.Math.Max(b, newUnits) : newUnits;
+                if (o + mine > capacity)
+                {
+                    fullTile = t;
+                    return false;
+                }
+            }
+            fullTile = default;
+            return true;
+        }
+
+        /// <summary>Units each tile of a network uses: the largest segment covering or ending on it (riser tiles included).</summary>
+        public static void AddUsage(DuctNetworkState net, System.Func<DuctNetworkState, DuctSegment, int> units, Dictionary<TilePos, int> usage)
+        {
+            var mine = new Dictionary<TilePos, int>();
+            foreach (DuctSegment s in net.Segments)
+            {
+                int u = units(net, s);
+                foreach (TilePos t in Tiles(net, s))
+                    if (!mine.TryGetValue(t, out int have) || have < u) mine[t] = u;
+            }
+            foreach (var kv in mine) usage[kv.Key] = (usage.TryGetValue(kv.Key, out int v) ? v : 0) + kv.Value;
+        }
+
+        /// <summary>Interior walls a run passes through without a door (core drilling, tier 2+).</summary>
+        public static int CoreDrills(BuildingLayout layout, IReadOnlyList<TilePos> path)
+        {
+            int n = 0;
+            for (int i = 1; i < path.Count; i++) if (layout.NeedsCoreDrill(path[i - 1], path[i])) n++;
+            return n;
         }
 
         /// <summary>Places a validated run. Corners get elbow nodes with <paramref name="smoothElbows"/>.</summary>
@@ -189,10 +263,8 @@ namespace HeadLoss.Game.Buildings
             var keys = new List<int> { startNode };
             for (int i = 1; i < path.Count - 1; i++)
             {
-                (int dx0, int dy0) = path[i - 1].DirectionTo(path[i]);
-                (int dx1, int dy1) = path[i].DirectionTo(path[i + 1]);
                 if (crossings.Contains(path[i])) keys.Add(NodeOrSplit(net, path[i]));
-                else if (dx0 != dx1 || dy0 != dy1) keys.Add(AddNode(net, path[i], smoothElbows));
+                else if (!TilePos.Collinear(path[i - 1], path[i], path[i + 1])) keys.Add(AddNode(net, path[i], smoothElbows));
             }
             keys.Add(endNode);
             for (int i = 0; i < keys.Count - 1; i++)
@@ -202,7 +274,7 @@ namespace HeadLoss.Game.Buildings
 
         static int AddNode(DuctNetworkState net, TilePos t, bool smooth)
         {
-            var n = new DuctNode { Id = net.NextNodeId++, X = t.X, Y = t.Y, Kind = DuctNodeKind.Free, SmoothFittings = smooth };
+            var n = new DuctNode { Id = net.NextNodeId++, X = t.X, Y = t.Y, Floor = t.F, Kind = DuctNodeKind.Free, SmoothFittings = smooth };
             net.Nodes.Add(n);
             return n.Id;
         }
@@ -295,13 +367,15 @@ namespace HeadLoss.Game.Buildings
             n.On = true;
             n.Vsd = false;
             n.Speed = 1;
+            n.Setting = 0;
         }
 
         /// <summary>Checks that an inline part can go on <paramref name="tile"/>: inside a straight duct, not on a fitting.</summary>
         public static DrawError ValidateInline(DuctNetworkState net, TilePos tile)
         {
             Occupancy(net).TryGetValue(tile, out TileOccupant o);
-            return o.SegmentId != 0 ? DrawError.None : DrawError.NotOnStraightDuct;
+            if (o.SegmentId == 0) return DrawError.NotOnStraightDuct;
+            return IsRiser(net, net.FindSegment(o.SegmentId)!) ? DrawError.NotOnStraightDuct : DrawError.None;
         }
 
         /// <summary>
@@ -399,7 +473,7 @@ namespace HeadLoss.Game.Buildings
                     if (count != 2 || s1 == null || s2 == null) continue;
                     if (!s1.SameSpec(s2)) continue;
                     TilePos a = net.FindNode(s1.Other(n.Id))!.Pos, b = net.FindNode(s2.Other(n.Id))!.Pos;
-                    if (a.X != b.X && a.Y != b.Y) continue;  // a corner
+                    if (!TilePos.Collinear(a, n.Pos, b)) continue;  // a corner (or a bend into a riser)
                     net.Segments.Remove(s1);
                     net.Segments.Remove(s2);
                     net.Nodes.Remove(n);
@@ -424,7 +498,7 @@ namespace HeadLoss.Game.Buildings
                 if (s.NodeA != n.Id && s.NodeB != n.Id) continue;
                 TilePos o = net.FindNode(s.Other(n.Id))!.Pos;
                 if (count == 0) first = o;
-                else if (count == 1 && first.HasValue) { if (first.Value.X == o.X || first.Value.Y == o.Y) return false; }
+                else if (count == 1 && first.HasValue && TilePos.Collinear(first.Value, n.Pos, o)) return false;
                 count++;
             }
             return count == 2;

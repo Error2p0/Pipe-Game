@@ -9,10 +9,10 @@
   },
   "solver": {
     "maxIterations": 60,
-    "flowTolerance": 1e-6,
-    "massImbalanceTolerance": 1e-9,
-    "gMinFactor": 1e-6,
-    "zeroFlowThreshold": 1e-9,
+    "flowTolerance": 1e-06,
+    "massImbalanceTolerance": 1e-09,
+    "gMinFactor": 1e-06,
+    "zeroFlowThreshold": 1e-09,
     "relaxation": 0.5,
     "divergenceIterations": 3,
     "initialVelocity": 1.0,
@@ -26,7 +26,11 @@
     "floorLayerOffset": 0.3,
     "ceilingLayerOffset": 2.7,
     "wallCavityLayerOffset": 1.5,
-    "budgetCapFactor": 1.6
+    "budgetCapFactor": 1.6,
+    "ceilingCapacity": 4,
+    "coreDrillPrice": 20,
+    "coreDrillTier": 2,
+    "wallCavityTier": 4
   },
   "heatmap": {
     "velocityAnchorMaxAir": 6.0,
@@ -38,16 +42,61 @@
     "pressureStepPa": 10,
     "flowAnchorMaxM3h": 100,
     "flowStepM3h": 50,
-    "temperatureAnchorC": [10, 30],
+    "temperatureAnchorC": [
+      10,
+      30
+    ],
     "temperatureStepK": 2,
-    "densityAnchor": [1.15, 1.25],
+    "densityAnchor": [
+      1.15,
+      1.25
+    ],
     "densityStep": 0.01,
     "roomAlpha": 0.55,
     "palettes": {
-      "viridis": ["#440154", "#472D7B", "#3B528B", "#2C728E", "#21918C", "#28AE80", "#5EC962", "#ADDC30", "#FDE725"],
-      "cividis": ["#00224E", "#123570", "#3B496C", "#575D6D", "#707173", "#8A8779", "#A69D75", "#C4B56C", "#E4CF5B", "#FEE838"],
-      "magma": ["#000004", "#1C1033", "#4F127B", "#812581", "#B5367A", "#E55064", "#FB8761", "#FEC287", "#FCFDBF"]
-    }
+      "viridis": [
+        "#440154",
+        "#472D7B",
+        "#3B528B",
+        "#2C728E",
+        "#21918C",
+        "#28AE80",
+        "#5EC962",
+        "#ADDC30",
+        "#FDE725"
+      ],
+      "cividis": [
+        "#00224E",
+        "#123570",
+        "#3B496C",
+        "#575D6D",
+        "#707173",
+        "#8A8779",
+        "#A69D75",
+        "#C4B56C",
+        "#E4CF5B",
+        "#FEE838"
+      ],
+      "magma": [
+        "#000004",
+        "#1C1033",
+        "#4F127B",
+        "#812581",
+        "#B5367A",
+        "#E55064",
+        "#FB8761",
+        "#FEC287",
+        "#FCFDBF"
+      ]
+    },
+    "pressureAnchorMaxWaterBar": 5,
+    "pressureStepWaterBar": 0.5,
+    "flowAnchorMaxWaterLps": 1,
+    "flowStepWaterLps": 0.5,
+    "densityAnchorWater": [
+      995,
+      1001
+    ]
   },
   "drawing": {
     "defaultMaterial": "galvanized-duct",
@@ -86,9 +135,27 @@
     "refundFraction": 0.5,
     "startingWallet": 40,
     "tickHz": 10,
-    "basePay": [0.05, 0.2, 5, 30, 180],
-    "tierFactor": [1, 5, 25, 125, 625],
-    "electricityTierFactor": [1, 1, 3, 10, 30]
+    "basePay": [
+      0.05,
+      0.2,
+      1.1,
+      30,
+      180
+    ],
+    "tierFactor": [
+      1,
+      5,
+      25,
+      125,
+      625
+    ],
+    "electricityTierFactor": [
+      1,
+      1,
+      3,
+      10,
+      30
+    ]
   },
   "crank": {
     "speedPerClick": 0.12,
@@ -114,14 +181,29 @@
     "reportMinimumSeconds": 60
   },
   "targets": {
-    "starterCrankPaysFanMinutes": [2, 3],
-    "paybackMinutes": [5, 10, 20, 40, 80],
-    "electricityShare": [0.10, 0.25]
+    "referenceMainTiles": 20,
+    "starterCrankPaysFanMinutes": [
+      2,
+      3
+    ],
+    "paybackMinutes": [
+      5,
+      10,
+      20,
+      40,
+      80
+    ],
+    "electricityShare": [
+      0.1,
+      0.25
+    ]
   },
   "audio": {
     "masterVolume": 0.5,
     "airflowGain": 0.12,
     "airflowFullM3h": 600,
+    "waterGain": 0.08,
+    "waterFullLps": 5,
     "airflowCutoffMinHz": 250,
     "airflowCutoffMaxHz": 1800,
     "humMinHz": 40,
@@ -138,7 +220,8 @@
     "turnPenalty": 0.6,
     "shortApproachPenalty": 12,
     "balancingPasses": 80,
-    "balanceTarget": 0.4
+    "balanceTarget": 0.4,
+    "coreDrillPenalty": 4
   },
   "difficulty": {
     "demandReferenceM3h": 120,
@@ -147,14 +230,24 @@
     "codeWeight": 0.25
   },
   "progression": {
-    "unlockOnline": [2, 3, 3, 2]
+    "unlockOnline": [
+      2,
+      3,
+      3,
+      2
+    ]
   },
   "climate": {
     "meanTemperatureC": 15,
     "dailyAmplitudeK": 6,
     "warmestHour": 15,
     "solarPeakWm2": 300,
-    "facadeFactors": { "south": 1.0, "west": 0.8, "east": 0.6, "north": 0.2 },
+    "facadeFactors": {
+      "south": 1.0,
+      "west": 0.8,
+      "east": 0.6,
+      "north": 0.2
+    },
     "sunriseHour": 6,
     "sunsetHour": 20,
     "wallU": 0.6,
@@ -181,5 +274,67 @@
     "backgroundHz": 0.2,
     "backgroundStepFactor": 4,
     "thermalHz": 1
+  },
+  "water": {
+    "mainsTemperatureC": 12,
+    "referenceConnectionFactor": 0.85,
+    "openEndK": 1.0
+  },
+  "failure": {
+    "forecastHours": 24,
+    "tickHz": 1,
+    "stressRate": 0.000277777777778,
+    "stressExponent": 1.5,
+    "weibullBeta": 3,
+    "weibullEta": 1,
+    "weepThreshold": 0.6,
+    "ageingRate": 0,
+    "repairStandardSeconds": 7200,
+    "repairEmergencySeconds": 180,
+    "repairEmergencyFactor": 5,
+    "repairPricePerMetre": 5,
+    "repairMinPrice": 10,
+    "hammerDurationSeconds": 2,
+    "accumulatorSurgeFactor": 0.2,
+    "valveCloseSeconds": 1,
+    "pumpChangeSeconds": 0.5,
+    "burstSeconds": 0.05,
+    "checkValveSeconds": 0.1
+  },
+  "power": {
+    "basicConnectionKW": 6,
+    "substationKW": 2000,
+    "tripDelaySeconds": 2,
+    "cableTier": 3
+  },
+  "city": {
+    "facilityPressure": {
+      "water": 400000,
+      "gas-lp": 7500,
+      "gas-mp": 200000,
+      "gas-hp": 700000,
+      "heating": 600000,
+      "special-gas": 1000000
+    },
+    "crossingCost": 300,
+    "drillingPerTile": 2000,
+    "corridorPerTile": 500,
+    "corridorCapacity": 4,
+    "tileCapacity": 2,
+    "fines": {
+      "under-house": 5,
+      "protected-site": 8,
+      "near-substation": 10,
+      "main-separation": 6,
+      "historic-foundations": 25
+    },
+    "depotFineFactor": 2,
+    "substationClearance": 2,
+    "mainSeparation": 1,
+    "solveIntervalSeconds": 5,
+    "capacityPasses": 5,
+    "couplingIterations": 3,
+    "couplingTolerance": 0.01,
+    "removeRefundFraction": 0.5
   }
 }

@@ -3,10 +3,65 @@
     "id": "noise",
     "displayName": "Noise",
     "kind": "operating",
-    "tiers": [1, 2, 3, 4, 5],
+    "tiers": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ],
     "buildingTypes": [],
-    "parameters": { "maxFaceVelocityBedroom": 2.5, "maxFaceVelocityOffice": 3.5 },
+    "parameters": {
+      "maxFaceVelocityBedroom": 2.5,
+      "maxFaceVelocityOffice": 3.5
+    },
     "reason": "Air vents above their code maximum pay nothing and show a quiet warning.",
     "why": "Duct noise rises sharply with air speed."
+  },
+  {
+    "id": "tap-pressure",
+    "displayName": "Tap pressure",
+    "kind": "operating",
+    "tiers": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {
+      "maxPressureBar": 5
+    },
+    "reason": "Taps above their code maximum pay nothing and show a quiet warning.",
+    "why": "Fixtures and safety limits."
+  },
+  {
+    "id": "no-water-above-electrics",
+    "displayName": "No water above electrics",
+    "kind": "layout",
+    "tiers": [
+      2,
+      3,
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {},
+    "reason": "No water pipe in the ceiling over an electrical room or the panel.",
+    "why": "A leak above electrics is dangerous."
+  },
+  {
+    "id": "fire-dampers",
+    "displayName": "Fire dampers",
+    "kind": "layout",
+    "tiers": [
+      3,
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {},
+    "reason": "Every duct crossing a fire wall needs a fire damper at the crossing.",
+    "why": "Fire walls split the building into fire compartments."
   }
 ]

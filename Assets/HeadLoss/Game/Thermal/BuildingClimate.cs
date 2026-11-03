@@ -41,7 +41,7 @@ namespace HeadLoss.Game.Thermal
         public static RoomGridLayout Build(DataRepository data, BuildingLayout b)
         {
             int k = PerTile(data);
-            var l = new RoomGridLayout { NX = b.Width * k, NY = b.Height * k, Floors = 1, RoomCount = b.Rooms.Count };
+            var l = new RoomGridLayout { NX = b.Width * k, NY = b.Height * k, Floors = b.Floors, RoomCount = b.Rooms.Count };
             int n = l.Cells;
             l.Room = new int[n];
             l.OpenE = new bool[n];
@@ -51,39 +51,41 @@ namespace HeadLoss.Game.Thermal
             l.Stair = new bool[n];
             l.RoomVolume = new float[b.Rooms.Count];
             float cell = (float)data.Balancing.RoomGrid.CellSize, height = (float)data.Balancing.RoomGrid.RoomHeight;
-            TilePos TileOf(int cx, int cy) => new TilePos(cx / k, cy / k);
-            for (int cy = 0; cy < l.NY; cy++)
-                for (int cx = 0; cx < l.NX; cx++)
-                {
-                    int c = l.Index(0, cx, cy);
-                    TilePos t = TileOf(cx, cy);
-                    int room = b.RoomIndexAt(t);
-                    l.Room[c] = room;
-                    if (room < 0) continue;
-                    l.RoomVolume[room] += cell * cell * height;
-                    if (cx + 1 < l.NX)
+            var types = BuildingLayout.RoomTypesFrom(data.Buildings);
+            for (int fi = 0; fi < b.Floors; fi++)
+            {
+                int floor = b.LowestFloor + fi;
+                TilePos TileOf(int cx, int cy) => new TilePos(cx / k, cy / k, floor);
+                bool Inside(int cx, int cy) => cx >= 0 && cy >= 0 && cx < l.NX && cy < l.NY && b.IsInside(TileOf(cx, cy));
+                // Air moves within a room and through doors (never through a core-drilled hole).
+                bool Open(TilePos a, TilePos o) => a == o || (b.IsInside(o) && (b.RoomIndexAt(a) == b.RoomIndexAt(o) || b.HasDoor(a, o)));
+                for (int cy = 0; cy < l.NY; cy++)
+                    for (int cx = 0; cx < l.NX; cx++)
                     {
-                        TilePos e = TileOf(cx + 1, cy);
-                        l.OpenE[c] = e == t || (b.IsInside(e) && b.CanPass(t, e));
+                        int c = l.Index(fi, cx, cy);
+                        TilePos t = TileOf(cx, cy);
+                        int room = b.RoomIndexAt(t);
+                        l.Room[c] = room;
+                        if (room < 0) continue;
+                        l.RoomVolume[room] += cell * cell * height;
+                        if (cx + 1 < l.NX) l.OpenE[c] = Open(t, TileOf(cx + 1, cy));
+                        if (cy + 1 < l.NY) l.OpenN[c] = Open(t, TileOf(cx, cy + 1));
+                        int outside = (Inside(cx - 1, cy) ? 0 : 1) + (Inside(cx + 1, cy) ? 0 : 1) + (Inside(cx, cy - 1) ? 0 : 1) + (Inside(cx, cy + 1) ? 0 : 1);
+                        l.ExteriorArea[c] = outside * cell * height;
+                        // Stairwells and shafts link the floors (vertical exchange).
+                        l.Stair[c] = types.TryGetValue(b.Rooms[room].Type, out BuildingLayout.RoomTypeInfo info) && (info.Shaft || info.BlocksPipes);
                     }
-                    if (cy + 1 < l.NY)
-                    {
-                        TilePos nn = TileOf(cx, cy + 1);
-                        l.OpenN[c] = nn == t || (b.IsInside(nn) && b.CanPass(t, nn));
-                    }
-                    int outside = (cx == 0 ? 1 : 0) + (cy == 0 ? 1 : 0) + (cx == l.NX - 1 ? 1 : 0) + (cy == l.NY - 1 ? 1 : 0);
-                    l.ExteriorArea[c] = outside * cell * height;
-                }
+            }
             foreach (DoorDef d in b.Doors)
             {
-                var a = new TilePos(d.X, d.Y);
+                var a = new TilePos(d.X, d.Y, d.Floor);
                 TilePos o = BuildingLayout.Neighbour(a, d.Side);
                 int ra = b.RoomIndexAt(a), rb = b.RoomIndexAt(o);
                 if (ra >= 0 && rb >= 0) l.Doors.Add((ra, rb));
                 foreach (TilePos t in new[] { a, o })
                     for (int i = 0; i < k; i++)
                         for (int j = 0; j < k; j++)
-                            if (b.InFootprint(t)) l.Door[l.Index(0, t.X * k + i, t.Y * k + j)] = true;
+                            if (b.InFootprint(t)) l.Door[l.Index(t.F - b.LowestFloor, t.X * k + i, t.Y * k + j)] = true;
             }
             return l;
         }
@@ -171,9 +173,11 @@ namespace HeadLoss.Game.Thermal
 
         IEnumerable<int> CellsOf(TilePos t)
         {
+            int f = t.F - _layout.LowestFloor;
+            if (f < 0 || f >= Grid.Floors) yield break;
             for (int i = 0; i < _perTile; i++)
                 for (int j = 0; j < _perTile; j++)
-                    yield return Grid.Index(0, t.X * _perTile + i, t.Y * _perTile + j);
+                    yield return Grid.Index(f, t.X * _perTile + i, t.Y * _perTile + j);
         }
 
         void AddSupply(TilePos t, double flow, double temperatureC)
@@ -211,7 +215,7 @@ namespace HeadLoss.Game.Thermal
             {
                 double gain = Climate.SolarGainW(w.Side, _data.Buildings.Generation.WindowAreaM2);
                 if (gain <= 0) continue;
-                var cells = new List<int>(CellsOf(new TilePos(w.X, w.Y)));
+                var cells = new List<int>(CellsOf(new TilePos(w.X, w.Y, w.Floor)));
                 foreach (int c in cells) Inputs.HeatLower[c] += (float)(gain / cells.Count);
             }
             if (network == null || result == null) return;
@@ -223,12 +227,12 @@ namespace HeadLoss.Game.Thermal
                 if (o == null) continue;
                 double q = Math.Max(0, result.Flow[kv.Value]);
                 double tK = Thermal != null && ThermalNetwork == network ? Thermal.LinkInT[kv.Value] : network.Graph.Links[kv.Value].Temperature;
-                var tile = new TilePos(o.X, o.Y);
+                TilePos tile = BuildingLayout.PosOf(o);
                 AddSupply(tile, q, Units.KToC(tK));
                 OutletDef def = _data.Outlet(o.Type);
                 (int dx, int dy) = Facing(o, tile);
                 int cx = tile.X * _perTile + (dx > 0 ? _perTile - 1 : 0), cy = tile.Y * _perTile + (dy > 0 ? _perTile - 1 : 0);
-                if (q > 0) Inputs.Jets.Add(new VentJet { Cell = Grid.Index(0, cx, cy), DirX = dx, DirY = dy, FaceVelocity = (float)(q / def.GrilleFaceAreaM2) });
+                if (q > 0) Inputs.Jets.Add(new VentJet { Cell = Grid.Index(tile.F - _layout.LowestFloor, cx, cy), DirX = dx, DirY = dy, FaceVelocity = (float)(q / def.GrilleFaceAreaM2) });
             }
             // Open ends discharge into the room; duct leaks enter the room under the duct.
             foreach (var kv in network.OpenEndLink)
@@ -303,8 +307,7 @@ namespace HeadLoss.Game.Thermal
         {
             var list = new List<TilePos>();
             if (!(SegmentTiles(network, segmentId) is (TilePos a, TilePos b))) return list;
-            (int dx, int dy) = a.DirectionTo(b);
-            for (TilePos t = a; ; t = new TilePos(t.X + dx, t.Y + dy))
+            for (TilePos t = a; ; t = t.Toward(b))
             {
                 list.Add(t);
                 if (t == b || list.Count > 512) break;

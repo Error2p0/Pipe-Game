@@ -61,6 +61,31 @@ namespace HeadLoss.Core
         /// <summary>Velocity (m/s).</summary>
         public static string FormatVelocity(double ms) => Number(ms, 2) + " m/s";
 
+        /// <summary>Water flow, shown in L/s.</summary>
+        /// <param name="m3s">m³/s.</param>
+        public static string FormatWaterFlow(double m3s) => Number(m3s * 1000, Math.Abs(m3s) < 1e-3 ? 3 : 2) + " L/s";
+
+        /// <summary>Pressure in bar (water).</summary>
+        /// <param name="pa">Pa.</param>
+        public static string FormatBar(double pa) => Number(pa / PaPerBar, 2) + " bar";
+
+        /// <summary>A pressure in the unit of a fluid: Pa for air, bar for liquids.</summary>
+        public static string FormatPressure(double pa, string fluid) => fluid == "air" ? FormatPa(pa) : FormatBar(pa);
+
+        /// <summary>A flow in the unit of a fluid: m³/h for air, L/s for liquids.</summary>
+        public static string FormatFlow(double m3s, string fluid) => fluid == "air" ? FormatAirFlow(m3s) : FormatWaterFlow(m3s);
+
+        /// <summary>A calm duration: "45 s", "12 min", "3.5 h", "2 days".</summary>
+        /// <param name="seconds">s.</param>
+        public static string FormatDuration(double seconds)
+        {
+            if (double.IsInfinity(seconds) || double.IsNaN(seconds)) return "never";
+            if (seconds < 90) return $"{Math.Max(0, seconds):0} s";
+            if (seconds < 5400) return $"{seconds / 60:0} min";
+            if (seconds < 172800) return Number(seconds / 3600, seconds < 36000 ? 1 : 0) + " h";
+            return $"{seconds / 86400:0} days";
+        }
+
         /// <summary>Air-side pressure (Pa) shown in Pa.</summary>
         public static string FormatPa(double pa) => Number(pa, Math.Abs(pa) < 10 ? 2 : 1) + " Pa";
 

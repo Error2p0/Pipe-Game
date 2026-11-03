@@ -4,7 +4,7 @@
   "currencySymbol": "$",
   "steam": { "appId": 480, "restartIfNecessary": false },
   "toolbox": {
-    "parts": ["damper", "inline-duct-fan"]
+    "parts": ["damper", "inline-duct-fan", "fire-damper", "shutoff-valve", "ball-valve", "balancing-valve", "check-valve", "pressure-reducing-valve", "relief-valve", "pressure-tank", "inline-booster-pump", "circulation-pump"]
   },
   "theme": {
     "paper": "#F4F1EA",
@@ -31,7 +31,10 @@
       "ward": "#7BB08A",
       "electrical-room": "#C7B05B",
       "plant-room": "#8A9AA6",
-      "protected-room": "#A65B5B"
+      "protected-room": "#A65B5B",
+      "shaft": "#7A7F86",
+      "stairwell": "#8E8A80",
+      "dining": "#B0855B"
     },
     "city": {
       "ground": "#EEEAE0",
@@ -79,7 +82,10 @@
       "ward": "#7BB08A",
       "electrical-room": "#C7B05B",
       "plant-room": "#8A9AA6",
-      "protected-room": "#A65B5B"
+      "protected-room": "#A65B5B",
+      "shaft": "#7A7F86",
+      "stairwell": "#8E8A80",
+      "dining": "#B0855B"
     },
     "city": {
       "ground": "#22292F",

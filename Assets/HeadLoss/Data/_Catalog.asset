@@ -49,8 +49,12 @@ MonoBehaviour:
     text: {fileID: 4900000, guid: d0eb796547780f446b26ca55a2a0c09f, type: 3}
   - path: handmade/small-house.json
     text: {fileID: 4900000, guid: 4f9c0c7a0a61a654ca17c64b90ecdea4, type: 3}
+  - path: handmade/tap-house.json
+    text: {fileID: 4900000, guid: 35a3ec2e8c2701d439765043b692d6f8, type: 3}
   - path: handmade/test-house.json
     text: {fileID: 4900000, guid: 24e6fead3f9622f4ea7b71e17edcf271, type: 3}
+  - path: handmade/water-house.json
+    text: {fileID: 4900000, guid: 5e5f4712a85a2d6409a30c837e50a998, type: 3}
   - path: materials.json
     text: {fileID: 4900000, guid: a42f9ff564640e1448f712dd3826effe, type: 3}
   - path: outlets.json

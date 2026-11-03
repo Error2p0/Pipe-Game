@@ -44,7 +44,7 @@ namespace HeadLoss.Game.Generation
             {
                 BuildingLayoutDef? def = BuildingGenerator.Generate(data, req, attempt);
                 if (def == null) continue;
-                var layout = new BuildingLayout(def);
+                var layout = BuildingLayout.From(data, def);
                 ReferenceResult r = AutoRouter.Build(data, layout);
                 last = new GeneratedBuilding
                 {

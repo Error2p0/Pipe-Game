@@ -2,9 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using HeadLoss.Core;
+using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game;
 using HeadLoss.Game.City;
 using HeadLoss.Game.Economy;
+using HeadLoss.Game.Progression;
 using HeadLoss.Game.Session;
 using HeadLoss.Unity.View;
 using UnityEngine;
@@ -12,10 +14,15 @@ using UnityEngine.UIElements;
 
 namespace HeadLoss.Unity.UI
 {
+    /// <summary>The city view's active tool.</summary>
+    public enum CityTool { None, Route, Corridor }
+
     /// <summary>
-    /// City view HUD (<c>11-ui-visuals-audio.md</c> §Screens): the city's name and how much of it is online, the
-    /// plot panel (difficulty hint on hover, the same panel with an Open button when a plot is selected by click or
-    /// tap), a "Start here" marker over the starter house, and a menu button.
+    /// City view HUD (<c>11-ui-visuals-audio.md</c> §Screens): the city's name and how much of it is online, the tools (route
+    /// a main or cable, utility corridor, utilisation heatmap with a per-utility filter, insurance and engineering
+    /// software), the live route quote, the plot panel (difficulty hint on hover, the same panel with an Open button when
+    /// a plot is selected by click or tap), the panel of a selected main, a "Start here" marker over the starter house,
+    /// and a menu button.
     /// </summary>
     public sealed class CityHud
     {
@@ -26,6 +33,55 @@ namespace HeadLoss.Unity.UI
         readonly Label _cityName, _cityStatus, _plotTitle, _plotStatus, _plotFacts, _plotDots, _plotNote, _startHere;
         readonly Button _open;
         readonly string _symbol;
+
+        // Tools.
+        readonly List<(string utility, Button button)> _utilityTabs = new List<(string, Button)>();
+        readonly DropdownField _size;
+        readonly List<double> _sizes = new List<double>();
+        readonly Button _routeTool, _corridorTool, _drilling, _heatmap, _insurance, _software;
+        readonly List<(string filter, Button button)> _filterTabs = new List<(string, Button)>();
+        readonly VisualElement _legend;
+        readonly Label _fines, _toolHint;
+        readonly VisualElement _routePanel, _mainPanel;
+        readonly Label _routeTitle, _mainTitle;
+        readonly List<Label> _routeLines = new List<Label>(), _mainLines = new List<Label>();
+        readonly Button _removeMain;
+        string _shownSizes = "";
+        static readonly float[] LegendStops = { 0f, 0.25f, 0.5f, 0.75f, 1f };
+        readonly List<Label> _legendChips = new List<Label>();
+        string _legendPalette = "";
+
+        /// <summary>Colours the legend from the heatmap palette in the settings.</summary>
+        public void SetLegendPalette(string palette)
+        {
+            if (palette == _legendPalette) return;
+            _legendPalette = palette;
+            for (int i = 0; i < _legendChips.Count; i++)
+            {
+                Color c = _ui.P.Ramp(palette, LegendStops[i]);
+                _legendChips[i].style.backgroundColor = c;
+                _legendChips[i].style.color = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b > 0.45f ? new Color(0.12f, 0.15f, 0.19f) : Color.white;
+            }
+        }
+
+        /// <summary>The active tool.</summary>
+        public CityTool Tool { get; set; }
+        /// <summary>The utility being routed: water or power.</summary>
+        public string Utility { get; private set; } = "water";
+        /// <summary>The main size to lay, mm.</summary>
+        public double DiameterMm { get; private set; } = 100;
+        /// <summary>The cable size to lay, kW.</summary>
+        public double CapacityKW { get; private set; }
+        /// <summary>Directional drilling: no recurring fines, no crossing cost, dear per tile.</summary>
+        public bool Drilled { get; private set; }
+        /// <summary>The utilisation heatmap is on.</summary>
+        public bool Heatmap { get; private set; }
+        /// <summary>Only this utility is drawn ("" = all).</summary>
+        public string Filter { get; private set; } = "";
+        /// <summary>The selected main or cable (0 = none).</summary>
+        public int SelectedMain { get; set; }
+        /// <summary>Audio cues the root plays and clears.</summary>
+        public bool Clicked, Laid;
         string _shownPlot = "";
         int _shownState = -1;
         float _next;
@@ -51,10 +107,74 @@ namespace HeadLoss.Unity.UI
             _startHere.style.backgroundColor = ui.P.Paper;
             _startHere.pickingMode = PickingMode.Ignore;
 
-            VisualElement city = ui.Panel(_layer, "hl-citypanel");
+            var left = new VisualElement { pickingMode = PickingMode.Ignore };
+            left.AddToClassList("hl-cityleft");
+            _layer.Add(left);
+            VisualElement city = ui.Panel(left, "hl-citypanel");
             _cityName = UiKit.Text(city, ctx.City!.Name, "hl-title");
             _cityStatus = UiKit.Text(city, "", "hl-subtitle");
             UiKit.Text(city, "Hover or tap a building to see what it needs. Open it to design its ducts.", "hl-subtitle");
+
+            VisualElement tools = ui.Panel(left, "hl-citytools");
+            UiKit.Text(tools, "Utilities", "hl-section");
+            VisualElement utilityRow = UiKit.Row(tools);
+            foreach ((string id, string name) in new[] { ("water", "Water"), ("power", "Power") })
+            {
+                string u = id;
+                _utilityTabs.Add((u, ui.Button(utilityRow, name, () => SetUtility(u))));
+            }
+            _size = new DropdownField();
+            _size.AddToClassList("hl-dropdown");
+            ui.StyleField(_size);
+            _size.RegisterValueChangedCallback(_ => ApplySize());
+            tools.Add(_size);
+            VisualElement toolRow = UiKit.Row(tools);
+            _routeTool = ui.Button(toolRow, "Route", () => Tool = Tool == CityTool.Route ? CityTool.None : CityTool.Route);
+            _corridorTool = ui.Button(toolRow, "Corridor", () => Tool = Tool == CityTool.Corridor ? CityTool.None : CityTool.Corridor);
+            _drilling = ui.Button(toolRow, "Drilling", () => Drilled = !Drilled);
+            _toolHint = UiKit.Text(tools, "", "hl-subtitle");
+
+            UiKit.Text(tools, "Heatmap", "hl-section");
+            _heatmap = ui.Button(tools, "Utilisation", () => Heatmap = !Heatmap);
+            VisualElement filterRow = UiKit.Row(tools);
+            foreach ((string id, string name) in new[] { ("", "All"), ("water", "Water"), ("power", "Power") })
+            {
+                string f = id;
+                _filterTabs.Add((f, ui.Button(filterRow, name, () => Filter = f)));
+            }
+            _legend = new VisualElement();
+            tools.Add(_legend);
+            UiKit.Text(_legend, "Share of capacity (0–100%)", "hl-subtitle");
+            VisualElement chips = UiKit.Row(_legend);
+            foreach (float at in LegendStops)
+            {
+                var chip = new Label($"{at * 100:0}");
+                chip.AddToClassList("hl-legend-chip");
+                chips.Add(chip);
+                _legendChips.Add(chip);
+            }
+            var over = new Label("100+");
+            over.AddToClassList("hl-legend-chip");
+            over.style.backgroundColor = ui.P.Warning;
+            over.style.color = Color.white;
+            chips.Add(over);
+
+            UiKit.Text(tools, "City services", "hl-section");
+            _fines = UiKit.Text(tools, "", "hl-readout-line");
+            _insurance = ui.Button(tools, "", ToggleInsurance);
+            _software = ui.Button(tools, "", () => { if (_ctx.BuyEngineeringSoftware()) Clicked = true; });
+
+            _routePanel = ui.Panel(left, "hl-routepanel");
+            _routeTitle = UiKit.Text(_routePanel, "", "hl-section");
+            for (int i = 0; i < 8; i++) _routeLines.Add(UiKit.Text(_routePanel, "", "hl-readout-line"));
+            _routePanel.style.display = DisplayStyle.None;
+
+            _mainPanel = ui.Panel(_layer, "hl-plotpanel");
+            _mainTitle = UiKit.Text(_mainPanel, "", "hl-title");
+            for (int i = 0; i < 5; i++) _mainLines.Add(UiKit.Text(_mainPanel, "", "hl-readout-line"));
+            _removeMain = ui.Button(_mainPanel, "Remove", RemoveSelected);
+            _removeMain.style.alignSelf = Align.FlexStart;
+            _mainPanel.style.display = DisplayStyle.None;
 
             _plotPanel = ui.Panel(_layer, "hl-plotpanel");
             _plotTitle = UiKit.Text(_plotPanel, "", "hl-title");
@@ -76,6 +196,197 @@ namespace HeadLoss.Unity.UI
 
         public void Dispose() => _layer.RemoveFromHierarchy();
 
+        void SetUtility(string utility)
+        {
+            Utility = utility;
+            _shownSizes = "";
+        }
+
+        void ToggleInsurance()
+        {
+            UtilityState? u = _ctx.Game.City?.Utilities;
+            if (u != null && _ctx.SetInsurance(!u.Insurance)) Clicked = true;
+        }
+
+        void RemoveSelected()
+        {
+            if (_ctx.RemoveMain(SelectedMain)) Clicked = true;
+            SelectedMain = 0;
+        }
+
+        void ApplySize()
+        {
+            if (_size.index < 0 || _size.index >= _sizes.Count) return;
+            if (Utility == "power") CapacityKW = _sizes[_size.index];
+            else DiameterMm = _sizes[_size.index];
+        }
+
+        /// <summary>The unlocked sizes of the utility in the dropdown (rebuilt when they change).</summary>
+        void RefreshSizes()
+        {
+            PipeFamilyDef? family = Utilities.FamilyFor(_ctx.Data, Utility);
+            int tier = Tech.UnlockedTier(_ctx.Game);
+            string key = $"{Utility}/{tier}";
+            bool any = false;
+            if (family != null)
+                foreach (PipeSizeDef s in family.Sizes) any |= _ctx.Game.City != null && Tech.Unlocked(_ctx.Game, s.Tier);
+            if (key != _shownSizes && family != null)
+            {
+                _shownSizes = key;
+                _sizes.Clear();
+                var names = new List<string>();
+                foreach (PipeSizeDef s in family.Sizes)
+                {
+                    if (!Tech.Unlocked(_ctx.Game, s.Tier)) continue;
+                    if (family.Kind == "cable")
+                    {
+                        _sizes.Add(s.CapacityKW);
+                        names.Add($"{s.CapacityKW:0} kW · {Units.FormatMoney(s.PricePerTile, _symbol)} per tile");
+                    }
+                    else
+                    {
+                        _sizes.Add(s.DiameterMm);
+                        double q = Utilities.CapacityM3s(family, s.DiameterMm);
+                        names.Add($"{s.DiameterMm:0} mm · {Units.M3sToM3h(q):0} m³/h · {Units.FormatMoney(Utilities.PricePerTile(_ctx.Data, family, s.DiameterMm, 0), _symbol)} per tile");
+                    }
+                }
+                _size.choices = names;
+                double current = Utility == "power" ? CapacityKW : DiameterMm;
+                int at = _sizes.IndexOf(current);
+                if (at < 0) at = 0;
+                if (_sizes.Count > 0)
+                {
+                    _size.SetValueWithoutNotify(names[at]);
+                    if (Utility == "power") CapacityKW = _sizes[at];
+                    else DiameterMm = _sizes[at];
+                }
+                else _size.SetValueWithoutNotify("");
+            }
+            _size.SetEnabled(any);
+            _routeTool.SetEnabled(any);
+            if (!any && Tool == CityTool.Route) Tool = CityTool.None;
+            int firstTier = family != null && family.Sizes.Count > 0 ? family.Sizes[0].Tier : 0;
+            string word = Utility == "power" ? "Cables" : "Water mains";
+            string hint = !any ? $"{word} unlock at tier {firstTier}. Until then {(Utility == "power" ? "every building has its basic connection." : "buildings with taps wait for water.")}"
+                : Tool == CityTool.Route ? Utility == "power" ? "Drag from a substation or a cable to a building. Right click cancels." : "Drag from the treatment plant or a main to a building. Right click cancels."
+                : Tool == CityTool.Corridor ? $"Click road tiles to add a shared trench: {_ctx.Data.Balancing.City.CorridorCapacity} lines per tile, {Units.FormatMoney(_ctx.Data.Balancing.City.CorridorPerTile, _symbol)} per tile."
+                : "Click a main or cable to see it.";
+            _toolHint.text = hint;
+        }
+
+        void RefreshTools()
+        {
+            RefreshSizes();
+            foreach ((string u, Button b) in _utilityTabs) _ui.Style(b, u == Utility);
+            _ui.Style(_routeTool, Tool == CityTool.Route);
+            _ui.Style(_corridorTool, Tool == CityTool.Corridor);
+            _ui.Style(_drilling, Drilled);
+            _drilling.text = Drilled ? $"Drilling on · +{Units.FormatMoney(_ctx.Data.Balancing.City.DrillingPerTile, _symbol)}/tile" : "Drilling off";
+            _ui.Style(_heatmap, Heatmap);
+            foreach ((string f, Button b) in _filterTabs) _ui.Style(b, f == Filter);
+            _legend.style.display = Heatmap ? DisplayStyle.Flex : DisplayStyle.None;
+
+            int violations = _ctx.CityViolations.Count;
+            _fines.text = violations > 0
+                ? $"Fines  {Units.FormatMoney(_ctx.FinesPerCycle, _symbol)} per cycle · {violations} violation{(violations == 1 ? "" : "s")}"
+                : "No routing violations";
+            _fines.style.color = violations > 0 ? _ui.P.Warning : _ui.P.Text;
+
+            MetaUpgradeDef? insurance = _ctx.Data.Upgrades.Meta.Find(m => m.Id == "insurance");
+            MetaUpgradeDef? software = _ctx.Data.Upgrades.Meta.Find(m => m.Id == "engineering-software");
+            UtilityState? ut = _ctx.Game.City?.Utilities;
+            if (insurance != null && ut != null)
+            {
+                bool ok = Tech.Unlocked(_ctx.Game, insurance.Tier);
+                _insurance.text = !ok ? $"Insurance · tier {insurance.Tier}" : ut.Insurance ? $"Insurance on · {insurance.PremiumFraction * 100:0}% of gross · fines ×{insurance.FineFactor:0.##}" : $"Insurance · {insurance.PremiumFraction * 100:0}% of gross · fines ×{insurance.FineFactor:0.##}";
+                _insurance.SetEnabled(ok);
+                _ui.Style(_insurance, ut.Insurance);
+            }
+            if (software != null && ut != null)
+            {
+                bool ok = Tech.Unlocked(_ctx.Game, software.Tier);
+                _software.text = ut.EngineeringSoftware ? "Engineering software owned" : ok ? $"Engineering software · {Units.FormatMoney(software.Price, _symbol)}" : $"Engineering software · tier {software.Tier}";
+                _software.SetEnabled(ok && !ut.EngineeringSoftware);
+            }
+            RefreshMain();
+        }
+
+        void RefreshMain()
+        {
+            MainState? m = SelectedMain != 0 ? _ctx.Game.City?.Utilities.Mains.Find(x => x.Id == SelectedMain) : null;
+            _mainPanel.style.display = m != null ? DisplayStyle.Flex : DisplayStyle.None;
+            if (m == null) return;
+            _plotPanel.style.display = DisplayStyle.None;
+            int line = 0;
+            void Line(string text)
+            {
+                _mainLines[line].text = text;
+                _mainLines[line].style.display = DisplayStyle.Flex;
+                line++;
+            }
+            _mainTitle.text = m.Utility == "power" ? $"Power cable · {m.CapacityKW:0} kW" : $"Water main · {m.DiameterMm:0} mm";
+            double metres = (m.Tiles.Count - 1) * _ctx.City!.TileMetres;
+            Line($"Length  {metres:0} m{(m.Drilled ? " · directionally drilled" : "")}");
+            double use = _ctx.CityResult != null && _ctx.CityResult.Utilisation.TryGetValue(m.Id, out double u) ? u : 0;
+            Line($"Utilisation  {use * 100:0}%{(use > 1 ? " · over capacity: the buildings it feeds share what it can carry" : "")}");
+            Line(m.Destination.Length > 0 ? $"Feeds  {_ctx.CityBuildings!.Hint(m.Destination)?.DisplayName ?? m.Destination}" : "A trunk: branch from it by routing from any of its tiles");
+            int here = 0;
+            foreach (CityViolation v in _ctx.CityViolations)
+                foreach (int[] t in m.Tiles)
+                    if (t[0] == v.X && t[1] == v.Y) { here++; break; }
+            if (here > 0) Line($"{here} tile{(here == 1 ? "" : "s")} in violation (fines every cycle until it moves)");
+            for (int i = line; i < _mainLines.Count; i++) _mainLines[i].style.display = DisplayStyle.None;
+            _removeMain.text = $"Remove · refund {Units.FormatMoney(m.Paid * _ctx.Data.Balancing.City.RemoveRefundFraction, _symbol)}";
+        }
+
+        /// <summary>Shows the route tool's quote (null hides the panel): cost, fines with each reason, resulting pressure, or why it cannot be laid.</summary>
+        public void ShowRoute(RouteQuote? q, WaterConnection? water)
+        {
+            _routePanel.style.display = q == null ? DisplayStyle.None : DisplayStyle.Flex;
+            if (q == null) return;
+            int line = 0;
+            void Line(string text, Color colour)
+            {
+                if (line >= _routeLines.Count) return;
+                _routeLines[line].text = text;
+                _routeLines[line].style.color = colour;
+                _routeLines[line].style.display = DisplayStyle.Flex;
+                line++;
+            }
+            if (!q.Valid && q.Error.Length > 0 && q.Error != "Drag at least one tile")
+            {
+                _routeTitle.text = "Cannot lay this route";
+                Line(q.Error, _ui.P.Warning);
+            }
+            else if (!q.Valid)
+            {
+                _routeTitle.text = "New route";
+                Line("Drag along the tile grid", _ui.P.Text);
+            }
+            else
+            {
+                _routeTitle.text = q.Destination.Length > 0 ? $"To {_ctx.CityBuildings!.Hint(q.Destination)?.DisplayName ?? q.Destination}" : "A trunk: end it on a building to connect it";
+                string parts = Units.FormatMoney(q.PipeCost, _symbol);
+                if (q.CrossingCost > 0) parts += $" + crossings {Units.FormatMoney(q.CrossingCost, _symbol)}";
+                if (q.DrillingCost > 0) parts += $" + drilling {Units.FormatMoney(q.DrillingCost, _symbol)}";
+                Line($"Cost  {Units.FormatMoney(q.Cost, _symbol)} ({parts})", _ui.P.Text);
+                if (water is WaterConnection w)
+                    Line(w.Share < 0.999 ? $"Connection  {Units.FormatBar(w.PressurePa)} · mains carry {w.Share * 100:0}% of its demand" : $"Connection  {Units.FormatBar(w.PressurePa)}", _ui.P.Text);
+                if (q.Violations.Count > 0)
+                {
+                    Line($"Fines  {Units.FormatMoney(q.FinesPerCycle, _symbol)} per cycle until it moves", _ui.P.Danger);
+                    var seen = new HashSet<string>();
+                    foreach (CityViolation v in q.Violations)
+                    {
+                        if (!seen.Add(v.Reason)) continue;
+                        int count = q.Violations.FindAll(x => x.Reason == v.Reason).Count;
+                        Line($"{v.Reason} · {count} tile{(count == 1 ? "" : "s")}", _ui.P.Danger);
+                    }
+                }
+            }
+            for (int i = line; i < _routeLines.Count; i++) _routeLines[i].style.display = DisplayStyle.None;
+        }
+
         /// <summary>True when the pointer (Input System screen coordinates, origin bottom-left) is over a HUD element.</summary>
         public bool IsPointerOverUi(Vector2 screen)
         {
@@ -94,6 +405,7 @@ namespace HeadLoss.Unity.UI
             _next = time + 0.25f;
             _shownPlot = plotId;
             _shownState = state;
+            RefreshTools();
 
             int online = 0;
             double net = 0;
@@ -102,9 +414,11 @@ namespace HeadLoss.Unity.UI
                 if (s.CommittedEvaluation.Online) online++;
                 net += s.CommittedEvaluation.Net;
             }
+            GameLoop.FinesPerSecond(_ctx, out double fines);
+            net -= fines + GameLoop.PremiumsPerSecond(_ctx);
             _cityStatus.text = $"{online} of {_ctx.City!.Plots.Count} buildings online · {Units.FormatMoneyRate(net, _symbol)}";
 
-            if (plotId.Length == 0)
+            if (plotId.Length == 0 || (SelectedMain != 0 && _mainPanel.style.display == DisplayStyle.Flex))
             {
                 _plotPanel.style.display = DisplayStyle.None;
                 return;
@@ -123,7 +437,8 @@ namespace HeadLoss.Unity.UI
             _plotStatus.text = Status(h);
             _plotDots.text = $"Difficulty  {new string('●', h.Dots)}{new string('○', 5 - h.Dots)}   · tier {h.Tier}";
             _plotFacts.text = Facts(h);
-            _plotNote.text = !h.Available ? h.UnavailableNote : selected ? "" : "Click to select · double-click to open";
+            string needs = h.Fluids.Contains("water") && !Tech.Unlocked(_ctx.Game, 2) ? "Requires water (tier 2) · " : "";
+            _plotNote.text = needs + (!h.Available ? h.UnavailableNote : selected ? "" : "Click to select · double-click to open");
             _open.style.display = selected && h.Available ? DisplayStyle.Flex : DisplayStyle.None;
             _plotStatus.style.color = _ctx.FindSession(plotId)?.CommittedEvaluation.Online == true ? _ui.P.Good : _ui.P.Text;
         }
@@ -132,11 +447,16 @@ namespace HeadLoss.Unity.UI
         {
             if (!h.Available) return "Not available yet";
             BuildingSession? s = _ctx.FindSession(h.PlotId);
-            if (s == null || (!s.Record.EverOnline && s.Committed.Air.Segments.Count == 0))
+            if (s == null || (!s.Record.EverOnline && s.Committed.Air.Segments.Count == 0 && s.Committed.Water.Segments.Count == 0))
                 return $"Not built yet · budget cap {Units.FormatMoney(h.BudgetCap, _symbol)}";
             BuildingEvaluation ev = s.CommittedEvaluation;
+            string paying = ev.Electricity > 0 ? $" · paying {Units.FormatMoneyRate(ev.Electricity, _symbol)} electricity" : "";
+            if (s.Record.PanelTripped) return $"Offline · panel tripped: {Units.FormatPower(s.RequestedPowerW)} of {s.PanelLimitKW:0.#} kW";
+            if (ev.Burst) return $"Burst · {Units.FormatMoneyRate(ev.Gross, _symbol)} until it is repaired{paying}";
             if (ev.Online) return $"Online · {Units.FormatMoneyRate(ev.Net, _symbol)}";
-            return $"Offline · {ev.BelowMinimum} below minimum" + (ev.Electricity > 0 ? $" · paying {Units.FormatMoneyRate(ev.Electricity, _symbol)} electricity" : "");
+            if (s.HasWater && !s.Supply.Connected) return "Offline · no city water: route a main here" + paying;
+            if (ev.BlockingViolations > 0) return $"Offline · blocked by {ev.BlockingViolations} code violation{(ev.BlockingViolations == 1 ? "" : "s")}" + paying;
+            return $"Offline · {ev.BelowMinimum} below minimum" + paying;
         }
 
         string Facts(DifficultyHint h)
@@ -149,14 +469,18 @@ namespace HeadLoss.Unity.UI
             if (h.Available)
             {
                 sb.Append($"\n{h.Outlets} outlets · about {Units.M3sToM3h(h.FlowDemand):0} m³/h in total");
+                if (_ctx.CityResult != null && _ctx.CityResult.Water.TryGetValue(h.PlotId, out WaterConnection water) && water.Connected)
+                    sb.Append($"\nCity water  {Units.FormatBar(water.PressurePa)}{(water.Share < 0.999 ? $" · mains carry {water.Share * 100:0}%" : "")}");
+                if (_ctx.CityResult != null && _ctx.CityResult.Power.TryGetValue(h.PlotId, out PowerConnection power) && power.Cabled)
+                    sb.Append($"\nCable  {power.ConnectionKW:0} kW · the city gives {power.AllocatedKW:0.#} kW");
                 sb.Append($"\nLongest run from the intake {h.MaxPathMetres:0} m · {h.Codes} code{(h.Codes == 1 ? "" : "s")} in force");
             }
-            foreach (var kv in h.FacilityDistances) sb.Append($"\n{Utility(kv.Key)} {kv.Value:0} m away");
+            foreach (var kv in h.FacilityDistances) sb.Append($"\n{FacilityName(kv.Key)} {kv.Value:0} m away");
             if (h.Fluids.Count == 1 && h.Fluids[0] == "air") sb.Append("\nAir comes from the building's own intake");
             return sb.ToString();
         }
 
-        static string Utility(string u) => u switch
+        static string FacilityName(string u) => u switch
         {
             "water" => "Water treatment plant",
             "gas" => "Gas receiving station",

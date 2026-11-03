@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **4 · Water, floors and power** (not started; begins on the user's go) (`docs/spec/14-roadmap.md`).
+Current phase: **4 · Water, floors and power** (in progress on branch `phase-4/water-core`, not merged yet) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -64,17 +64,23 @@ Task list from `14-roadmap.md` §Phase 3:
 
 Task list from `14-roadmap.md` §Phase 4:
 
-- [ ] 1. Water fluid, pipe materials (PVC, copper, steel), pipe sizes, wave speeds.
-- [ ] 2. Taps (demand nodes), mains-pressure-only connection, small booster pump, multistage pump, inline booster.
-- [ ] 3. Multi-floor buildings: floors, stairwells, shafts, risers, ghosts, floor switcher; tier 2–3 buildings with water.
-- [ ] 4. Layers: floor, ceiling with capacity units, (wall cavity stub for tier 4).
-- [ ] 5. City utility network: water treatment plant source, routing tool, mains sizes and capacity, violations and recurring fines, crossing costs, utility corridor, directional drilling, city solve with capacity sharing, utilisation heatmap, building ↔ city coupling.
-- [ ] 6. Burst model: ratings, stress, Weibull hazard, weeping, stress heatmap, burst effects on income (in game / offline), repairs (emergency / standard), shutoff isolation, relief valves, regulators, check valves, maintenance contracts.
-- [ ] 7. Water hammer surges and the pressure tank / accumulator.
-- [ ] 8. Building codes: noise, tap pressure, no water above electrics, fire dampers, constraints (walls, columns, protected rooms, core drilling); violation outlines and list.
-- [ ] 9. Electricity: basic connection until unlock; substations, cables, kW capacity, brownouts (furthest first), panels (basic → standard → large), trip and reset, connection kW, power heatmap.
-- [ ] 10. Pipe-wall leak sensors, engineering software (stress forecast), insurance.
-- [ ] 11. Tech unlocks to tier 3.
-- [ ] Carry-over from earlier phases: one duct per tile gives way to ceiling capacity (D8); stress readout (D15) and stress heatmap (D64); noise code checked by the code system instead of only the vent max (D37); larger equipment (centrifugal blower 2×1, EC fan 2×2) takes floor space on the floor layer (D62, phase-3 report).
+- [x] 1. Water fluid, pipe materials (PVC, copper, steel), pipe sizes, wave speeds.
+- [x] 2. Taps (demand nodes), mains-pressure-only connection, small booster pump, multistage pump, inline booster.
+- [x] 3. Multi-floor buildings: floors, stairwells, shafts, risers, ghosts, floor switcher; tier 2–3 buildings with water.
+- [x] 4. Layers: floor, ceiling with capacity units, (wall cavity stub for tier 4).
+- [x] 5. City utility network: water treatment plant source, routing tool, mains sizes and capacity, violations and recurring fines, crossing costs, utility corridor, directional drilling, city solve with capacity sharing, utilisation heatmap, building ↔ city coupling.
+- [x] 6. Burst model: ratings, stress, Weibull hazard, weeping, stress heatmap, burst effects on income (in game / offline), repairs (emergency / standard), shutoff isolation, relief valves, regulators, check valves, maintenance contracts.
+- [x] 7. Water hammer surges and the pressure tank / accumulator.
+- [x] 8. Building codes: noise, tap pressure, no water above electrics, fire dampers, constraints (walls, columns, protected rooms, core drilling); violation outlines and list.
+- [x] 9. Electricity: basic connection until unlock; substations, cables, kW capacity, brownouts (furthest first), panels (basic → standard → large), trip and reset, connection kW, power heatmap.
+- [x] 10. Pipe-wall leak sensors, engineering software (stress forecast), insurance.
+- [x] 11. Tech unlocks to tier 3.
+- [x] Carry-over from earlier phases: one duct per tile gives way to ceiling capacity (D8); stress readout (D15) and stress heatmap (D64); noise code checked by the code system instead of only the vent max (D37); larger equipment (centrifugal blower 2×1, EC fan 2×2) takes floor space on the floor layer (D62, phase-3 report).
 - [ ] Phase end: all tests green, Windows build in `Builds/phase-4/`, `docs/dev/phase-4-report.md`.
 - [ ] Gate playtest by the user. Checklist: push a water network above rating on purpose and see stress build visibly before any burst; bursts happen roughly when the forecast says; relief valves and shutoffs clearly limit the damage. Bursts feel fair, never arbitrary.
+
+### Session notes (2026-11-03, Phase 4 session 1)
+
+Done on `phase-4/water-core` (commits up to "city utility network"): water data, solver control valves (check, regulator, relief), floors/risers/water network/ceiling capacity/core drilling/floor space, multi-floor tier 2–3 generation with water and the 3D auto-router (200-seed solvability passes for tiers 1–3), save v3 (tier 2+ refunded and reset, D83), burst model (stress per edge, Weibull, isolation, income cut, repairs, water hammer, pressure tank), building codes, city mains/cables model + city solve + power allocation + panel trip/brownout + fines/insurance/meta actions (game side), floor-aware renderers and interaction. Decisions D71–D89 logged (D90 starvation pressure ∝ share² still to write up).
+
+Session 2 (same day): building HUD, city tools, offline timeline, tier 3 tuning, decisions D90–D105. See `docs/dev/phase-4-report.md`.

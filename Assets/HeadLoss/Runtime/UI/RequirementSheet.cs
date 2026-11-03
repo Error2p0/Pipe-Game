@@ -35,7 +35,7 @@ namespace HeadLoss.Unity.UI
             _panel.Add(scroll);
 
             UiKit.Text(scroll, $"Requirement sheet · {l.DisplayName}", "hl-title");
-            UiKit.Text(scroll, $"Tier {l.Tier} · 1 floor · {l.Width} × {l.Height} m · {l.Rooms.Count} room{(l.Rooms.Count == 1 ? "" : "s")}", "hl-subtitle");
+            UiKit.Text(scroll, $"Tier {l.Tier} · {l.Floors} floor{(l.Floors == 1 ? "" : "s")} · {l.Width} × {l.Height} m · {l.Rooms.Count} room{(l.Rooms.Count == 1 ? "" : "s")}", "hl-subtitle");
             Line(scroll, "The building earns only while every outlet gets at least its minimum. Between minimum and ideal an outlet pays its base rate; above the ideal it pays more, up to "
                 + $"{data.Balancing.Economy.CapMultiplier:0.#}× at the code maximum. Above the code maximum it pays nothing.");
 
@@ -54,13 +54,12 @@ namespace HeadLoss.Unity.UI
                 foreach (OutletPlacementDef o in kv.Value)
                 {
                     OutletDef def = data.Outlet(o.Type);
-                    OutletRequirementDef r = def.Tiers[l.Tier.ToString()];
-                    string unit = def.Unit == "m3/h" ? "m³/h" : def.Unit;
-                    RoomDef? room = l.RoomOf(new TilePos(o.X, o.Y));
-                    string where = room != null ? $" ({OutletList.NiceName(room.Id)})" : "";
-                    string max = r.Max > 0 ? $" · code max {r.Max:0.##} {unit} ({def.CodeMaxReason.ToLowerInvariant()})" : "";
+                    OutletRequirement r = BuildingEconomy.Requirement(data, l, o);
+                    RoomDef? room = l.RoomOf(BuildingLayout.PosOf(o));
+                    string where = room != null ? $" ({OutletList.NiceName(room.Id)}{(l.Floors > 1 ? ", " + BuildingViewStateName(o.Floor) : "")})" : "";
+                    string max = r.HasMax ? $" · code max {UiKit.FormatDelivery(def, r.Max)} ({def.CodeMaxReason.ToLowerInvariant()})" : "";
                     double pay = BuildingEconomy.BaseRate(data, def, l.Tier);
-                    Line(scroll, $"{OutletList.NiceName(o.Id)}{where} · {def.DisplayName.ToLowerInvariant()}: min {r.Min:0.##} · ideal {r.Ideal:0.##}{max} · base pay {Units.FormatMoneyRate(pay, symbol)}");
+                    Line(scroll, $"{OutletList.NiceName(o.Id)}{where} · {def.DisplayName.ToLowerInvariant()}: min {UiKit.FormatDelivery(def, r.Min)} · ideal {UiKit.FormatDelivery(def, r.Ideal)}{max} · base pay {Units.FormatMoneyRate(pay, symbol)}");
                 }
             }
 
@@ -69,7 +68,8 @@ namespace HeadLoss.Unity.UI
             {
                 EquipmentPlacementDef? pre = null;
                 foreach (EquipmentPlacementDef e in l.InitialEquipment) if (e.OpeningId == o.Id) pre = e;
-                string eq = pre != null ? $" · {data.EquipmentItem(pre.EquipmentId).DisplayName.ToLowerInvariant()} already in place" : " · empty: place a fan here";
+                string empty = o.Utility == "air" ? " · empty: place a fan here" : o.Utility == "water" ? " · route a water main here in the city view; mains pressure only, or place a pump" : "";
+                string eq = pre != null ? $" · {data.EquipmentItem(pre.EquipmentId).DisplayName.ToLowerInvariant()} already in place" : empty;
                 Line(scroll, $"{OutletList.NiceName(o.Id)} · {o.Utility} · {o.Facing} wall{eq}");
             }
 
@@ -77,13 +77,16 @@ namespace HeadLoss.Unity.UI
             Line(scroll, $"{Units.FormatMoney(session.BudgetCap, symbol)} for the first build. Until the building has been online once, the parts you commit here may not cost more than this. After that there is no cap.");
 
             UiKit.Text(scroll, "Codes in force", "hl-section");
+            HashSet<string> codes = HeadLoss.Game.Codes.CodeChecker.InForce(data, l);
             foreach (CodeDef c in data.Codes)
-                if (c.Tiers.Contains(l.Tier)) Line(scroll, $"{c.DisplayName}: {c.Reason} {c.Why}");
+                if (codes.Contains(c.Id)) Line(scroll, $"{c.DisplayName}: {c.Reason} {c.Why}");
 
             Button close = ui.Button(_panel, "Close (Tab)", () => Show(false));
             close.style.alignSelf = Align.FlexEnd;
             Show(false);
         }
+
+        static string BuildingViewStateName(int floor) => HeadLoss.Unity.View.BuildingViewState.FloorName(floor).ToLowerInvariant();
 
         static void Line(VisualElement parent, string text) => UiKit.Text(parent, text, "hl-readout-line");
 

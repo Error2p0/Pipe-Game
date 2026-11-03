@@ -10,8 +10,9 @@ namespace HeadLoss.Core.Data
     public static class DataValidator
     {
         static readonly HashSet<string> MaterialKinds = new HashSet<string> { "duct", "pipe" };
-        static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "filter" };
-        static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable" };
+        static readonly HashSet<string> FamilyKinds = new HashSet<string> { "duct", "pipe", "main", "cable" };
+        static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "check", "regulator", "relief", "filter" };
+        static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable", "none" };
         static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon" };
         static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };
@@ -80,7 +81,8 @@ namespace HeadLoss.Core.Data
             foreach (string id in data.Game.Toolbox.Parts)
             {
                 bool fan = data.FindEquipment(id)?.Placement == "inline";
-                bool valve = data.FindFitting(id)?.Model == "valve";
+                string? model = data.FindFitting(id)?.Model;
+                bool valve = model == "valve" || model == "check" || model == "regulator" || model == "relief" || id == "fire-damper";
                 if (!fan && !valve) errors.Add($"game.json toolbox: '{id}' is not an inline fan or valve");
             }
             foreach (var kv in t.RoomFills) Colour($"game.json theme.roomFills.{kv.Key}", kv.Value, errors);
@@ -249,6 +251,13 @@ namespace HeadLoss.Core.Data
                 Tier(w, m.Tier, errors);
                 foreach (string fl in m.Fluids)
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
+                if (m.Kind == "pipe")
+                {
+                    if (m.Walls.Count == 0) errors.Add($"{w}: pipes need wall thicknesses");
+                    if (!(m.WaveSpeed > 0)) errors.Add($"{w}: pipes need a wave speed");
+                    foreach (PipeWallDef wall in m.Walls)
+                        if (!(wall.WallMm > 0 && 2 * wall.WallMm < wall.DiameterMm)) errors.Add($"{w}: wall {wall.WallMm} mm does not fit {wall.DiameterMm} mm");
+                }
             }
         }
 
@@ -258,12 +267,28 @@ namespace HeadLoss.Core.Data
             {
                 string w = $"pipes.json '{p.Id}'";
                 Id("pipes.json", p.Id, errors);
-                if (!MaterialKinds.Contains(p.Kind)) errors.Add($"{w}: kind '{p.Kind}' unknown");
+                if (!FamilyKinds.Contains(p.Kind)) errors.Add($"{w}: kind '{p.Kind}' unknown");
                 if (p.Sizes.Count == 0) errors.Add($"{w}: no sizes");
+                bool city = p.Kind == "main" || p.Kind == "cable";
+                if (city && !Utilities.Contains(p.Utility)) errors.Add($"{w}: utility '{p.Utility}' unknown");
+                if (p.Kind == "main")
+                {
+                    Positive(w + " capacityVelocity", p.CapacityVelocity, errors);
+                    Positive(w + " pricePerTile", p.PricePerTile, errors);
+                    Positive(w + " priceReferenceDiameterMm", p.PriceReferenceDiameterMm, errors);
+                }
                 for (int i = 0; i < p.Sizes.Count; i++)
                 {
+                    Tier($"{w} sizes[{i}]", p.Sizes[i].Tier, errors);
+                    if (p.Kind == "cable")
+                    {
+                        Positive($"{w} sizes[{i}].capacityKW", p.Sizes[i].CapacityKW, errors);
+                        Positive($"{w} sizes[{i}].pricePerTile", p.Sizes[i].PricePerTile, errors);
+                        if (i > 0 && !(p.Sizes[i].CapacityKW > p.Sizes[i - 1].CapacityKW)) errors.Add($"{w}: sizes not ascending at {i}");
+                        continue;
+                    }
                     Positive($"{w} sizes[{i}].diameterMm", p.Sizes[i].DiameterMm, errors);
-                    if (p.Sizes[i].CapacityUnits < 1) errors.Add($"{w} sizes[{i}]: capacityUnits must be ≥ 1");
+                    if (!city && p.Sizes[i].CapacityUnits < 1) errors.Add($"{w} sizes[{i}]: capacityUnits must be ≥ 1");
                     if (i > 0 && !(p.Sizes[i].DiameterMm > p.Sizes[i - 1].DiameterMm)) errors.Add($"{w}: sizes not ascending at {i}");
                 }
             }
@@ -280,7 +305,15 @@ namespace HeadLoss.Core.Data
                 if (!FittingModels.Contains(ft.Model)) { errors.Add($"{w}: model '{ft.Model}' unknown"); continue; }
                 switch (ft.Model)
                 {
-                    case "fixed": Positive(w + " k", ft.K, errors); break;
+                    case "fixed":
+                    case "check": Positive(w + " k", ft.K, errors); break;
+                    case "regulator":
+                    case "relief":
+                        Positive(w + " k", ft.K, errors);
+                        Positive(w + " settingStep", ft.SettingStep, errors);
+                        if (!(ft.SettingMin > 0 && ft.SettingMin <= ft.DefaultSetting && ft.DefaultSetting <= ft.SettingMax))
+                            errors.Add($"{w}: need 0 < settingMin ≤ defaultSetting ≤ settingMax");
+                        break;
                     case "valve":
                         Positive(w + " k", ft.K, errors);
                         if (!(ft.MinOpening > 0 && ft.MinOpening <= 1)) errors.Add($"{w}: minOpening must be in (0, 1]");
@@ -310,7 +343,7 @@ namespace HeadLoss.Core.Data
                 if (!SpeedControls.Contains(e.SpeedControl)) errors.Add($"{w}: speedControl '{e.SpeedControl}' unknown");
                 if (!Placements.Contains(e.Placement)) errors.Add($"{w}: placement '{e.Placement}' unknown");
                 if (!PowerModels.Contains(e.PowerModel)) errors.Add($"{w}: powerModel '{e.PowerModel}' unknown");
-                if (!Layers.Contains(e.Footprint.Layer)) errors.Add($"{w}: footprint.layer '{e.Footprint.Layer}' unknown");
+                if (!Layers.Contains(e.Footprint.Layer) && e.Footprint.Layer != "none") errors.Add($"{w}: footprint.layer '{e.Footprint.Layer}' unknown");
                 if (e.Footprint.Width < 1 || e.Footprint.Height < 1) errors.Add($"{w}: footprint must be ≥ 1×1");
                 foreach (string fl in e.Fluids)
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
@@ -319,6 +352,16 @@ namespace HeadLoss.Core.Data
                 {
                     if (!(e.EfficiencyFactor > 0 && e.EfficiencyFactor <= 1)) errors.Add($"{w}: efficiencyFactor must be in (0, 1]");
                     if (e.FitsCategories.Count == 0) errors.Add($"{w}: add-on fits no category");
+                    continue;
+                }
+                if (e.Category == "panel")
+                {
+                    Positive(w + " panelLimitKW", e.PanelLimitKW, errors);
+                    continue;
+                }
+                if (e.Curve.Count == 0)
+                {
+                    if (e.PowerModel == "curve") errors.Add($"{w}: powerModel curve needs a curve");
                     continue;
                 }
                 Positive(w + " connectionDiameterMm", e.ConnectionDiameterMm, errors);
@@ -365,6 +408,7 @@ namespace HeadLoss.Core.Data
                     OutletRequirementDef r = kv.Value;
                     if (!(r.Min > 0 && r.Ideal >= r.Min)) errors.Add($"{w} tier {kv.Key}: need 0 < min ≤ ideal");
                     if (r.Max != 0 && r.Max < r.Ideal) errors.Add($"{w} tier {kv.Key}: code max below ideal");
+                    if (o.Measured == "pressure" && !(r.DesignFlowLps > 0)) errors.Add($"{w} tier {kv.Key}: pressure outlets need designFlowLps");
                 }
             }
         }
@@ -397,12 +441,15 @@ namespace HeadLoss.Core.Data
                 Tier(w, b.Tier, errors);
                 if (b.Width < 1 || b.Height < 1) { errors.Add($"{w}: size must be ≥ 1×1"); return; }
                 if (b.Rooms.Count == 0) errors.Add($"{w}: no rooms");
+                var ids = new HashSet<string>();
+                foreach (RoomDef r in b.Rooms) if (!ids.Add(r.Id)) errors.Add($"{w}: room id '{r.Id}' used twice");
                 foreach (RoomDef r in b.Rooms)
                 {
                     Id(w + " rooms", r.Id, errors);
                     if (r.X < 0 || r.Y < 0 || r.Width < 1 || r.Height < 1 || r.X + r.Width > b.Width || r.Y + r.Height > b.Height)
                         errors.Add($"{w}: room '{r.Id}' outside the footprint");
                     if (data.FindRoomType(r.Type) == null) errors.Add($"{w}: room '{r.Id}' type '{r.Type}' unknown");
+                    if (r.Floor < b.LowestFloor || r.Floor >= b.LowestFloor + System.Math.Max(1, b.Floors)) errors.Add($"{w}: room '{r.Id}' floor {r.Floor} outside the building");
                     if (r.Occupants < 0 || r.MachinesW < 0) errors.Add($"{w}: room '{r.Id}' loads must be ≥ 0");
                 }
                 var openingIds = new HashSet<string>();
@@ -412,14 +459,10 @@ namespace HeadLoss.Core.Data
                     openingIds.Add(o.Id);
                     if (!Utilities.Contains(o.Utility)) errors.Add($"{w}: opening '{o.Id}' utility '{o.Utility}' unknown");
                     if (!Facings.Contains(o.Facing)) errors.Add($"{w}: opening '{o.Id}' facing '{o.Facing}' unknown");
-                    bool onEdge = o.Facing switch
-                    {
-                        "west" => o.X == 0,
-                        "east" => o.X == b.Width - 1,
-                        "south" => o.Y == 0,
-                        "north" => o.Y == b.Height - 1,
-                        _ => false,
-                    };
+                    // On an outside wall: the tile is in a room and the one beyond its facing wall is not (L and U shapes
+                    // have outside walls inside the bounding box).
+                    int bx = o.X + (o.Facing == "east" ? 1 : o.Facing == "west" ? -1 : 0), by = o.Y + (o.Facing == "north" ? 1 : o.Facing == "south" ? -1 : 0);
+                    bool onEdge = RoomAt(b, o.X, o.Y, o.Floor) >= 0 && RoomAt(b, bx, by, o.Floor) < 0;
                     if (!onEdge || o.X < 0 || o.Y < 0 || o.X >= b.Width || o.Y >= b.Height)
                         errors.Add($"{w}: opening '{o.Id}' is not on its {o.Facing} wall");
                 }
@@ -430,10 +473,10 @@ namespace HeadLoss.Core.Data
                     if (o.X < 0 || o.Y < 0 || o.X >= b.Width || o.Y >= b.Height) errors.Add($"{w}: outlet '{o.Id}' outside the footprint");
                     if (o.Min > 0 && !(o.Min < o.Ideal && (o.Max == 0 || o.Ideal <= o.Max))) errors.Add($"{w}: outlet '{o.Id}' needs min < ideal ≤ max");
                     if (o.Facing.Length > 0 && !Facings.Contains(o.Facing)) errors.Add($"{w}: outlet '{o.Id}' facing '{o.Facing}' unknown");
-                    if (RoomAt(b, o.X, o.Y) < 0) errors.Add($"{w}: outlet '{o.Id}' is not in a room");
+                    if (RoomAt(b, o.X, o.Y, o.Floor) < 0) errors.Add($"{w}: outlet '{o.Id}' is not in a room");
                 }
                 foreach (WindowDef win in b.Windows)
-                    if (!Facings.Contains(win.Side) || RoomAt(b, win.X, win.Y) < 0) errors.Add($"{w}: window at ({win.X}, {win.Y}) {win.Side} is not on a room wall");
+                    if (!Facings.Contains(win.Side) || RoomAt(b, win.X, win.Y, win.Floor) < 0) errors.Add($"{w}: window at ({win.X}, {win.Y}) {win.Side} is not on a room wall");
                 foreach (string code in b.Codes)
                     if (data.FindCode(code) == null) errors.Add($"{w}: code '{code}' unknown");
                 if (b.ReferenceCrankSpeed < 0 || b.ReferenceCrankSpeed > 1) errors.Add($"{w}: referenceCrankSpeed outside 0–1");
@@ -549,12 +592,12 @@ namespace HeadLoss.Core.Data
             }
         }
 
-        static int RoomAt(BuildingLayoutDef b, int x, int y)
+        static int RoomAt(BuildingLayoutDef b, int x, int y, int floor = 0)
         {
             for (int i = 0; i < b.Rooms.Count; i++)
             {
                 RoomDef r = b.Rooms[i];
-                if (x >= r.X && y >= r.Y && x < r.X + r.Width && y < r.Y + r.Height) return i;
+                if (r.Floor == floor && x >= r.X && y >= r.Y && x < r.X + r.Width && y < r.Y + r.Height) return i;
             }
             return -1;
         }
@@ -567,7 +610,7 @@ namespace HeadLoss.Core.Data
                 if (!Facings.Contains(d.Side)) { errors.Add($"{where}: side unknown"); continue; }
                 int nx = d.X + (d.Side == "east" ? 1 : d.Side == "west" ? -1 : 0);
                 int ny = d.Y + (d.Side == "north" ? 1 : d.Side == "south" ? -1 : 0);
-                int ra = RoomAt(b, d.X, d.Y), rb = RoomAt(b, nx, ny);
+                int ra = RoomAt(b, d.X, d.Y, d.Floor), rb = RoomAt(b, nx, ny, d.Floor);
                 if (ra < 0 || rb < 0) errors.Add($"{where}: not between two rooms");
                 else if (ra == rb) errors.Add($"{where}: both sides are the same room");
             }

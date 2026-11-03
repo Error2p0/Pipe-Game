@@ -1,13 +1,95 @@
 {
   "ductSealing": [
-    { "id": "unsealed", "displayName": "Unsealed", "tier": 1, "leakageCoefficient": 1.0e-4, "pricePerMetre": 0 },
-    { "id": "sealed", "displayName": "Sealed joints", "tier": 2, "leakageCoefficient": 2.5e-5, "pricePerMetre": 0.3 },
-    { "id": "premium-sealed", "displayName": "Premium sealing", "tier": 4, "leakageCoefficient": 8.0e-6, "pricePerMetre": 0.8 }
+    {
+      "id": "unsealed",
+      "displayName": "Unsealed",
+      "tier": 1,
+      "leakageCoefficient": 0.0001,
+      "pricePerMetre": 0
+    },
+    {
+      "id": "sealed",
+      "displayName": "Sealed joints",
+      "tier": 2,
+      "leakageCoefficient": 2.5e-05,
+      "pricePerMetre": 0.3
+    },
+    {
+      "id": "premium-sealed",
+      "displayName": "Premium sealing",
+      "tier": 4,
+      "leakageCoefficient": 8e-06,
+      "pricePerMetre": 0.8
+    }
   ],
   "leakageExponent": 0.65,
   "insulation": [
-    { "id": "insulation-13", "displayName": "Insulation 13 mm", "tier": 2, "thicknessMm": 13, "u": 1.5, "pricePerMetre": 0.5, "extraCapacityUnits": 1, "capacityAboveMm": 42 },
-    { "id": "insulation-25", "displayName": "Insulation 25 mm", "tier": 3, "thicknessMm": 25, "u": 0.8, "pricePerMetre": 1.2, "extraCapacityUnits": 1, "capacityAboveMm": 42 },
-    { "id": "insulation-50", "displayName": "Insulation 50 mm", "tier": 4, "thicknessMm": 50, "u": 0.45, "pricePerMetre": 2.5, "extraCapacityUnits": 1, "capacityAboveMm": 42 }
+    {
+      "id": "insulation-13",
+      "displayName": "Insulation 13 mm",
+      "tier": 2,
+      "thicknessMm": 13,
+      "u": 1.5,
+      "pricePerMetre": 0.5,
+      "extraCapacityUnits": 1,
+      "capacityAboveMm": 42
+    },
+    {
+      "id": "insulation-25",
+      "displayName": "Insulation 25 mm",
+      "tier": 3,
+      "thicknessMm": 25,
+      "u": 0.8,
+      "pricePerMetre": 1.2,
+      "extraCapacityUnits": 1,
+      "capacityAboveMm": 42
+    },
+    {
+      "id": "insulation-50",
+      "displayName": "Insulation 50 mm",
+      "tier": 4,
+      "thicknessMm": 50,
+      "u": 0.45,
+      "pricePerMetre": 2.5,
+      "extraCapacityUnits": 1,
+      "capacityAboveMm": 42
+    }
+  ],
+  "meta": [
+    {
+      "id": "leak-sensors",
+      "displayName": "Pipe-wall leak sensors",
+      "tier": 3,
+      "kind": "per-network",
+      "price": 500,
+      "notes": "Alert as soon as a segment starts weeping, with the expected time to a burst"
+    },
+    {
+      "id": "engineering-software",
+      "displayName": "Engineering software",
+      "tier": 3,
+      "kind": "one-off",
+      "price": 25000,
+      "notes": "Shows a pipe stress forecast in design mode before you commit"
+    },
+    {
+      "id": "insurance",
+      "displayName": "Insurance",
+      "tier": 3,
+      "kind": "toggle",
+      "price": 0,
+      "premiumFraction": 0.03,
+      "fineFactor": 0.5,
+      "notes": "All fines halved, for a premium of 3% of gross income per cycle"
+    },
+    {
+      "id": "maintenance-contract",
+      "displayName": "Maintenance contract",
+      "tier": 2,
+      "kind": "per-building",
+      "price": 0,
+      "premiumFraction": 0.02,
+      "notes": "Bursts are repaired automatically while you are away, for 2% of the building's gross income per cycle"
+    }
   ]
 }

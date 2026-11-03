@@ -17,6 +17,8 @@ namespace HeadLoss.Game.Economy
         Overdelivery,
         /// <summary>Above the code maximum: the outlet pays 0 and shows a warning.</summary>
         AboveCodeMax,
+        /// <summary>Cut off by a closed shutoff: pays 0 but does not keep the building offline.</summary>
+        Isolated,
     }
 
     /// <summary>An outlet requirement in SI delivery units (flow m³/s, pressure Pa, heat W).</summary>

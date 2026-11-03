@@ -219,6 +219,7 @@
 
 .hl-readout {
     margin-top: 12px;
+    flex-shrink: 1;
 }
 
 .hl-readout-line {
@@ -356,10 +357,27 @@
 
 /* ---- city view ---- */
 
-.hl-citypanel {
+.hl-cityleft {
     position: absolute;
-    left: 16px; top: 16px;
-    width: 360px;
+    left: 16px; top: 16px; bottom: 80px;
+    width: 400px;
+}
+
+.hl-citytools {
+    margin-top: 10px;
+    flex-shrink: 1;
+}
+
+.hl-routepanel {
+    margin-top: 10px;
+    flex-shrink: 0;
+}
+
+.hl-legend-chip {
+    flex-grow: 1;
+    height: 22px;
+    font-size: 13px;
+    -unity-text-align: middle-center;
 }
 
 .hl-plotpanel {
@@ -422,4 +440,37 @@
     translate: -50% 0;
     width: 760px;
     padding: 20px;
+}
+
+.hl-viewbar {
+    margin-top: 10px;
+    flex-shrink: 0;
+}
+
+.hl-titlecard {
+    flex-shrink: 0;
+}
+
+.hl-toolbox {
+    flex-shrink: 1;
+}
+
+.hl-outlets {
+    max-height: 42%;
+}
+
+.hl-violations {
+    margin-top: 12px;
+}
+
+.hl-stress-track {
+    height: 8px;
+    margin-top: 6px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.hl-stress-fill {
+    height: 100%;
+    width: 0;
 }
