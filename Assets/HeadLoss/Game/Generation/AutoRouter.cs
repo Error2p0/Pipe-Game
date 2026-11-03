@@ -1001,15 +1001,17 @@ namespace HeadLoss.Game.Generation
                 (ev, snap) = SolveAll(data, layout, s, 0);
             }
             double x = WorstRatingRatio(data, net, snap.Water!, out _);
+            ev.ApplyViolations(Codes.CodeChecker.Check(data, layout, s));
             var r = new ReferenceResult
             {
                 State = s,
                 Evaluation = ev,
                 Cost = Pricing.Value(data, layout, s),
-                Solvable = ev.Online && ev.AboveCodeMax == 0 && x <= 1,
+                Solvable = ev.Online && ev.AboveCodeMax == 0 && x <= 1 && ev.BlockingViolations == 0,
             };
             if (!r.Solvable)
-                r.Reason = ev.BelowMinimum > 0 ? $"{ev.BelowMinimum} outlets below minimum" : ev.AboveCodeMax > 0 ? $"{ev.AboveCodeMax} outlets above code max" : $"pipe above rating (x {x:0.00})";
+                r.Reason = ev.BelowMinimum > 0 ? $"{ev.BelowMinimum} outlets below minimum" : ev.AboveCodeMax > 0 ? $"{ev.AboveCodeMax} outlets above code max"
+                    : ev.BlockingViolations > 0 ? ev.Violations[0].Reason : $"pipe above rating (x {x:0.00})";
             return r;
         }
 

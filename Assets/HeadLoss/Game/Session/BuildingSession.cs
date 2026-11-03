@@ -423,6 +423,8 @@ namespace HeadLoss.Game.Session
             Failures.DetectSurges(before, CommittedSnapshot);
             DesignEvaluation = BuildingEconomy.Evaluate(Data, Layout, d);
             CommittedEvaluation = c == null ? BuildingEconomy.Evaluate(Data, Layout, d) : BuildingEconomy.Evaluate(Data, Layout, c);
+            DesignEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, d.State));
+            CommittedEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, CommittedSnapshot.State));
             ApplyBurstCut(CommittedEvaluation, CommittedSnapshot, Committed);
             ApplyBurstCut(DesignEvaluation, d, State);
             SolveRevision++;
@@ -511,7 +513,9 @@ namespace HeadLoss.Game.Session
         {
             BuildingState copy = State.Clone();
             change(copy);
-            return BuildingEconomy.Evaluate(Data, Layout, SolveCopy(copy));
+            BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, SolveCopy(copy));
+            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, copy));
+            return ev;
         }
 
         /// <summary>
@@ -523,6 +527,7 @@ namespace HeadLoss.Game.Session
             var none = new Dictionary<int, double>();
             NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true));
             BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
+            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State));
             if (Failures.HasActiveBurst(snap, snap.State)) ev.ApplyBurst(Data.Balancing.Economy.OfflineBurstFactor);
             LastSteadySnapshot = snap;
             return ev;

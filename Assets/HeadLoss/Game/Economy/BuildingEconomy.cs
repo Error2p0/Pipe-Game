@@ -54,6 +54,24 @@ namespace HeadLoss.Game.Economy
         /// <summary>The gross before the burst cut, $/s.</summary>
         public double GrossBeforeBurst;
 
+        /// <summary>Layout code violations (each blocking one keeps the building offline).</summary>
+        public readonly List<Codes.Violation> Violations = new List<Codes.Violation>();
+        /// <summary>Blocking violations stop the building coming online (<c>09-codes.md</c>).</summary>
+        public int BlockingViolations;
+
+        /// <summary>Applies layout violations: any blocking one keeps the building offline (gross 0).</summary>
+        public void ApplyViolations(List<Codes.Violation> violations)
+        {
+            Violations.Clear();
+            Violations.AddRange(violations);
+            BlockingViolations = 0;
+            foreach (Codes.Violation v in violations) if (v.Blocking) BlockingViolations++;
+            if (BlockingViolations == 0 || !Online) return;
+            Online = false;
+            Gross = 0;
+            foreach (OutletStatus o in Outlets) o.Pay = 0;
+        }
+
         /// <summary>Applies the burst cut (<c>02-economy.md</c> §Income formula: burstFactor).</summary>
         public void ApplyBurst(double factor)
         {
@@ -81,8 +99,12 @@ namespace HeadLoss.Game.Economy
         {
             OutletDef def = data.Outlet(placement.Type);
             OutletRequirementDef tier = def.Tiers[layout.Tier.ToString()];
-            if (placement.Min <= 0) return OutletRequirement.FromDef(def, tier);
-            return OutletRequirement.FromDef(def, new OutletRequirementDef { Min = placement.Min, Ideal = placement.Ideal, Max = placement.Max });
+            var r = placement.Min <= 0 ? tier : new OutletRequirementDef { Min = placement.Min, Ideal = placement.Ideal, Max = placement.Max };
+            // The code maximum is the noise or tap-pressure code: it only applies where that code is in force (09).
+            string code = Codes.CodeChecker.CodeForOutlet(def);
+            if (code.Length > 0 && r.Max > 0 && !Codes.CodeChecker.InForce(data, layout).Contains(code))
+                r = new OutletRequirementDef { Min = r.Min, Ideal = r.Ideal, Max = 0 };
+            return OutletRequirement.FromDef(def, r);
         }
 
         /// <summary>Electrical input power of a device link, W (a variable-speed drive divides by its efficiency factor).</summary>
