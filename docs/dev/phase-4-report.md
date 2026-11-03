@@ -69,7 +69,7 @@ Tier 3 pays back far too fast against the target. Pay cannot fix it, because low
 ## Known issues
 
 - **Tiers 4 and 5 do not unlock yet.** There are no buildings for them (D104).
-- **Booster stations and substation upgrades** are Phase 5 task 8, as the roadmap says, so a long main and a substation's capacity cannot be improved yet.
+- **Booster stations and substation upgrades** are Phase 6 task 8, as the roadmap says, so a long main and a substation's capacity cannot be improved yet.
 - Weeping labels can overlap outlet labels in tight rooms; zoom in or select the pipe.
 - The route tool draws lines sharing a tile on top of each other (water offset from power, but two water lines overlap). The main's panel tells you which one you selected.
 - Saves and settings live in `AppData/LocalLow/Elevate Studios/Head Loss/saves/`: the product name changed after D70 was written. If you set up Steam Auto-Cloud with the old `Pipe Game` subdirectory (D69), point it at `Head Loss`. Saves from before that rename are still in the `Pipe Game` folder.
