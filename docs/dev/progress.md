@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **4 · Water, floors and power** (not started; begins on the user's go) (`docs/spec/14-roadmap.md`).
+Current phase: **4 · Water, floors and power** (in progress on branch `phase-4/water-core`, not merged yet) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -64,17 +64,28 @@ Task list from `14-roadmap.md` §Phase 3:
 
 Task list from `14-roadmap.md` §Phase 4:
 
-- [ ] 1. Water fluid, pipe materials (PVC, copper, steel), pipe sizes, wave speeds.
-- [ ] 2. Taps (demand nodes), mains-pressure-only connection, small booster pump, multistage pump, inline booster.
+- [x] 1. Water fluid, pipe materials (PVC, copper, steel), pipe sizes, wave speeds.
+- [x] 2. Taps (demand nodes), mains-pressure-only connection, small booster pump, multistage pump, inline booster.
 - [ ] 3. Multi-floor buildings: floors, stairwells, shafts, risers, ghosts, floor switcher; tier 2–3 buildings with water.
 - [ ] 4. Layers: floor, ceiling with capacity units, (wall cavity stub for tier 4).
 - [ ] 5. City utility network: water treatment plant source, routing tool, mains sizes and capacity, violations and recurring fines, crossing costs, utility corridor, directional drilling, city solve with capacity sharing, utilisation heatmap, building ↔ city coupling.
 - [ ] 6. Burst model: ratings, stress, Weibull hazard, weeping, stress heatmap, burst effects on income (in game / offline), repairs (emergency / standard), shutoff isolation, relief valves, regulators, check valves, maintenance contracts.
 - [ ] 7. Water hammer surges and the pressure tank / accumulator.
-- [ ] 8. Building codes: noise, tap pressure, no water above electrics, fire dampers, constraints (walls, columns, protected rooms, core drilling); violation outlines and list.
+- [x] 8. Building codes (game side; violation outlines and list in the HUD still to do): noise, tap pressure, no water above electrics, fire dampers, constraints (walls, columns, protected rooms, core drilling); violation outlines and list.
 - [ ] 9. Electricity: basic connection until unlock; substations, cables, kW capacity, brownouts (furthest first), panels (basic → standard → large), trip and reset, connection kW, power heatmap.
 - [ ] 10. Pipe-wall leak sensors, engineering software (stress forecast), insurance.
 - [ ] 11. Tech unlocks to tier 3.
 - [ ] Carry-over from earlier phases: one duct per tile gives way to ceiling capacity (D8); stress readout (D15) and stress heatmap (D64); noise code checked by the code system instead of only the vent max (D37); larger equipment (centrifugal blower 2×1, EC fan 2×2) takes floor space on the floor layer (D62, phase-3 report).
 - [ ] Phase end: all tests green, Windows build in `Builds/phase-4/`, `docs/dev/phase-4-report.md`.
 - [ ] Gate playtest by the user. Checklist: push a water network above rating on purpose and see stress build visibly before any burst; bursts happen roughly when the forecast says; relief valves and shutoffs clearly limit the damage. Bursts feel fair, never arbitrary.
+
+### Session notes (2026-11-03, Phase 4 session 1)
+
+Done on `phase-4/water-core` (commits up to "city utility network"): water data, solver control valves (check, regulator, relief), floors/risers/water network/ceiling capacity/core drilling/floor space, multi-floor tier 2–3 generation with water and the 3D auto-router (200-seed solvability passes for tiers 1–3), save v3 (tier 2+ refunded and reset, D83), burst model (stress per edge, Weibull, isolation, income cut, repairs, water hammer, pressure tank), building codes, city mains/cables model + city solve + power allocation + panel trip/brownout + fines/insurance/meta actions (game side), floor-aware renderers and interaction. Decisions D71–D89 logged (D90 starvation pressure ∝ share² still to write up).
+
+Next session, in order:
+1. Fix the failing EditMode test `OfflineTests.CatchUp_SeventyTwoHours_WithinBudget` (net −70 M over 72 h: probably a T2+ session offline without a city water connection or the new power/fines path; check `OfflineCatchUp` with the city solve and burst sampling).
+2. Building HUD: network tabs (air/water), floor tabs + PageUp/PageDown, layer switcher (L), water sizes/materials/parts, riser buttons, regulator/relief setting sliders, shutoff open/close, water and power opening readouts (pump picker, panel, trip reset), tap rows and labels in bar, stress readout + engineering-software forecast, surge note, repair panel, leak sensors / maintenance contract, violation outlines and list.
+3. City view: route tool (utility, size, drilling), main selection/removal, corridors, utilisation heatmap (mains and cables), insurance and engineering software buttons.
+4. Offline: burst sampling and standard repairs/maintenance contracts in the catch-up.
+5. Tech unlocks to tier 3 (check shop/catalogue lists the new items), balancing report for tiers 2–3, PlayMode tests, 10-minute play check, Windows build, phase report.

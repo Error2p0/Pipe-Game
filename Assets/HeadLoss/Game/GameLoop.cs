@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HeadLoss.Core.Data;
+using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.City;
 using HeadLoss.Game.Generation;
@@ -28,6 +29,42 @@ namespace HeadLoss.Game
         public IReadOnlyList<string> Notes => _notes;
         /// <summary>Outside conditions for every building (the Unity layer sets the local hour).</summary>
         public Thermal.Climate Climate { get; }
+        /// <summary>The last city solve (null before the first one, or without a city).</summary>
+        public CityNetworkResult? CityResult { get; private set; }
+        /// <summary>Routing violations of the mains and cables (the last city solve).</summary>
+        public List<CityViolation> CityViolations { get; } = new List<CityViolation>();
+        /// <summary>Recurring routing fines, $ per income cycle.</summary>
+        public double FinesPerCycle { get; private set; }
+        /// <summary>Set when mains, cables or a building's draw changed: the city re-solves on the next tick.</summary>
+        public bool CityDirty { get; set; } = true;
+
+        /// <summary>
+        /// The city solve (<c>03-city.md</c> §City network solve): water connection pressures and shares, power allocations,
+        /// utilisation and fines; then every session gets its connection. Without a city each building keeps the
+        /// reference water pressure and the basic power connection.
+        /// </summary>
+        public void SolveCity()
+        {
+            CityDirty = false;
+            if (City == null) return;
+            UtilityState u = Game.City!.Utilities;
+            CityResult = CityNetwork.Solve(Data, City, u,
+                plot => FindSession(plot) is BuildingSession s ? s.WaterDemand() : 0,
+                plot => FindSession(plot) is BuildingSession s ? s.RequestedPowerW / 1000 : 0);
+            CityViolations.Clear();
+            FinesPerCycle = Utilities.Fines(Data, City, u, CityViolations);
+            foreach (BuildingSession s in _sessions)
+            {
+                WaterSupply supply = CityResult.Water.TryGetValue(s.Record.BuildingId, out WaterConnection w) && w.Connected
+                    ? new WaterSupply(true, w.PressurePa) : WaterSupply.None;
+                if (supply.Connected != s.Supply.Connected || System.Math.Abs(supply.PressurePa - s.Supply.PressurePa) > 1)
+                {
+                    s.Supply = supply;
+                    s.MarkDirty();
+                }
+                s.Power = CityResult.Power.TryGetValue(s.Record.BuildingId, out PowerConnection pc) ? pc : default;
+            }
+        }
 
         readonly List<BuildingSession> _sessions = new List<BuildingSession>();
         readonly List<string> _notes = new List<string>();
@@ -82,6 +119,80 @@ namespace HeadLoss.Game
             game.GeneratorVersion = Save.SaveSerializer.CurrentGeneratorVersion;
         }
 
+        // ---------- city actions (03 §Routing in the city view; 07 §City equipment, §Meta upgrades) ----------
+
+        /// <summary>Lays a main or cable along a path, paid at once. Returns the quote (Valid false = nothing laid).</summary>
+        public RouteQuote LayMain(string utility, double diameterMm, double capacityKW, IReadOnlyList<(int x, int y)> path, bool drilled)
+        {
+            var bad = new RouteQuote();
+            if (City == null || Game.City == null) { bad.Error = "No city"; return bad; }
+            PipeFamilyDef? family = Utilities.FamilyFor(Data, utility);
+            if (family == null) { bad.Error = "Nothing to route for this utility yet"; return bad; }
+            int tier = 99;
+            foreach (PipeSizeDef sz in family.Sizes)
+                if ((family.Kind == "cable" ? sz.CapacityKW == capacityKW : sz.DiameterMm == diameterMm)) tier = sz.Tier;
+            if (!Progression.Tech.Unlocked(Game, tier)) { bad.Error = $"Unlocks at tier {tier}"; return bad; }
+            RouteQuote q = Utilities.Quote(Data, City, Game.City.Utilities, utility, diameterMm, capacityKW, path, drilled);
+            if (!q.Valid) return q;
+            if (!Game.CanAfford(q.Cost))
+            {
+                q.Valid = false;
+                q.Error = Game.Debt > 0 ? "Purchases wait until the debt is repaid" : "Not enough money";
+                return q;
+            }
+            Game.Wallet -= q.Cost;
+            Utilities.Lay(Game.City.Utilities, utility, family.Id, diameterMm, capacityKW, path, drilled, q);
+            CityDirty = true;
+            return q;
+        }
+
+        /// <summary>Removes a main or cable (and branches that only it fed), refunding a share of what they cost.</summary>
+        public bool RemoveMain(int mainId)
+        {
+            if (Game.City == null) return false;
+            List<MainState> removed = Utilities.Remove(Game.City.Utilities, mainId);
+            if (removed.Count == 0) return false;
+            double refund = 0;
+            foreach (MainState m in removed) refund += m.Paid * Data.Balancing.City.RemoveRefundFraction;
+            Game.ApplyIncome(refund);
+            CityDirty = true;
+            return true;
+        }
+
+        /// <summary>Builds a utility corridor on a road tile (shared trench: four lines, no separation violations).</summary>
+        public bool BuildCorridor(int x, int y)
+        {
+            if (City == null || Game.City == null || !Utilities.CanBuildCorridor(City, Game.City.Utilities, x, y)) return false;
+            double price = Data.Balancing.City.CorridorPerTile;
+            if (!Game.CanAfford(price)) return false;
+            Game.Wallet -= price;
+            Utilities.BuildCorridor(Game.City.Utilities, x, y);
+            CityDirty = true;
+            return true;
+        }
+
+        /// <summary>Insurance on or off (tier 3): fines halved for a premium on gross income.</summary>
+        public bool SetInsurance(bool on)
+        {
+            if (Game.City == null) return false;
+            MetaUpgradeDef? def = Data.Upgrades.Meta.Find(m => m.Id == "insurance");
+            if (def == null || (on && !Progression.Tech.Unlocked(Game, def.Tier))) return false;
+            Game.City.Utilities.Insurance = on;
+            CityDirty = true;
+            return true;
+        }
+
+        /// <summary>Buys the engineering software (tier 3, one-off): the stress forecast in design mode.</summary>
+        public bool BuyEngineeringSoftware()
+        {
+            if (Game.City == null || Game.City.Utilities.EngineeringSoftware) return false;
+            MetaUpgradeDef? def = Data.Upgrades.Meta.Find(m => m.Id == "engineering-software");
+            if (def == null || !Progression.Tech.Unlocked(Game, def.Tier) || !Game.CanAfford(def.Price)) return false;
+            Game.Wallet -= def.Price;
+            Game.City.Utilities.EngineeringSoftware = true;
+            return true;
+        }
+
         /// <summary>A new game in a new city: the starting wallet, nothing built, the city view open.</summary>
         /// <param name="citySeed">The city seed (random unless the player enters one; chosen by the caller).</param>
         public static GameState NewGame(DataRepository data, ulong citySeed) =>
@@ -114,7 +225,11 @@ namespace HeadLoss.Game
         {
             GeneratedBuilding? g = CityBuildings != null ? CityBuildings.Get(r.BuildingId) : null;
             BuildingLayout layout = g?.Layout ?? FindLayout(r.BuildingId)!;
-            return new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate);
+            var s = new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate);
+            // In a city, water comes only through a routed main (the first city solve sets it).
+            if (City != null) s.Supply = WaterSupply.None;
+            CityDirty = true;
+            return s;
         }
 
         public BuildingSession? FindSession(string buildingId) => _sessions.Find(s => s.Record.BuildingId == buildingId);
@@ -173,12 +288,19 @@ namespace HeadLoss.Game
         public GameContext Context { get; }
         double _economyAccumulator;
         double _unlockAccumulator;
+        double _citySolve;
 
         public GameLoop(GameContext context) => Context = context;
 
         /// <param name="dtSeconds">Seconds since the last tick.</param>
         public void Tick(double dtSeconds)
         {
+            _citySolve += dtSeconds;
+            if (Context.CityDirty || _citySolve >= Context.Data.Balancing.City.SolveIntervalSeconds)
+            {
+                _citySolve = 0;
+                Context.SolveCity();
+            }
             foreach (BuildingSession s in Context.Sessions) s.Tick(dtSeconds);
             Context.Game.PlayTimeSeconds += dtSeconds;
             double step = 1.0 / Context.Data.Balancing.Economy.TickHz;
@@ -187,6 +309,7 @@ namespace HeadLoss.Game
             {
                 _economyAccumulator -= step;
                 EconomyStep(Context.Game, Context.Sessions, step);
+                CityCosts(Context, step);
             }
             _unlockAccumulator += dtSeconds;
             if (_unlockAccumulator >= 1.0)
@@ -201,6 +324,34 @@ namespace HeadLoss.Game
         /// seconds (gross only when online; electricity always). A building online for the first time drops its
         /// budget cap.
         /// </summary>
+        /// <summary>
+        /// City running costs, charged pro rata each tick (<c>02-economy.md</c> §Recurring fines): routing fines, and the
+        /// insurance premium (a share of every building's gross) when insured.
+        /// </summary>
+        public static void CityCosts(GameContext ctx, double dt)
+        {
+            GameState g = ctx.Game;
+            if (g.City == null) return;
+            double cycle = ctx.Data.Balancing.Economy.IncomeCycleSeconds;
+            double cost = ctx.FinesPerCycle / cycle;
+            if (g.City.Utilities.Insurance)
+            {
+                double gross = 0;
+                foreach (BuildingSession s in ctx.Sessions) gross += s.CommittedEvaluation.Gross;
+                MetaUpgradeDef? ins = ctx.Data.Upgrades.Meta.Find(m => m.Id == "insurance");
+                cost += gross * (ins?.PremiumFraction ?? 0);
+            }
+            foreach (BuildingSession s in ctx.Sessions)
+                if (s.Record.Failures.MaintenanceContract)
+                {
+                    MetaUpgradeDef? mc = ctx.Data.Upgrades.Meta.Find(m => m.Id == "maintenance-contract");
+                    cost += s.CommittedEvaluation.Gross * (mc?.PremiumFraction ?? 0);
+                }
+            if (cost <= 0) return;
+            g.ApplyIncome(-cost * dt);
+            g.LifetimeIncome -= cost * dt;
+        }
+
         public static void EconomyStep(GameState game, IReadOnlyList<BuildingSession> sessions, double dt)
         {
             foreach (BuildingSession s in sessions)

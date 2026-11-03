@@ -202,6 +202,7 @@ namespace HeadLoss.Game.Session
             HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasTaps(layout);
             Supply = new WaterSupply(true, ReferenceWaterPressure(data));
             Failures = new Failures.BuildingFailures(data, layout, record, Seeds.Derive(0x0FA1_0000UL, layout.Id));
+            if (record.PanelTripped) PowerSpeed = 0;
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
             CommittedEvaluation = DesignEvaluation;
@@ -321,6 +322,157 @@ namespace HeadLoss.Game.Session
         /// <summary>Speed factor on powered devices: 0 while the panel is tripped, cbrt(available/draw) in a brownout.</summary>
         public double PowerSpeed { get; set; } = 1;
 
+        /// <summary>The building's power connection from the city (the basic connection until a cable reaches it).</summary>
+        public City.PowerConnection Power { get; set; }
+        /// <summary>What the equipment asks for at full speed, W.</summary>
+        public double RequestedPowerW { get; private set; }
+        double _overPanel;
+
+        /// <summary>The panel's limit, kW (the basic panel when none is placed).</summary>
+        public double PanelLimitKW
+        {
+            get
+            {
+                foreach (EquipmentState e in Committed.Equipment)
+                    if (Data.FindEquipment(e.EquipmentId) is EquipmentDef d && d.Category == "panel") return d.PanelLimitKW;
+                return Data.FindEquipment("panel-basic")?.PanelLimitKW ?? 4;
+            }
+        }
+
+        /// <summary>The power connection, kW: the cable's capacity, or the basic connection.</summary>
+        public double ConnectionKW => Power.Cabled ? Power.ConnectionKW : Data.Balancing.Power.BasicConnectionKW;
+
+        /// <summary>Power the equipment can have, kW: min(panel limit, connection, city allocation).</summary>
+        public double AvailableKW => Math.Min(PanelLimitKW, Power.Cabled ? Math.Min(ConnectionKW, Power.AllocatedKW) : ConnectionKW);
+
+        /// <summary>
+        /// What the building draws from its water main, m³/s: the inflow of the built water network's last solve, or
+        /// (before one) the design flow of every connected tap.
+        /// </summary>
+        public double WaterDemand()
+        {
+            FluidSolve? w = CommittedSnapshot?.Water;
+            if (w != null && w.Compiled.SupplyNode >= 0) return Math.Max(0, w.Compiled.SupplyFlow(w.Result));
+            double q = 0;
+            foreach (OutletPlacementDef o in Layout.Outlets)
+            {
+                if (BuildingState.OutletFluid(o.Type) != "water") continue;
+                DuctNode? n = Committed.Water.Nodes.Find(x => x.Kind == DuctNodeKind.Outlet && x.AnchorId == o.Id);
+                if (n != null && Committed.Water.Degree(n.Id) > 0) q += NetworkCompiler.DesignFlow(Data, Layout, o);
+            }
+            return q;
+        }
+
+        // ---------- purchases that are not placed (07 §Meta upgrades) ----------
+
+        /// <summary>Buys pipe-wall leak sensors for a network (tier 3, paid at once).</summary>
+        public bool BuyLeakSensors(string fluid)
+        {
+            MetaUpgradeDef? def = Data.Upgrades.Meta.Find(m => m.Id == "leak-sensors");
+            if (def == null || Record.Failures.LeakSensors.Contains(fluid) || !Unlocked(def.Tier) || !Game.CanAfford(def.Price)) return false;
+            Game.Wallet -= def.Price;
+            Record.SpentTotal += def.Price;
+            Record.Failures.LeakSensors.Add(fluid);
+            return true;
+        }
+
+        /// <summary>Starts or ends the maintenance contract (a share of gross per cycle; crews come while you are away).</summary>
+        public bool SetMaintenanceContract(bool on, bool preferEmergency)
+        {
+            MetaUpgradeDef? def = Data.Upgrades.Meta.Find(m => m.Id == "maintenance-contract");
+            if (def == null || (on && !Unlocked(def.Tier))) return false;
+            Record.Failures.MaintenanceContract = on;
+            Record.Failures.PreferEmergency = preferEmergency;
+            return true;
+        }
+
+        /// <summary>
+        /// Books a crew for a burst on what is built (<c>08-failures.md</c> §Repairs), optionally fitting another material or size
+        /// in the same visit (its price difference is paid with the repair). Paid now, from the wallet.
+        /// </summary>
+        public bool Repair(string fluid, int committedSegmentId, bool emergency, string upgradeMaterial = "", double upgradeDiameterMm = 0)
+        {
+            DuctNetworkState net = Committed.Net(fluid);
+            DuctSegment? s = net.FindSegment(committedSegmentId);
+            if (s == null) return false;
+            string? edge = null;
+            List<string> edges = HeadLoss.Game.Failures.BuildingFailures.Edges(fluid, net, s);
+            foreach (Failures.BurstState b in Record.Failures.Bursts) if (b.Fluid == fluid && edges.Contains(b.Edge)) edge = b.Edge;
+            if (edge == null) return false;
+            double extra = 0;
+            if (upgradeMaterial.Length > 0 || upgradeDiameterMm > 0)
+            {
+                var up = s.Clone();
+                if (upgradeMaterial.Length > 0) up.MaterialId = upgradeMaterial;
+                if (upgradeDiameterMm > 0) up.DiameterMm = upgradeDiameterMm;
+                double metres = edges.Count * (DuctEditor.IsRiser(net, s) ? Data.Balancing.Building.FloorHeight : 1);
+                extra = Math.Max(0, (Pricing.SegmentPerMetre(Data, up) - Pricing.SegmentPerMetre(Data, s)) * metres);
+                if (!Unlocked(Progression.Tech.ItemTier(Data, up.MaterialId)) || !Unlocked(Progression.Tech.SizeTier(Data, up.MaterialId, up.DiameterMm))) return false;
+            }
+            bool ok = Failures.StartRepair(fluid, edge, emergency, upgradeMaterial, upgradeDiameterMm, net, s, price =>
+            {
+                if (!Game.CanAfford(price + extra)) return false;
+                Game.Wallet -= price + extra;
+                Record.SpentTotal += extra;
+                return true;
+            });
+            if (ok) MarkDirty();
+            return ok;
+        }
+
+        /// <summary>Resets a tripped panel (the player's click; it never resets by itself).</summary>
+        public bool ResetPanel()
+        {
+            if (!Record.PanelTripped) return false;
+            Record.PanelTripped = false;
+            _overPanel = 0;
+            PowerSpeed = 1;
+            MarkDirty();
+            return true;
+        }
+
+        /// <summary>
+        /// Panel trips and brownouts (<c>04-buildings.md</c> §Electrical panel, <c>03-city.md</c> §Electricity): a draw above the
+        /// panel limit for longer than the trip delay stops everything; a draw above what the connection and the city give
+        /// slows every fan and pump to s = cbrt(available / draw).
+        /// </summary>
+        void TickPower(double dt)
+        {
+            double speedNow = PowerSpeed;
+            double drawn = CommittedEvaluation.PowerW;
+            if (speedNow > 0.05) RequestedPowerW = drawn / (speedNow * speedNow * speedNow);
+            else if (!Record.PanelTripped) RequestedPowerW = drawn;
+            double requestedKW = RequestedPowerW / 1000;
+            if (Record.PanelTripped)
+            {
+                if (PowerSpeed != 0) { PowerSpeed = 0; MarkDirty(); }
+                return;
+            }
+            if (requestedKW > PanelLimitKW)
+            {
+                _overPanel += dt;
+                if (_overPanel > Data.Balancing.Power.TripDelaySeconds)
+                {
+                    Record.PanelTripped = true;
+                    PowerSpeed = 0;
+                    MarkDirty();
+                    PanelTrippedEvent?.Invoke();
+                    return;
+                }
+            }
+            else _overPanel = 0;
+            double supply = Power.Cabled ? Math.Min(ConnectionKW, Power.AllocatedKW) : ConnectionKW;
+            double target = requestedKW > supply && requestedKW > 0 ? Math.Cbrt(Math.Max(0, supply) / requestedKW) : 1;
+            if (Math.Abs(target - PowerSpeed) > 0.01)
+            {
+                PowerSpeed = target;
+                MarkDirty();
+            }
+        }
+
+        /// <summary>Raised when the panel trips (a calm notice).</summary>
+        public event Action? PanelTrippedEvent;
+
         double PowerSpeedFor(bool committed) => PowerSpeed;
 
         /// <summary>Compiles and solves a state with the given solvers (pure; safe on a worker thread).</summary>
@@ -355,6 +507,7 @@ namespace HeadLoss.Game.Session
         {
             UpdateCrank(dt);
             TickRooms(dt);
+            TickPower(dt);
             Failures.Tick(dt, CommittedSnapshot, Committed, Game.PlayTimeSeconds);
             Failures.TickRepairs(dt, Record);
             if (Failures.Revision != _failRev)

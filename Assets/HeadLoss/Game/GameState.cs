@@ -54,6 +54,8 @@ namespace HeadLoss.Game
         public int Index = 1;
         /// <summary>Highest tech tier unlocked in this city (<c>03-city.md</c> §Progression).</summary>
         public int UnlockedTier = 1;
+        /// <summary>Routed mains and cables, corridors and city-wide purchases (<c>03-city.md</c> §City utility network).</summary>
+        public City.UtilityState Utilities = new City.UtilityState();
     }
 
     /// <summary>Phase 2 settings kept in the save (unused since Phase 3: settings live in settings.json, D68).</summary>
