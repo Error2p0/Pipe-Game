@@ -132,7 +132,7 @@ Duct leakage `Q_leak = C_L · A_surface · p^0.65` per segment. Leakage classes:
 | --- | --- | --- | --- |
 | `elbow-90-sharp` | 1.2 (ducts), 0.9 (pipes) | 1 | Auto-placed at every 90° turn by default |
 | `elbow-90-long-radius` | 0.3 | 2 | Drawing option once unlocked; "upgrade bends" button per network |
-| `elbow-45-sharp` / `elbow-45-long` | 0.4 / 0.15 | 1 / 2 | Diagonal runs (tier 2+, 45° drawing mode) |
+| `elbow-45-sharp` / `elbow-45-long` | 0.4 / 0.15 | 1 / 2 | Not used: there is no 45° drawing (D106) |
 | `tee-sharp` | run 0.4, branch 1.0 | 1 | |
 | `tee-smooth` | run 0.2, branch 0.6 | 2 | |
 | `reducer` | contraction 0.2; expansion (1 − A₁/A₂)² | 1 | Auto-placed at size changes |

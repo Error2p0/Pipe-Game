@@ -50,7 +50,7 @@ Animated particles flow along pipes in every mode, speed matching velocity, so t
 The UI should scale cleanly to a phone screen later; avoid tiny click targets and hover-only information that has no tap equivalent.
 
 [impl]
-- Drawing: pick a network (fluid), size, material, fitting quality; left-drag from an existing node/opening; orthogonal by default, 45° mode from tier 2 (`Shift`). Right click or `Esc` cancels. Each placed corner shows its K and the pressure lost there as a small label while drawing. Snapping to openings, outlets and existing nodes. Tees are created by drawing from the middle of a segment.
+- Drawing: pick a network (fluid), size, material, fitting quality; left-drag from an existing node/opening; orthogonal only (no 45° mode, D106). Right click or `Esc` cancels. Each placed corner shows its K and the pressure lost there as a small label while drawing. Snapping to openings, outlets and existing nodes. Tees are created by drawing from the middle of a segment.
 - Selection: click a segment or equipment to select; box select with drag on empty space. Selection panel shows readouts and actions (upgrade, change size/material, insulate, delete, add valve).
 - Readout (hover or tap-select): Q (m³/h or L/s), v (m/s), p start/end (Pa, bar or mbar by fluid), Δp split (friction / fittings / elevation), Re, temperature, stress bar.
 - Undo/redo: `Ctrl+Z` / `Ctrl+Y` (and buttons). Unlimited in design mode; history cleared on leaving the building.
@@ -81,7 +81,6 @@ The UI should scale cleanly to a phone screen later; avoid tiny click targets an
 | C (hold/tap) | Crank the hand-crank fan |
 | R | Rotate equipment before placing |
 | Delete | Remove selection |
-| Shift (while drawing) | 45° mode (tier 2+) |
 | WASD / right-drag / wheel | Pan / pan / zoom |
 
 ## Accessibility and mobile readiness [impl]

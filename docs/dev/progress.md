@@ -77,10 +77,12 @@ Task list from `14-roadmap.md` §Phase 4:
 - [x] 11. Tech unlocks to tier 3.
 - [x] Carry-over from earlier phases: one duct per tile gives way to ceiling capacity (D8); stress readout (D15) and stress heatmap (D64); noise code checked by the code system instead of only the vent max (D37); larger equipment (centrifugal blower 2×1, EC fan 2×2) takes floor space on the floor layer (D62, phase-3 report).
 - [x] Phase end: all tests green, Windows build in `Builds/phase-4/`, `docs/dev/phase-4-report.md`.
-- [ ] Gate playtest by the user. Checklist: push a water network above rating on purpose and see stress build visibly before any burst; bursts happen roughly when the forecast says; relief valves and shutoffs clearly limit the damage. Bursts feel fair, never arbitrary.
+- [x] Gate playtest by the user: **passed 2026-11-04**.
 
 ### Session notes (2026-11-03, Phase 4 session 1)
 
 Done on `phase-4/water-core` (commits up to "city utility network"): water data, solver control valves (check, regulator, relief), floors/risers/water network/ceiling capacity/core drilling/floor space, multi-floor tier 2–3 generation with water and the 3D auto-router (200-seed solvability passes for tiers 1–3), save v3 (tier 2+ refunded and reset, D83), burst model (stress per edge, Weibull, isolation, income cut, repairs, water hammer, pressure tank), building codes, city mains/cables model + city solve + power allocation + panel trip/brownout + fines/insurance/meta actions (game side), floor-aware renderers and interaction. Decisions D71–D89 logged (D90 starvation pressure ∝ share² still to write up).
 
 Session 2 (same day): building HUD, city tools, offline timeline, tier 3 tuning, decisions D90–D105. See `docs/dev/phase-4-report.md`.
+
+Phase 4 complete and merged; report in `docs/dev/phase-4-report.md`. Gate passed 2026-11-04, with D74–D105 confirmed and no 45° drawing (D106).

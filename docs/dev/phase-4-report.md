@@ -1,6 +1,6 @@
 # Phase 4 report · Water, floors and power
 
-Status: **waiting for your playtest of the gate.** Everything is merged to `main` from `phase-4/water-core`. The build is `Builds/phase-4/HeadLoss.exe`.
+Status: **gate passed 2026-11-04.** Decisions confirmed by the user; no 45° drawing (D106). Everything is merged to `main` from `phase-4/water-core`. The build is `Builds/phase-4/HeadLoss.exe`.
 
 ## What was built
 
@@ -68,7 +68,6 @@ Tier 3 pays back far too fast against the target. Pay cannot fix it, because low
 
 ## Known issues
 
-- **45° drawing is not built.** 11 asks for a 45° mode from tier 2 (Shift). The roadmap gives it no phase and pipes run on the tile grid, so it would be a sizeable change to the drawing model (D106). Your call; see below.
 - **Tiers 4 and 5 do not unlock yet.** There are no buildings for them (D104).
 - **Booster stations and substation upgrades** are Phase 5 task 8, as the roadmap says, so a long main and a substation's capacity cannot be improved yet.
 - Weeping labels can overlap outlet labels in tight rooms; zoom in or select the pipe.
