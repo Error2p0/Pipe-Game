@@ -29,7 +29,8 @@ Add `--no-banner` to every call. Run from the project root so the project is aut
 - `unity test` (top-level) spawns a batch-mode Editor and must not be used while the Editor has the project open (CLAUDE.md §2.6). Use `unity command test run` instead.
 - `script eval` runs statements and returns `result`; in play mode it is the way to drive the game (for example `FindAnyObjectByType<GameRoot>().StartGame(GameContext.NewGame(r.Data), false)` starts a game that never writes the save).
 - `InputTestFixture`: change one key of a device per frame. Events queued in the same frame are built from the device's last processed state, so `Release(z); Release(ctrl);` leaves `z` held.
-- The Phase 2 game opens on the main menu. Its saves live in `%USERPROFILE%/AppData/LocalLow/Elevate Studios/Pipe Game/saves/`.
+- The game opens on the main menu. Saves and `Player.log` live in `%USERPROFILE%/AppData/LocalLow/Elevate Studios/Head Loss/`.
+- `build run` straight after a recompile can be lost in the domain reload (`build status` says `idle`): check the status and start it again. While building, wrap `build status` in `timeout 20`, because calls can hang.
 - While the Editor reloads, commands fail with "Pipeline server isn't reachable" (with or without the `PIPELINE_UNREACHABLE` code); retry after a few seconds.
 - In Git Bash, long `python - <<'EOF'` heredocs sometimes fail to parse; write the script to a file first.
 - `script eval` prints numbers in the Editor's culture (decimal commas).

@@ -76,7 +76,7 @@ Task list from `14-roadmap.md` §Phase 4:
 - [x] 10. Pipe-wall leak sensors, engineering software (stress forecast), insurance.
 - [x] 11. Tech unlocks to tier 3.
 - [x] Carry-over from earlier phases: one duct per tile gives way to ceiling capacity (D8); stress readout (D15) and stress heatmap (D64); noise code checked by the code system instead of only the vent max (D37); larger equipment (centrifugal blower 2×1, EC fan 2×2) takes floor space on the floor layer (D62, phase-3 report).
-- [ ] Phase end: all tests green, Windows build in `Builds/phase-4/`, `docs/dev/phase-4-report.md`.
+- [x] Phase end: all tests green, Windows build in `Builds/phase-4/`, `docs/dev/phase-4-report.md`.
 - [ ] Gate playtest by the user. Checklist: push a water network above rating on purpose and see stress build visibly before any burst; bursts happen roughly when the forecast says; relief valves and shutoffs clearly limit the damage. Bursts feel fair, never arbitrary.
 
 ### Session notes (2026-11-03, Phase 4 session 1)

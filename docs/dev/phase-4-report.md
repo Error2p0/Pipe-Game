@@ -28,7 +28,7 @@ EditMode: 296 of 296 pass. PlayMode: 27 pass, 0 fail, 2 skipped (input-package t
 
 The reference cases from `15-testing.md` that apply are in: T8 (Joukowsky), T12 and T13 (Weibull). A Monte Carlo test confirms the median sampled burst time matches the forecast within 5%, which is the fairness the gate asks about. Another confirms stress builds at the same rate in game and offline.
 
-Performance: city solve for 500 segments has a median of 2.2 ms (budget 10 ms). The building network solve for 2,000 segments sits right at its 5 ms budget in the Editor: it measured 5.05 ms once in a full run and passed when re-run alone, so that test can fail occasionally on timing. A player build is faster. The 72 h catch-up test now solves real water networks and stays inside its budget. The 10-minute play session left the console clean: 10 minutes with 12 built buildings and 10 water mains running in the city view, the first 2 minutes also switching views by script, with 0 errors and 0 warnings. Nobody played by hand, so your playtest is the first real test of the input feel.
+Performance: city solve for 500 segments has a median of 2.2 ms (budget 10 ms). The building network solve for 2,000 segments sits right at its 5 ms budget in the Editor: it measured 5.05 ms once in a full run and passed when re-run alone, so that test can fail occasionally on timing. A player build is faster. The 72 h catch-up test now solves real water networks and stays inside its budget. The 10-minute play session left the console clean: 10 minutes with 12 built buildings and 10 water mains running in the city view, the first 2 minutes also switching views by script, with 0 errors and 0 warnings. Nobody played by hand, so your playtest is the first real test of the input feel. The Windows build started and stayed responsive for 25 s at the main menu with no exceptions in its log; I did not play a session in the build itself.
 
 ## Balancing report (`Head Loss/Balancing Report`, 20 generated buildings per tier)
 
@@ -73,7 +73,7 @@ Tier 3 pays back far too fast against the target. Pay cannot fix it, because low
 - **Booster stations and substation upgrades** are Phase 5 task 8, as the roadmap says, so a long main and a substation's capacity cannot be improved yet.
 - Weeping labels can overlap outlet labels in tight rooms; zoom in or select the pipe.
 - The route tool draws lines sharing a tile on top of each other (water offset from power, but two water lines overlap). The main's panel tells you which one you selected.
-- Saves and settings live in `AppData/LocalLow/Elevate Studios/Pipe Game/saves/` (D70).
+- Saves and settings live in `AppData/LocalLow/Elevate Studios/Head Loss/saves/`: the product name changed after D70 was written. If you set up Steam Auto-Cloud with the old `Pipe Game` subdirectory (D69), point it at `Head Loss`. Saves from before that rename are still in the `Pipe Game` folder.
 - Parts still cannot be moved, only removed and placed again.
 
 ## Needs your confirmation
