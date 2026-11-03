@@ -88,7 +88,15 @@
         "#FEC287",
         "#FCFDBF"
       ]
-    }
+    },
+    "pressureAnchorMaxWaterBar": 5,
+    "pressureStepWaterBar": 0.5,
+    "flowAnchorMaxWaterLps": 1,
+    "flowStepWaterLps": 0.5,
+    "densityAnchorWater": [
+      995,
+      1001
+    ]
   },
   "drawing": {
     "defaultMaterial": "galvanized-duct",

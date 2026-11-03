@@ -61,18 +61,25 @@ namespace HeadLoss.Unity.View
         }
 
         /// <param name="dt">Seconds since the last frame.</param>
-        public void Draw(DuctGeometry geometry, NetworkSnapshot? snap, float dt)
+        public void Draw(DuctViewInput input, float dt)
         {
-            if (_def == null || _disc == null || snap == null) return;
+            if (_def == null || _disc == null) return;
             _time += dt;
             _matrices.Clear();
-            float size = (float)_def.Size;
+            foreach (NetworkView view in input.Views)
+                if (view.Solve != null) Add(view.Geometry, view.Solve);
+            if (_matrices.Count > 0) Graphics.RenderMeshInstanced(_params, _disc, 0, _matrices);
+        }
+
+        void Add(DuctGeometry geometry, Game.Session.FluidSolve solve)
+        {
+            float size = (float)_def!.Size;
             float spacing = (float)_def.SpacingMetres;
             var scale = new Vector3(size, size, 1);
             foreach (DuctGeometry.Segment s in geometry.Segments)
             {
-                if (!snap.Compiled.SegmentLink.TryGetValue(s.Id, out int link)) continue;
-                double v = snap.Result.Velocity[link];
+                if (!solve.Compiled.SegmentLink.TryGetValue(s.Id, out int link)) continue;
+                double v = solve.Result.Velocity[link];
                 if (System.Math.Abs(v) < _def.MinVisibleVelocity) continue;
                 float speed = ReduceMotion
                     ? (float)_def.MinSpeed * 2
@@ -90,7 +97,6 @@ namespace HeadLoss.Unity.View
                     _matrices.Add(Matrix4x4.TRS(new Vector3(p.x, p.y, Z), Quaternion.identity, scale));
                 }
             }
-            if (_matrices.Count > 0) Graphics.RenderMeshInstanced(_params, _disc, 0, _matrices);
         }
     }
 }

@@ -19,6 +19,8 @@ namespace HeadLoss.Game.Buildings
         public bool SheetSeen;
         /// <summary>Gross income earned by this building over its life, $.</summary>
         public double LifetimeIncome;
+        /// <summary>Pipe stress, bursts and repairs (<c>08-failures.md</c>).</summary>
+        public Failures.FailureState Failures = new Failures.FailureState();
 
         /// <summary>A fresh record: anchors and pre-placed equipment, committed for free.</summary>
         public static BuildingRecord CreateFor(BuildingLayout layout)

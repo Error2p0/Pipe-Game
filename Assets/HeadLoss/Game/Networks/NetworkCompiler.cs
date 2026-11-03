@@ -52,6 +52,10 @@ namespace HeadLoss.Game.Networks
         public Dictionary<int, double> DriveFactor = new Dictionary<int, double>();
         /// <summary>The city connection node (water): flow out of it is the building's draw from the main. −1 when none.</summary>
         public int SupplyNode = -1;
+        /// <summary>Outlets cut off from the supply by a closed shutoff (exempt from the minimum check, pay 0).</summary>
+        public HashSet<string> IsolatedOutlets = new HashSet<string>();
+        /// <summary>Segments (burst ones included) cut off from the supply by a closed shutoff.</summary>
+        public HashSet<int> IsolatedSegments = new HashSet<int>();
         public List<CompiledFitting> Fittings = new List<CompiledFitting>();
 
         /// <summary>Total flow drawn from the supply node, m³/s.</summary>
@@ -87,7 +91,7 @@ namespace HeadLoss.Game.Networks
         /// <summary>Speed factor on every powered fan and pump: 0 when the panel has tripped, cbrt(available/draw) in a brownout.</summary>
         public double PowerSpeed = 1;
         /// <summary>Burst segments per fluid (segment ids): removed, with an open end at each of their nodes.</summary>
-        public IReadOnlyCollection<int>? BurstSegments;
+        public IReadOnlyDictionary<string, HashSet<int>>? BurstSegments;
     }
 
     /// <summary>
@@ -121,7 +125,7 @@ namespace HeadLoss.Game.Networks
             // their floor's ceiling layer; taps and the connection at the floor layer.
             double Ceiling(int floor) => water ? floor * bb.FloorHeight + bb.CeilingLayerOffset : bb.CeilingLayerOffset;
             double FloorLayer(int floor) => water ? floor * bb.FloorHeight + bb.FloorLayerOffset : bb.CeilingLayerOffset;
-            var burst = new HashSet<int>(o.BurstSegments ?? Array.Empty<int>());
+            var burst = o.BurstSegments != null && o.BurstSegments.TryGetValue(fluid, out HashSet<int>? bs) ? bs : new HashSet<int>();
 
             var inlineOut = new Dictionary<int, int>();
             foreach (DuctNode n in net.Nodes)
@@ -351,7 +355,51 @@ namespace HeadLoss.Game.Networks
 
             AssignFittings(net, data, c, segLink, water);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
+            if (c.SupplyNode >= 0) MarkIsolated(net, c);
             return c;
+        }
+
+        /// <summary>
+        /// Shutoff isolation (<c>07-equipment.md</c> §Control parts): what the supply reaches with every shutoff open but
+        /// not with the closed ones as they are is an isolated branch.
+        /// </summary>
+        static void MarkIsolated(DuctNetworkState net, CompiledNetwork c)
+        {
+            NetworkGraph g = c.Graph;
+            // A burst segment still joins its two ends as far as isolation goes (the shutoff decides, not the rupture).
+            var bridges = new List<(int, int)>();
+            foreach (var kv in c.BurstLinks) bridges.Add((g.Links[kv.Value.a].From, g.Links[kv.Value.b].From));
+            bool[] Reach(bool openShutoffs)
+            {
+                var seen = new bool[g.Nodes.Count];
+                var stack = new Stack<int>();
+                seen[c.SupplyNode] = true;
+                stack.Push(c.SupplyNode);
+                void Visit(int v)
+                {
+                    if (v < 0 || seen[v] || g.Nodes[v].Kind == NodeKind.FixedPressure) return;
+                    seen[v] = true;
+                    stack.Push(v);
+                }
+                while (stack.Count > 0)
+                {
+                    int u = stack.Pop();
+                    foreach (NetworkLink l in g.Links)
+                    {
+                        if (l.Closed && !openShutoffs) continue;
+                        Visit(l.From == u ? l.To : l.To == u ? l.From : -1);
+                    }
+                    foreach ((int a, int b) in bridges) Visit(a == u ? b : b == u ? a : -1);
+                }
+                return seen;
+            }
+            bool[] now = Reach(false), all = Reach(true);
+            bool Isolated(int node) => all[node] && !now[node];
+            foreach (var kv in c.OutletNode) if (Isolated(kv.Value)) c.IsolatedOutlets.Add(kv.Key);
+            foreach (var kv in c.SegmentLink)
+                if (Isolated(g.Links[kv.Value].From) || Isolated(g.Links[kv.Value].To)) c.IsolatedSegments.Add(kv.Key);
+            foreach (var kv in c.BurstLinks)
+                if (Isolated(g.Links[kv.Value.a].From) && Isolated(g.Links[kv.Value.b].From)) c.IsolatedSegments.Add(kv.Key);
         }
 
         /// <summary>Design flow of a pressure-measured outlet (taps), m³/s.</summary>

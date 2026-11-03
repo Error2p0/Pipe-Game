@@ -49,6 +49,19 @@ namespace HeadLoss.Game.Economy
         public double Fines;
         /// <summary>Insurance premium, $/s (none yet).</summary>
         public double Premiums;
+        /// <summary>An unrepaired burst that no shutoff isolates cuts the gross (in game to 0, offline to 25%).</summary>
+        public bool Burst;
+        /// <summary>The gross before the burst cut, $/s.</summary>
+        public double GrossBeforeBurst;
+
+        /// <summary>Applies the burst cut (<c>02-economy.md</c> §Income formula: burstFactor).</summary>
+        public void ApplyBurst(double factor)
+        {
+            Burst = true;
+            GrossBeforeBurst = Gross;
+            Gross *= factor;
+            foreach (OutletStatus o in Outlets) o.Pay *= factor;
+        }
 
         /// <summary>Net income, $/s (can be negative).</summary>
         public double Net => Gross - Electricity - Fines - Premiums;
@@ -116,6 +129,11 @@ namespace HeadLoss.Game.Economy
                 bool risky = data.Fluid(def.Fluid).Risky;
                 st.Multiplier = Payout.Multiplier(st.Requirement, st.Delivery, risky, e, out st.Zone);
                 if (!st.Connected) st.Zone = OutletZone.NotConnected;
+                if (solve != null && solve.Compiled.IsolatedOutlets.Contains(placement.Id))
+                {
+                    st.Zone = OutletZone.Isolated;
+                    st.Multiplier = 0;
+                }
                 if (st.Zone == OutletZone.NotConnected || st.Zone == OutletZone.BelowMinimum) ev.BelowMinimum++;
                 if (st.Zone == OutletZone.AboveCodeMax) ev.AboveCodeMax++;
                 ev.PotentialGross += st.BaseRate * st.Multiplier;

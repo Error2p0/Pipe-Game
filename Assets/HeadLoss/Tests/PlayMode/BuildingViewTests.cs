@@ -116,7 +116,7 @@ namespace HeadLoss.PlayMode.Tests
 
             DuctSegment last = s.State.Air.Segments.Find(x => s.State.Air.FindNode(x.NodeB)!.Kind == DuctNodeKind.Outlet || s.State.Air.FindNode(x.NodeA)!.Kind == DuctNodeKind.Outlet)!;
             double flowBefore = s.OutletFlow("vent-1");
-            Color before = root.Ducts!.SegmentColour(root.View, last.Id);
+            Color before = root.Ducts!.SegmentColour(root.View, root.View.Air, last.Id);
 
             float t0 = Time.realtimeSinceStartup;
             rev = s.SolveRevision;
@@ -125,7 +125,7 @@ namespace HeadLoss.PlayMode.Tests
             float elapsed = Time.realtimeSinceStartup - t0;
 
             double flowAfter = s.OutletFlow("vent-1");
-            Color after = root.Ducts.SegmentColour(root.View, last.Id);
+            Color after = root.Ducts.SegmentColour(root.View, root.View.Air, last.Id);
             float colourDelta = Mathf.Abs(after.r - before.r) + Mathf.Abs(after.g - before.g) + Mathf.Abs(after.b - before.b);
             UnityEngine.Debug.Log($"Gate: {Units.M3sToM3h(flowBefore):F1} → {Units.M3sToM3h(flowAfter):F1} m³/h (+{(flowAfter / flowBefore - 1) * 100:F1}%), colour Δ {colourDelta:F3}, {elapsed * 1000:F0} ms");
             Assert.Less(elapsed, 1f, "heatmap must update within one second");

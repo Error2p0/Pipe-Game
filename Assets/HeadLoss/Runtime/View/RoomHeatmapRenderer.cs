@@ -20,6 +20,8 @@ namespace HeadLoss.Unity.View
         string _rampPalette = "";
         int _climateRev = -1, _heatmapRev = -1;
 
+        int _floor = -1;
+
         public void Init(Material template, RoomGridLayout grid, float widthM, float heightM)
         {
             _material = new Material(template) { name = "HeadLoss RoomHeatmap" };
@@ -36,14 +38,16 @@ namespace HeadLoss.Unity.View
         }
 
         /// <summary>Redraws when the rooms stepped or the heatmap changed; hides itself for modes that leave rooms neutral.</summary>
-        public void Refresh(BuildingClimate climate, HeatmapState hm, ViewPalette palette, float alpha)
+        /// <param name="floorIndex">Floor shown, counted from the lowest floor (0-based).</param>
+        public void Refresh(BuildingClimate climate, HeatmapState hm, ViewPalette palette, float alpha, int floorIndex = 0)
         {
             if (_renderer == null || _field == null || _ramp == null || _material == null) return;
-            bool show = HeatmapState.ColoursRooms(hm.Mode);
+            bool show = hm.RoomsColoured;
             _renderer.enabled = show;
-            if (!show || (climate.Revision == _climateRev && hm.Revision == _heatmapRev)) return;
+            if (!show || (climate.Revision == _climateRev && hm.Revision == _heatmapRev && floorIndex == _floor)) return;
             _climateRev = climate.Revision;
             _heatmapRev = hm.Revision;
+            _floor = floorIndex;
             if (_rampPalette != hm.Palette)
             {
                 for (int i = 0; i < 256; i++) _ramp.SetPixel(i, 0, palette.Ramp(hm.Palette, i / 255f));
@@ -53,18 +57,19 @@ namespace HeadLoss.Unity.View
             _material.SetFloat("_Alpha", alpha);
             RoomGridLayout g = climate.Grid;
             RoomGridState s = climate.State;
-            int n = g.Cells;
-            for (int c = 0; c < g.NX * g.NY; c++)
+            int n = g.Cells, plane = g.NX * g.NY, offset = System.Math.Max(0, System.Math.Min(g.Floors - 1, floorIndex)) * plane;
+            for (int i = 0; i < plane; i++)
             {
+                int c = offset + i;
                 if (g.Room[c] < 0)
                 {
-                    _pixels[2 * c] = 0;
-                    _pixels[2 * c + 1] = 0;
+                    _pixels[2 * i] = 0;
+                    _pixels[2 * i + 1] = 0;
                     continue;
                 }
                 float t = hm.NormaliseRoom(Value(climate, hm, c, n));
-                _pixels[2 * c] = t;
-                _pixels[2 * c + 1] = 1;
+                _pixels[2 * i] = t;
+                _pixels[2 * i + 1] = 1;
             }
             _field.SetPixelData(_pixels, 0);
             _field.Apply(false);

@@ -201,6 +201,7 @@ namespace HeadLoss.Game.Session
             Water = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
             HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasTaps(layout);
             Supply = new WaterSupply(true, ReferenceWaterPressure(data));
+            Failures = new Failures.BuildingFailures(data, layout, record, Seeds.Derive(0x0FA1_0000UL, layout.Id));
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
             CommittedEvaluation = DesignEvaluation;
@@ -314,6 +315,7 @@ namespace HeadLoss.Game.Session
                 WaterConnected = Supply.Connected,
                 WaterPressurePa = Supply.PressurePa,
                 PowerSpeed = PowerSpeedFor(committed),
+                BurstSegments = Failures.AllBurstSegments(committed ? Committed : State),
             };
 
         /// <summary>Speed factor on powered devices: 0 while the panel is tripped, cbrt(available/draw) in a brownout.</summary>
@@ -353,6 +355,13 @@ namespace HeadLoss.Game.Session
         {
             UpdateCrank(dt);
             TickRooms(dt);
+            Failures.Tick(dt, CommittedSnapshot, Committed, Game.PlayTimeSeconds);
+            Failures.TickRepairs(dt, Record);
+            if (Failures.Revision != _failRev)
+            {
+                _failRev = Failures.Revision;
+                MarkDirty();
+            }
             _sinceSolve += dt;
             if (_pending != null)
             {
@@ -408,16 +417,26 @@ namespace HeadLoss.Game.Session
             bool ok = d.Converged && (c == null || c.Converged);
             Settling = !ok;
             if (!ok && Current != null) return;
+            NetworkSnapshot? before = CommittedSnapshot;
             Current = d;
             CommittedSnapshot = c ?? d;
+            Failures.DetectSurges(before, CommittedSnapshot);
             DesignEvaluation = BuildingEconomy.Evaluate(Data, Layout, d);
-            CommittedEvaluation = c == null ? DesignEvaluation : BuildingEconomy.Evaluate(Data, Layout, c);
+            CommittedEvaluation = c == null ? BuildingEconomy.Evaluate(Data, Layout, d) : BuildingEconomy.Evaluate(Data, Layout, c);
+            ApplyBurstCut(CommittedEvaluation, CommittedSnapshot, Committed);
+            ApplyBurstCut(DesignEvaluation, d, State);
             SolveRevision++;
             Solved?.Invoke();
         }
 
         /// <summary>Raised on the main thread after a new solve is accepted.</summary>
         public event Action? Solved;
+
+        /// <summary>Stress, bursts, surges and repairs of what is built.</summary>
+        public Failures.BuildingFailures Failures { get; }
+        /// <summary>The player is away: bursts cut income to 25% instead of 0 (<c>12-save-offline.md</c>).</summary>
+        public bool OfflineRules { get; set; }
+        int _failRev;
 
         /// <summary>A fresh snapshot of a changed state (previews; the session is untouched).</summary>
         NetworkSnapshot SolveCopy(BuildingState copy) =>
@@ -462,6 +481,14 @@ namespace HeadLoss.Game.Session
             return DrawError.None;
         }
 
+        /// <summary>The burst factor on gross (02 §Income formula): 0 in game, 0.25 offline, while a burst is not isolated.</summary>
+        void ApplyBurstCut(BuildingEvaluation ev, NetworkSnapshot snap, BuildingState state)
+        {
+            if (!Failures.HasActiveBurst(snap, state)) return;
+            EconomyDef e = Data.Balancing.Economy;
+            ev.ApplyBurst(OfflineRules ? e.OfflineBurstFactor : e.InGameBurstFactor);
+        }
+
         /// <summary>Validates a run in progress and solves the networks as if it were placed (state untouched).</summary>
         public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
         {
@@ -495,8 +522,18 @@ namespace HeadLoss.Game.Session
         {
             var none = new Dictionary<int, double>();
             NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true));
-            return BuildingEconomy.Evaluate(Data, Layout, snap);
+            BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
+            if (Failures.HasActiveBurst(snap, snap.State)) ev.ApplyBurst(Data.Balancing.Economy.OfflineBurstFactor);
+            LastSteadySnapshot = snap;
+            return ev;
         }
+
+        /// <summary>The solve behind the last <see cref="SteadyState"/> (offline stress and burst sampling read it).</summary>
+        public NetworkSnapshot? LastSteadySnapshot { get; private set; }
+
+        /// <summary>The design's steady state at the current conditions (the engineering software forecast).</summary>
+        public NetworkSnapshot? DesignSnapshot => Current;
+
 
         readonly SolverSet _offlineSolver;
 
@@ -532,7 +569,9 @@ namespace HeadLoss.Game.Session
             if (net > 0) Game.Wallet -= net;
             else Game.ApplyIncome(-net);
             Record.SpentTotal += net;
+            BuildingState before = Record.Committed;
             Record.Committed = Record.Design.Clone();
+            Failures.OnCommit(before, Record.Committed);
             MarkDirty();
             DesignCommitted?.Invoke();
             return true;

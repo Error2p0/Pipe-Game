@@ -18,9 +18,11 @@ namespace HeadLoss.Unity.Interaction
         public int Id;
         /// <summary>Opening id (intake) or outlet id.</summary>
         public string Anchor;
+        /// <summary>Network of a segment, node or inline part (air, water).</summary>
+        public string Fluid;
 
-        public static Target None => new Target { Kind = TargetKind.None, Anchor = "" };
-        public bool Same(Target o) => Kind == o.Kind && Id == o.Id && Anchor == o.Anchor;
+        public static Target None => new Target { Kind = TargetKind.None, Anchor = "", Fluid = "air" };
+        public bool Same(Target o) => Kind == o.Kind && Id == o.Id && Anchor == o.Anchor && Fluid == o.Fluid;
     }
 
     /// <summary>
@@ -36,8 +38,12 @@ namespace HeadLoss.Unity.Interaction
         readonly BuildingSession _session;
         readonly CameraController _camera;
         readonly BuildingInput _input;
-        readonly DuctGeometry _geometry;
+        readonly DuctViewInput _views;
         readonly DrawingDef _drawing;
+        /// <summary>Floor, layer and network on show.</summary>
+        public BuildingViewState View { get; }
+        /// <summary>Size and material last chosen per network.</summary>
+        readonly Dictionary<string, (double size, string material)> _drawChoice = new Dictionary<string, (double, string)>();
 
         Mode _mode = Mode.Idle;
         Vector2 _pressScreen;
@@ -46,8 +52,20 @@ namespace HeadLoss.Unity.Interaction
         readonly List<TilePos> _path = new List<TilePos>();
         bool _panning;
 
-        public double DrawDiameterMm;
-        public string DrawMaterialId;
+        /// <summary>Size of the next run on the network in focus, mm.</summary>
+        public double DrawDiameterMm
+        {
+            get => _drawChoice[View.Fluid].size;
+            set => _drawChoice[View.Fluid] = (value, _drawChoice[View.Fluid].material);
+        }
+
+        /// <summary>Material of the next run on the network in focus.</summary>
+        public string DrawMaterialId
+        {
+            get => _drawChoice[View.Fluid].material;
+            set => _drawChoice[View.Fluid] = (_drawChoice[View.Fluid].size, value);
+        }
+
         public bool DrawSmoothElbows;
 
         /// <summary>Part being placed (fitting or equipment id), or "" when no part tool is active.</summary>
@@ -85,18 +103,34 @@ namespace HeadLoss.Unity.Interaction
         /// <summary>A short calm message for the hint line (empty = none).</summary>
         public string Hint { get; private set; } = "";
 
-        public BuildingInteraction(BuildingSession session, CameraController camera, BuildingInput input, DuctGeometry geometry)
+        public BuildingInteraction(BuildingSession session, CameraController camera, BuildingInput input, DuctViewInput views, BuildingViewState view)
         {
             _session = session;
             _camera = camera;
             _input = input;
-            _geometry = geometry;
+            _views = views;
+            View = view;
             _drawing = session.Data.Balancing.Drawing;
-            DrawDiameterMm = _drawing.DefaultDuctSizeMm;
-            DrawMaterialId = _drawing.DefaultMaterial;
+            _drawChoice["air"] = (_drawing.DefaultDuctSizeMm, _drawing.DefaultMaterial);
+            _drawChoice["water"] = (22, "pvc");
         }
 
-        static TilePos TileAt(Vector2 world) => new TilePos(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y));
+        TilePos TileAt(Vector2 world) => new TilePos(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y), View.Floor);
+
+        DuctNetworkState Net => _session.State.Net(View.Fluid);
+
+        /// <summary>Pipes are drawn and picked in the ceiling layer (the floor layer is for equipment and outlets).</summary>
+        bool PipesInFocus => View.Layer != ViewLayer.Floor;
+
+        /// <summary>Puts a network in focus (the toolbox tabs, or selecting one of its pipes).</summary>
+        public void SetFluid(string fluid)
+        {
+            if (fluid == View.Fluid) return;
+            CancelGesture();
+            if (PlaceTool.Length > 0) SetPlaceTool(PlaceTool);
+            View.SetFluid(fluid);
+            Revision++;
+        }
 
         /// <summary>Starts (or with the same id, stops) placing a part.</summary>
         public void SetPlaceTool(string partId)
@@ -176,6 +210,11 @@ namespace HeadLoss.Unity.Interaction
                         _pressScreen = screen;
                         _pressTile = TileAt(world);
                         _pressOnNetwork = StartsOnNetwork(_pressTile);
+                        if (!PipesInFocus && DuctEditor.Occupancy(Net).ContainsKey(_pressTile))
+                        {
+                            Hint = "Pipes and ducts run in the ceiling layer · press L";
+                            Revision++;
+                        }
                     }
                     break;
 
@@ -230,7 +269,9 @@ namespace HeadLoss.Unity.Interaction
             SetHover(Target.None);
             TilePos tile = TileAt(world);
             bool hovering = !pointerOverUi && _session.Layout.InFootprint(tile);
-            bool valid = hovering && DuctEditor.ValidateInline(_session.State.Air, tile) == DrawError.None;
+            DrawError err = DuctEditor.ValidateInline(Net, tile);
+            if (err == DrawError.None && !EquipmentFits.InlinePart(_session.Data, PlaceTool, View.Fluid)) err = DrawError.WrongNetwork;
+            bool valid = hovering && err == DrawError.None;
             if (hovering != PlaceHovering || tile != PlaceTile || valid != PlaceValid)
             {
                 PlaceHovering = hovering;
@@ -239,12 +280,13 @@ namespace HeadLoss.Unity.Interaction
                 Revision++;
             }
             string name = PartName(PlaceTool);
-            Hint = hovering && !valid ? DuctEditor.Describe(DrawError.NotOnStraightDuct)
-                : _session.Data.FindEquipment(PlaceTool) != null ? $"Click a straight duct to place the {name} · R turns it · Esc to stop"
-                : $"Click a straight duct to place a {name} · Esc to stop";
+            string what = View.Fluid == "air" ? "duct" : "pipe";
+            Hint = hovering && !valid ? DuctEditor.Describe(err)
+                : _session.Data.FindEquipment(PlaceTool)?.Curve.Count > 0 ? $"Click a straight {what} to place the {name} · R turns it · Esc to stop"
+                : $"Click a straight {what} to place a {name} · Esc to stop";
             if (hovering && _input.Primary.WasPressedThisFrame())
             {
-                var cmd = new PlaceInlineCommand(tile, PlaceTool, PlaceReversed);
+                var cmd = new PlaceInlineCommand(tile, PlaceTool, PlaceReversed, View.Fluid);
                 if (_session.Execute(cmd)) Revision++;
             }
         }
@@ -260,11 +302,51 @@ namespace HeadLoss.Unity.Interaction
                 Revision++;
                 return;
             }
-            if (Selected.Kind == TargetKind.Inline && _session.State.Air.FindNode(Selected.Id) is DuctNode n && _session.Data.FindEquipment(n.PartId) != null)
-                _session.Execute(new FlipInlineCommand(n.Id));
+            if (Selected.Kind == TargetKind.Inline && _session.State.Net(Selected.Fluid).FindNode(Selected.Id) is DuctNode n
+                && (_session.Data.FindEquipment(n.PartId) != null || _session.Data.FindFitting(n.PartId)?.Model == "check"))
+                _session.Execute(new FlipInlineCommand(n.Id, Selected.Fluid));
         }
 
-        bool StartsOnNetwork(TilePos t) => DuctEditor.Occupancy(_session.State.Air).TryGetValue(t, out TileOccupant o) && !o.IsEmpty;
+        bool StartsOnNetwork(TilePos t) => PipesInFocus && DuctEditor.Occupancy(Net).TryGetValue(t, out TileOccupant o) && !o.IsEmpty;
+
+        /// <summary>
+        /// Runs a riser one floor up or down from the selected pipe node or pipe tile, which must be in a shaft
+        /// (<c>04-buildings.md</c> §Floors and risers). Uses the size and material of the pipe it starts from. The view
+        /// follows to the new floor.
+        /// </summary>
+        public DrawError AddRiser(int direction)
+        {
+            TilePos? start = RiserStart();
+            if (start == null) return DrawError.NotInShaft;
+            DuctNetworkState net = _session.State.Net(Selected.Fluid);
+            DuctSegment? seg = null;
+            DuctNode? node = net.NodeAt(start.Value);
+            foreach (DuctSegment s in net.Segments)
+                if (node != null ? (s.NodeA == node.Id || s.NodeB == node.Id) : DuctEditor.Tiles(net, s).Contains(start.Value)) { seg = s; break; }
+            double size = seg?.DiameterMm ?? DrawDiameterMm;
+            string material = seg?.MaterialId ?? DrawMaterialId;
+            var path = new List<TilePos> { start.Value, start.Value.OnFloor(start.Value.F + direction) };
+            var cmd = new PlaceRunCommand(path, size, material, false, Selected.Fluid);
+            if (!_session.Execute(cmd))
+            {
+                Hint = DuctEditor.Describe(cmd.LastError);
+                Revision++;
+                return cmd.LastError;
+            }
+            View.SetFloor(start.Value.F + direction);
+            ClearSelection();
+            Revision++;
+            return DrawError.None;
+        }
+
+        /// <summary>The shaft tile a riser would start from: the selected pipe node, or the clicked tile of a selected pipe.</summary>
+        public TilePos? RiserStart()
+        {
+            DuctNetworkState net = _session.State.Net(Selected.Fluid);
+            TilePos? t = Selected.Kind == TargetKind.Node && net.FindNode(Selected.Id) is DuctNode n ? n.Pos
+                : Selected.Kind == TargetKind.Segment && SelectedSegments.Count == 1 ? SelectedTile : (TilePos?)null;
+            return t.HasValue && _session.Layout.IsShaft(t.Value) ? t : null;
+        }
 
         /// <summary>Extends the path one orthogonal step at a time toward the pointer tile, keeping direction and backtracking.</summary>
         void ExtendPathTo(TilePos target)
@@ -281,10 +363,10 @@ namespace HeadLoss.Unity.Interaction
                 int dx = target.X - last.X, dy = target.Y - last.Y;
                 (int cx, int cy) = _path.Count >= 2 ? _path[_path.Count - 2].DirectionTo(last) : (0, 0);
                 TilePos next;
-                if (cx != 0 && System.Math.Sign(dx) == cx) next = new TilePos(last.X + cx, last.Y);
-                else if (cy != 0 && System.Math.Sign(dy) == cy) next = new TilePos(last.X, last.Y + cy);
-                else if (System.Math.Abs(dx) >= System.Math.Abs(dy)) next = new TilePos(last.X + System.Math.Sign(dx), last.Y);
-                else next = new TilePos(last.X, last.Y + System.Math.Sign(dy));
+                if (cx != 0 && System.Math.Sign(dx) == cx) next = new TilePos(last.X + cx, last.Y, last.F);
+                else if (cy != 0 && System.Math.Sign(dy) == cy) next = new TilePos(last.X, last.Y + cy, last.F);
+                else if (System.Math.Abs(dx) >= System.Math.Abs(dy)) next = new TilePos(last.X + System.Math.Sign(dx), last.Y, last.F);
+                else next = new TilePos(last.X, last.Y + System.Math.Sign(dy), last.F);
                 if (_path.Count >= 2 && next == _path[_path.Count - 2]) _path.RemoveAt(_path.Count - 1);
                 else _path.Add(next);
             }
@@ -292,7 +374,7 @@ namespace HeadLoss.Unity.Interaction
 
         void RefreshPreview()
         {
-            Preview = _path.Count >= 2 ? _session.Preview(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows) : null;
+            Preview = _path.Count >= 2 ? _session.Preview(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows, View.Fluid) : null;
             Hint = Preview != null && Preview.Error != DrawError.None ? DuctEditor.Describe(Preview.Error) : "";
             Revision++;
         }
@@ -300,7 +382,7 @@ namespace HeadLoss.Unity.Interaction
         void CommitRun()
         {
             if (Preview != null && Preview.Error == DrawError.None)
-                _session.Execute(new PlaceRunCommand(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows));
+                _session.Execute(new PlaceRunCommand(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows, View.Fluid));
             CancelGesture();
         }
 
@@ -326,9 +408,9 @@ namespace HeadLoss.Unity.Interaction
         {
             ClearSelection();
             Rect r = BoxWorld;
-            foreach (DuctGeometry.Segment s in _geometry.Segments)
+            foreach (DuctGeometry.Segment s in _views.View(View.Fluid).Geometry.Segments)
                 if (r.Contains(s.A) || r.Contains(s.B) || r.Contains((s.A + s.B) * 0.5f)) SelectedSegments.Add(s.Id);
-            if (SelectedSegments.Count > 0) Selected = new Target { Kind = TargetKind.Segment, Id = 0, Anchor = "" };
+            if (SelectedSegments.Count > 0) Selected = new Target { Kind = TargetKind.Segment, Id = 0, Anchor = "", Fluid = View.Fluid };
         }
 
         void SetHover(Target t)
@@ -340,9 +422,12 @@ namespace HeadLoss.Unity.Interaction
 
         public void Select(Target t)
         {
+            if (t.Fluid == null) t.Fluid = View.Fluid;
             SelectedSegments.Clear();
             Selected = t;
             if (t.Kind == TargetKind.Segment) SelectedSegments.Add(t.Id);
+            // Selecting a pipe of the other network brings that network into focus.
+            if ((t.Kind == TargetKind.Segment || t.Kind == TargetKind.Node || t.Kind == TargetKind.Inline) && t.Fluid != View.Fluid) View.SetFluid(t.Fluid);
             Revision++;
         }
 
@@ -352,25 +437,26 @@ namespace HeadLoss.Unity.Interaction
         {
             if (Selected.Kind == TargetKind.Inline)
             {
-                _session.Execute(new RemoveInlineCommand(Selected.Id));
+                _session.Execute(new RemoveInlineCommand(Selected.Id, Selected.Fluid));
                 ClearSelection();
                 return;
             }
             if (SelectedSegments.Count == 0) return;
-            _session.Execute(new DeleteSegmentCommand(SelectedSegments));
+            _session.Execute(new DeleteSegmentCommand(SelectedSegments, Selected.Fluid));
             ClearSelection();
         }
 
         /// <summary>Drops selection and hover that no longer exist after an edit (including undo).</summary>
         public void Validate()
         {
-            DuctNetworkState net = _session.State.Air;
+            DuctNetworkState net = _session.State.Net(Selected.Fluid ?? "air");
             int before = SelectedSegments.Count;
             SelectedSegments.RemoveWhere(id => net.FindSegment(id) == null);
             if (Selected.Kind == TargetKind.Segment && SelectedSegments.Count == 0 && before > 0) Selected = Target.None;
             if ((Selected.Kind == TargetKind.Node || Selected.Kind == TargetKind.Inline) && !NodeIs(net, Selected)) Selected = Target.None;
-            if (Hover.Kind == TargetKind.Segment && net.FindSegment(Hover.Id) == null) Hover = Target.None;
-            if ((Hover.Kind == TargetKind.Node || Hover.Kind == TargetKind.Inline) && !NodeIs(net, Hover)) Hover = Target.None;
+            DuctNetworkState hnet = _session.State.Net(Hover.Fluid ?? "air");
+            if (Hover.Kind == TargetKind.Segment && hnet.FindSegment(Hover.Id) == null) Hover = Target.None;
+            if ((Hover.Kind == TargetKind.Node || Hover.Kind == TargetKind.Inline) && !NodeIs(hnet, Hover)) Hover = Target.None;
             Revision++;
         }
 
@@ -380,31 +466,46 @@ namespace HeadLoss.Unity.Interaction
             return n != null && (t.Kind == TargetKind.Inline) == (n.Kind == DuctNodeKind.Inline);
         }
 
-        /// <summary>What is under a world point: outlet or intake tile, then inline parts and fittings, then ducts.</summary>
+        /// <summary>
+        /// What is under a world point on the floor on show: outlet or opening tile, then (in the ceiling layer) inline
+        /// parts, fittings, risers and pipes, of the network in focus first and then the other one.
+        /// </summary>
         public Target Pick(Vector2 world)
         {
             TilePos tile = TileAt(world);
             foreach (OutletPlacementDef o in _session.Layout.Outlets)
-                if (o.X == tile.X && o.Y == tile.Y && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.4f)
-                    return new Target { Kind = TargetKind.Outlet, Anchor = o.Id };
+                if (BuildingLayout.PosOf(o) == tile && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.4f)
+                    return new Target { Kind = TargetKind.Outlet, Anchor = o.Id, Fluid = BuildingState.OutletFluid(o.Type) };
             foreach (EntryOpeningDef o in _session.Layout.EntryOpenings)
-                if (o.X == tile.X && o.Y == tile.Y && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.45f)
-                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id };
+                if (BuildingLayout.PosOf(o) == tile && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.45f)
+                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id, Fluid = o.Utility };
+            if (!PipesInFocus) return Target.None;
+            Target t = PickIn(View.Fluid, world);
+            if (t.Kind != TargetKind.None) return t;
+            foreach (string f in View.Fluids)
+                if (f != View.Fluid && (t = PickIn(f, world)).Kind != TargetKind.None) return t;
+            return Target.None;
+        }
 
-            DuctNetworkState net = _session.State.Air;
+        Target PickIn(string fluid, Vector2 world)
+        {
+            DuctNetworkState net = _session.State.Net(fluid);
             foreach (DuctNode n in net.Nodes)
             {
-                if (n.Kind != DuctNodeKind.Inline) continue;
-                if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.38f) return new Target { Kind = TargetKind.Inline, Id = n.Id, Anchor = "" };
+                if (n.Kind != DuctNodeKind.Inline || n.Floor != View.Floor) continue;
+                if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.38f) return new Target { Kind = TargetKind.Inline, Id = n.Id, Anchor = "", Fluid = fluid };
             }
             foreach (DuctNode n in net.Nodes)
             {
-                if (n.Kind != DuctNodeKind.Free || net.Degree(n.Id) < 1) continue;
-                if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.3f) return new Target { Kind = TargetKind.Node, Id = n.Id, Anchor = "" };
+                if (n.Kind != DuctNodeKind.Free || n.Floor != View.Floor || net.Degree(n.Id) < 1) continue;
+                if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.3f) return new Target { Kind = TargetKind.Node, Id = n.Id, Anchor = "", Fluid = fluid };
             }
+            DuctGeometry geometry = _views.View(fluid).Geometry;
+            foreach (DuctGeometry.Riser r in geometry.Risers)
+                if (Vector2.Distance(world, r.Centre) < 0.35f) return new Target { Kind = TargetKind.Segment, Id = r.SegmentId, Anchor = "", Fluid = fluid };
             int best = 0;
             float bestDist = float.MaxValue;
-            foreach (DuctGeometry.Segment s in _geometry.Segments)
+            foreach (DuctGeometry.Segment s in geometry.Segments)
             {
                 float d = DuctGeometry.DistanceToSegment(world, s.A, s.B);
                 if (d < Mathf.Max(s.Width * 0.5f + 0.08f, 0.25f) && d < bestDist)
@@ -413,7 +514,7 @@ namespace HeadLoss.Unity.Interaction
                     best = s.Id;
                 }
             }
-            return best != 0 ? new Target { Kind = TargetKind.Segment, Id = best, Anchor = "" } : Target.None;
+            return best != 0 ? new Target { Kind = TargetKind.Segment, Id = best, Anchor = "", Fluid = fluid } : Target.None;
         }
     }
 }

@@ -336,6 +336,14 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Density scale [min, max] widened in steps, kg/m³.</summary>
         public List<double> DensityAnchor = new List<double>();
         public double DensityStep;
+        /// <summary>Water pressure scale 0 → anchor, extended in steps, bar.</summary>
+        public double PressureAnchorMaxWaterBar;
+        public double PressureStepWaterBar;
+        /// <summary>Water flow scale 0 → anchor, extended in steps, L/s.</summary>
+        public double FlowAnchorMaxWaterLps;
+        public double FlowStepWaterLps;
+        /// <summary>Water density scale [min, max], kg/m³.</summary>
+        public List<double> DensityAnchorWater = new List<double>();
         /// <summary>Opacity of the room heatmap over the room fills.</summary>
         public double RoomAlpha;
         /// <summary>Palette ramps as hex colour stops, evenly spaced.</summary>

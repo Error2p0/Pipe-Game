@@ -10,8 +10,9 @@ using UnityEngine.UIElements;
 namespace HeadLoss.Unity
 {
     /// <summary>
-    /// Everything shown for the open building: blueprint, ducts, particles, equipment symbols, interaction and
-    /// HUD. Created when a building opens and disposed when the player leaves it.
+    /// Everything shown for the open building: blueprint of the floor on show, both networks with ghosts of the floors
+    /// above and below, particles, equipment symbols, interaction and HUD. Created when a building opens and disposed
+    /// when the player leaves it.
     /// </summary>
     public sealed class BuildingScene
     {
@@ -19,6 +20,8 @@ namespace HeadLoss.Unity
         public BuildingInteraction Interaction { get; }
         public BuildingHud Hud { get; }
         public DuctRenderer Ducts { get; }
+        /// <summary>Floor, layer and network on show.</summary>
+        public BuildingViewState ViewState { get; }
         /// <summary>What the duct layer showed at its last rebuild.</summary>
         public DuctViewInput View { get; } = new DuctViewInput();
         /// <summary>Session solve revision the duct layer last rebuilt for.</summary>
@@ -33,7 +36,7 @@ namespace HeadLoss.Unity
         readonly Sim.Rooms.IRoomGridStepper _previousStepper;
         readonly HeatmapState _heatmap;
         readonly BuildingInput _input;
-        int _stateRev = -1, _solveRev = -1, _ixRev = -1, _hmRev = -1;
+        int _stateRev = -1, _solveRev = -1, _ixRev = -1, _hmRev = -1, _viewRev = -1, _shownFloor;
 
         /// <summary>HUD screen-fraction insets (left, right, top, bottom) at the 1920×1080 reference.</summary>
         public static readonly Vector4 HudInsets = new Vector4(310f / 1920f, 400f / 1920f, 190f / 1080f, 90f / 1080f);
@@ -48,9 +51,15 @@ namespace HeadLoss.Unity
             _palette = palette;
             _previousStepper = session.Rooms.Stepper;
             if (roomStepper != null) session.Rooms.Stepper = roomStepper;
+            ViewState = new BuildingViewState(session.Layout, session.HasWater)
+            {
+                WallCavityAvailable = session.Unlocked(session.Data.Balancing.Building.WallCavityTier) && session.Layout.Tier >= session.Data.Balancing.Building.WallCavityTier,
+            };
+            _shownFloor = ViewState.Floor;
+            heatmap.SetFluid(ViewState.Fluid);
             _root = new GameObject("Building " + session.Layout.Id);
             _building = Child<BuildingRenderer>("Blueprint");
-            _building.Build(session.Layout, palette, materials.Building, materials.Walls, materials.Overlay);
+            _building.Build(session.Layout, palette, materials.Building, materials.Walls, materials.Overlay, ViewState.Floor);
             _rooms = Child<RoomHeatmapRenderer>("RoomHeatmap");
             _rooms.Init(materials.RoomHeat, session.Rooms.Grid, session.Layout.Width, session.Layout.Height);
             Ducts = Child<DuctRenderer>("Ducts");
@@ -60,7 +69,7 @@ namespace HeadLoss.Unity
             _equipment = Child<EquipmentLayer>("Equipment");
             _equipment.Init(session.Data, palette, materials.Equipment);
 
-            Interaction = new BuildingInteraction(session, camera, input, Ducts.Geometry);
+            Interaction = new BuildingInteraction(session, camera, input, View, ViewState);
             Hud = new BuildingHud(uiRoot, ui, session, Interaction, heatmap, camera) { DebugAvailable = debugAvailable };
 
             BuildingLayout l = session.Layout;
@@ -88,6 +97,9 @@ namespace HeadLoss.Unity
                 if (_input.HeatmapKeys[i].WasPressedThisFrame()) _heatmap.SetMode((HeatmapMode)(i + 1));
             if (_input.DebugOverlay.WasPressedThisFrame()) Hud.ToggleDebug();
             if (_input.RoomLayer.WasPressedThisFrame()) _heatmap.CycleLayer();
+            if (_input.FloorUp.WasPressedThisFrame()) ViewState.StepFloor(1);
+            if (_input.FloorDown.WasPressedThisFrame()) ViewState.StepFloor(-1);
+            if (_input.Layer.WasPressedThisFrame()) ViewState.CycleLayer();
             if (_input.Undo.WasPressedThisFrame()) s.Undo();
             if (_input.Redo.WasPressedThisFrame()) s.Redo();
             if (_input.Commit.WasPressedThisFrame()) s.Execute(new Game.Commands.CommitDesignCommand());
@@ -95,10 +107,16 @@ namespace HeadLoss.Unity
             if (_input.Crank.WasPressedThisFrame()) s.Crank();
             s.CrankHeld = _input.Crank.IsPressed() || Hud.CrankHeld;
 
+            _heatmap.SetFluid(ViewState.Fluid);
+            if (ViewState.Floor != _shownFloor)
+            {
+                _shownFloor = ViewState.Floor;
+                _building.ShowFloor(_shownFloor);
+            }
             if (s.StateRevision != _stateRev) Interaction.Validate();
-            _equipment.Sync(s.Layout, s.State);
+            _equipment.Sync(s.Layout, s.State, ViewState.Floor);
             UpdateHeatmapRange();
-            _rooms.Refresh(s.Rooms, _heatmap, _palette, (float)s.Data.Balancing.Heatmap.RoomAlpha);
+            _rooms.Refresh(s.Rooms, _heatmap, _palette, (float)s.Data.Balancing.Heatmap.RoomAlpha, ViewState.Floor - s.Layout.LowestFloor);
             RebuildDuctsIfNeeded();
             Hud.Update(time);
         }
@@ -120,27 +138,28 @@ namespace HeadLoss.Unity
 
         public void LateUpdate(float dt)
         {
-            _particles.Draw(Ducts.Geometry, View.Snapshot, dt);
+            _particles.Draw(View, dt);
             _equipment.Animate(Session, Session.Data.Balancing.Particles.FanSpinDegreesPerM3h);
         }
 
-        /// <summary>The scale follows the building: ducts (and rooms, for modes that colour them).</summary>
+        /// <summary>The scale follows the network in focus (and the rooms, for modes that colour them).</summary>
         void UpdateHeatmapRange()
         {
             NetworkSnapshot? snap = Session.Current;
-            if (snap == null || _heatmap.Mode == HeatmapMode.Plain) return;
+            FluidSolve? solve = snap?.For(ViewState.Fluid);
+            if (solve == null || _heatmap.Mode == HeatmapMode.Plain || _heatmap.Mode == HeatmapMode.Stress) return;
             double min = double.MaxValue, max = double.MinValue, roomMax = 0;
-            foreach (var kv in snap.Compiled.SegmentLink)
+            foreach (var kv in solve.Compiled.SegmentLink)
             {
-                double v = DuctRenderer.Value(_heatmap.Mode, snap, kv.Value);
+                double v = DuctRenderer.Value(_heatmap.Mode, solve, kv.Value);
                 min = System.Math.Min(min, v);
                 max = System.Math.Max(max, v);
             }
-            if (HeatmapState.ColoursRooms(_heatmap.Mode))
+            if (_heatmap.RoomsColoured)
             {
                 Game.Thermal.BuildingClimate rooms = Session.Rooms;
                 int n = rooms.Grid.Cells;
-                for (int c = 0; c < rooms.Grid.NX * rooms.Grid.NY; c++)
+                for (int c = 0; c < n; c++)
                 {
                     if (rooms.Grid.Room[c] < 0) continue;
                     double v = RoomHeatmapRenderer.Value(rooms, _heatmap, c, n);
@@ -160,29 +179,34 @@ namespace HeadLoss.Unity
         {
             BuildingSession s = Session;
             BuildingInteraction ix = Interaction;
-            if (s.StateRevision == _stateRev && s.SolveRevision == _solveRev && ix.Revision == _ixRev && _heatmap.Revision == _hmRev) return;
+            if (s.StateRevision == _stateRev && s.SolveRevision == _solveRev && ix.Revision == _ixRev && _heatmap.Revision == _hmRev && ViewState.Revision == _viewRev) return;
             _stateRev = s.StateRevision;
             _solveRev = s.SolveRevision;
             _ixRev = ix.Revision;
             _hmRev = _heatmap.Revision;
+            _viewRev = ViewState.Revision;
 
-            View.GhostSegments.Clear();
+            View.Floor = ViewState.Floor;
+            View.CeilingInFocus = ViewState.Layer != ViewLayer.Floor;
             View.InvalidPath = null;
             DrawPreview? pv = ix.Preview;
-            if (ix.IsDrawing && pv?.Snapshot != null)
+            bool preview = ix.IsDrawing && pv?.Snapshot != null;
+            NetworkSnapshot? snap = preview ? pv!.Snapshot : s.Current;
+            View.Snapshot = snap;
+            BuildingState state = preview ? pv!.Snapshot!.State : s.State;
+            foreach (NetworkView v in View.Views)
             {
-                // Simulate before you buy: show the whole network as if the run were placed.
-                View.Network = pv.Snapshot.State.Air;
-                View.Snapshot = pv.Snapshot;
-                foreach (DuctSegment seg in pv.Snapshot.State.Air.Segments)
-                    if (s.State.Air.FindSegment(seg.Id) == null) View.GhostSegments.Add(seg.Id);
+                v.Network = state.Net(v.Fluid);
+                v.Solve = snap?.For(v.Fluid);
+                v.Active = v.Fluid == ViewState.Fluid;
+                v.GhostSegments.Clear();
+                if (preview)
+                    foreach (DuctSegment seg in v.Network.Segments)
+                        if (s.State.Net(v.Fluid).FindSegment(seg.Id) == null) v.GhostSegments.Add(seg.Id);
             }
-            else
-            {
-                View.Network = s.State.Air;
-                View.Snapshot = s.Current;
-                if (ix.IsDrawing && ix.Path.Count > 1) View.InvalidPath = new List<TilePos>(ix.Path);
-            }
+            if (ix.IsDrawing && !preview && ix.Path.Count > 1) View.InvalidPath = new List<TilePos>(ix.Path);
+            View.SelectionFluid = ix.Selected.Fluid ?? "air";
+            View.HoverFluid = ix.Hover.Fluid ?? "air";
             View.SelectedSegments.Clear();
             foreach (int id in ix.SelectedSegments) View.SelectedSegments.Add(id);
             View.SelectedNode = ix.Selected.Kind == TargetKind.Node || ix.Selected.Kind == TargetKind.Inline ? ix.Selected.Id : 0;
@@ -194,25 +218,21 @@ namespace HeadLoss.Unity
             View.Placing = ix.PlaceTool.Length > 0 && ix.PlaceHovering;
             View.PlaceTile = ix.PlaceTile;
             View.PlaceValid = ix.PlaceValid;
+            View.Stress = (fluid, seg) => s.Failures.StressOf(fluid, seg, s.State);
             Ducts.Rebuild(View);
         }
 
-        /// <summary>The tile of an intake, outlet or inline part target (null for ducts and fittings).</summary>
+        /// <summary>The tile of an opening, outlet or inline part target on the floor on show (null for pipes and fittings).</summary>
         TilePos? TileOf(Target t)
         {
-            switch (t.Kind)
+            TilePos? tile = t.Kind switch
             {
-                case TargetKind.Intake:
-                    var o = Session.Layout.FindOpening(t.Anchor);
-                    return o != null ? new TilePos(o.X, o.Y) : (TilePos?)null;
-                case TargetKind.Outlet:
-                    var v = Session.Layout.FindOutlet(t.Anchor);
-                    return v != null ? new TilePos(v.X, v.Y) : (TilePos?)null;
-                case TargetKind.Inline:
-                    return Session.State.Air.FindNode(t.Id)?.Pos;
-                default:
-                    return null;
-            }
+                TargetKind.Intake => Session.Layout.FindOpening(t.Anchor) is { } o ? BuildingLayout.PosOf(o) : (TilePos?)null,
+                TargetKind.Outlet => Session.Layout.FindOutlet(t.Anchor) is { } v ? BuildingLayout.PosOf(v) : (TilePos?)null,
+                TargetKind.Inline => Session.State.Net(t.Fluid ?? "air").FindNode(t.Id)?.Pos,
+                _ => null,
+            };
+            return tile.HasValue && tile.Value.F == ViewState.Floor ? tile : null;
         }
 
         public void Dispose()
