@@ -95,6 +95,9 @@ namespace HeadLoss.Unity.View
             transform.position += (Vector3)((Vector2)_dragOriginWorld - now);
         }
 
+        /// <summary>Pans so a world point is in the middle of the view.</summary>
+        public void CentreOn(Vector2 world) => transform.position = new Vector3(world.x, world.y, transform.position.z);
+
         public void EndDrag() => _dragging = false;
         public bool Dragging => _dragging;
     }

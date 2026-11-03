@@ -43,7 +43,8 @@ namespace HeadLoss.Unity.UI
             head.style.justifyContent = Justify.SpaceBetween;
             head.style.alignItems = Align.Center;
             _header = UiKit.Text(head, "Outlets", "hl-section");
-            _rows = new VisualElement();
+            _rows = new ScrollView(ScrollViewMode.Vertical);
+            _rows.style.flexShrink = 1;
             Button toggle = ui.Button(head, "Hide", () => { });
             toggle.clicked += () =>
             {
@@ -75,7 +76,9 @@ namespace HeadLoss.Unity.UI
             r.Chip = new VisualElement();
             r.Chip.AddToClassList("hl-zone-chip");
             top.Add(r.Chip);
-            r.Name = UiKit.Text(top, NiceName(id), "hl-outlet-name");
+            var placed = _s.Layout.FindOutlet(id)!;
+            string floor = _s.Layout.Floors > 1 ? " · " + (placed.Floor == 0 ? "G" : placed.Floor.ToString()) : "";
+            r.Name = UiKit.Text(top, NiceName(id) + floor, "hl-outlet-name");
             r.Delivery = UiKit.Text(top, "", "hl-outlet-value");
             r.Zone = UiKit.Text(r.Root, "", "hl-outlet-zone");
 
@@ -114,7 +117,7 @@ namespace HeadLoss.Unity.UI
                 if (st == null) continue;
                 Color zc = _ui.ZoneColour(st.Zone);
                 r.Chip.style.backgroundColor = zc;
-                r.Delivery.text = st.Connected ? Units.FormatAirFlow(st.Delivery) : "—";
+                r.Delivery.text = st.Connected ? UiKit.FormatDelivery(st.Def, st.Delivery) : "—";
                 string pay = st.Zone == OutletZone.Working || st.Zone == OutletZone.Overdelivery
                     ? $" · ×{st.Multiplier:0.00} · {Units.FormatMoneyRate(st.BaseRate * st.Multiplier, _symbol)}"
                     : "";

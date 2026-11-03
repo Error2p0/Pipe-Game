@@ -128,6 +128,8 @@ namespace HeadLoss.Game.Tests
                 s.Game.Wallet = 1e7;
                 s.MarkDirty();
                 s.Commit();
+                // Water at the reference pressure (no mains are routed in this test).
+                s.Supply = new WaterSupply(true, BuildingSession.ReferenceWaterPressure(Data));
                 built.Add(s);
             }
             ctx.Leave();

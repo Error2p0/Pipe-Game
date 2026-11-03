@@ -423,3 +423,31 @@
     width: 760px;
     padding: 20px;
 }
+
+.hl-viewbar {
+    margin-top: 10px;
+}
+
+.hl-toolbox {
+    flex-shrink: 1;
+}
+
+.hl-outlets {
+    max-height: 50%;
+}
+
+.hl-violations {
+    margin-top: 12px;
+}
+
+.hl-stress-track {
+    height: 8px;
+    margin-top: 6px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.hl-stress-fill {
+    height: 100%;
+    width: 0;
+}

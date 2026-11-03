@@ -82,7 +82,7 @@ namespace HeadLoss.Core.Data
             {
                 bool fan = data.FindEquipment(id)?.Placement == "inline";
                 string? model = data.FindFitting(id)?.Model;
-                bool valve = model == "valve" || model == "check" || model == "regulator" || model == "relief";
+                bool valve = model == "valve" || model == "check" || model == "regulator" || model == "relief" || id == "fire-damper";
                 if (!fan && !valve) errors.Add($"game.json toolbox: '{id}' is not an inline fan or valve");
             }
             foreach (var kv in t.RoomFills) Colour($"game.json theme.roomFills.{kv.Key}", kv.Value, errors);

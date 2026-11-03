@@ -4,7 +4,7 @@
   "currencySymbol": "$",
   "steam": { "appId": 480, "restartIfNecessary": false },
   "toolbox": {
-    "parts": ["damper", "inline-duct-fan"]
+    "parts": ["damper", "inline-duct-fan", "fire-damper", "shutoff-valve", "ball-valve", "balancing-valve", "check-valve", "pressure-reducing-valve", "relief-valve", "pressure-tank", "inline-booster-pump", "circulation-pump"]
   },
   "theme": {
     "paper": "#F4F1EA",

@@ -122,6 +122,13 @@ namespace HeadLoss.Unity.Interaction
         /// <summary>Pipes are drawn and picked in the ceiling layer (the floor layer is for equipment and outlets).</summary>
         bool PipesInFocus => View.Layer != ViewLayer.Floor;
 
+        /// <summary>Shows a short calm message on the hint line.</summary>
+        public void SetHint(string text)
+        {
+            Hint = text;
+            Revision++;
+        }
+
         /// <summary>Puts a network in focus (the toolbox tabs, or selecting one of its pipes).</summary>
         public void SetFluid(string fluid)
         {
@@ -427,7 +434,7 @@ namespace HeadLoss.Unity.Interaction
             Selected = t;
             if (t.Kind == TargetKind.Segment) SelectedSegments.Add(t.Id);
             // Selecting a pipe of the other network brings that network into focus.
-            if ((t.Kind == TargetKind.Segment || t.Kind == TargetKind.Node || t.Kind == TargetKind.Inline) && t.Fluid != View.Fluid) View.SetFluid(t.Fluid);
+            if (t.Kind != TargetKind.None && t.Fluid != View.Fluid) View.SetFluid(t.Fluid);
             Revision++;
         }
 
@@ -478,7 +485,7 @@ namespace HeadLoss.Unity.Interaction
                     return new Target { Kind = TargetKind.Outlet, Anchor = o.Id, Fluid = BuildingState.OutletFluid(o.Type) };
             foreach (EntryOpeningDef o in _session.Layout.EntryOpenings)
                 if (BuildingLayout.PosOf(o) == tile && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.45f)
-                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id, Fluid = o.Utility };
+                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id, Fluid = o.Utility == "power" ? View.Fluid : o.Utility };
             if (!PipesInFocus) return Target.None;
             Target t = PickIn(View.Fluid, world);
             if (t.Kind != TargetKind.None) return t;
