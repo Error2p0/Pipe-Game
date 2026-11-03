@@ -264,6 +264,7 @@ namespace HeadLoss.Unity
             o.Heatmap = Hud.Heatmap;
             o.Filter = Hud.Filter;
             o.HeatmapPalette = _heatmap.Palette;
+            Hud.SetLegendPalette(_heatmap.Palette);
             o.SelectedMain = Hud.SelectedMain;
             o.Violations = _ctx.CityViolations;
             o.RouteUtility = Hud.Utility;

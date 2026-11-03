@@ -47,6 +47,22 @@ namespace HeadLoss.Unity.UI
         readonly List<Label> _routeLines = new List<Label>(), _mainLines = new List<Label>();
         readonly Button _removeMain;
         string _shownSizes = "";
+        static readonly float[] LegendStops = { 0f, 0.25f, 0.5f, 0.75f, 1f };
+        readonly List<Label> _legendChips = new List<Label>();
+        string _legendPalette = "";
+
+        /// <summary>Colours the legend from the heatmap palette in the settings.</summary>
+        public void SetLegendPalette(string palette)
+        {
+            if (palette == _legendPalette) return;
+            _legendPalette = palette;
+            for (int i = 0; i < _legendChips.Count; i++)
+            {
+                Color c = _ui.P.Ramp(palette, LegendStops[i]);
+                _legendChips[i].style.backgroundColor = c;
+                _legendChips[i].style.color = 0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b > 0.45f ? new Color(0.12f, 0.15f, 0.19f) : Color.white;
+            }
+        }
 
         /// <summary>The active tool.</summary>
         public CityTool Tool { get; set; }
@@ -130,13 +146,12 @@ namespace HeadLoss.Unity.UI
             tools.Add(_legend);
             UiKit.Text(_legend, "Share of capacity (0–100%)", "hl-subtitle");
             VisualElement chips = UiKit.Row(_legend);
-            foreach (float at in new[] { 0f, 0.25f, 0.5f, 0.75f, 1f })
+            foreach (float at in LegendStops)
             {
                 var chip = new Label($"{at * 100:0}");
                 chip.AddToClassList("hl-legend-chip");
-                chip.style.backgroundColor = ui.P.Ramp("viridis", at);
-                chip.style.color = at < 0.5f ? Color.white : ui.P.Text;
                 chips.Add(chip);
+                _legendChips.Add(chip);
             }
             var over = new Label("100+");
             over.AddToClassList("hl-legend-chip");

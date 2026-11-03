@@ -83,6 +83,21 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
+        public void Hint_OfAWaterBuilding_CountsFlowNotTapPressure_AndItsRealFloors()
+        {
+            GameContext c = NewCity();
+            foreach (Plot p in c.City!.Plots.FindAll(x => x.Tier == 3).GetRange(0, 3))
+            {
+                DifficultyHint? h = null;
+                c.CityBuildings!.Get(p.Id);
+                for (int i = 0; i < 100 && h == null; i++) h = c.CityBuildings.Hint(p.Id);
+                Assert.NotNull(h);
+                Assert.Less(h!.FlowDemand, 5, "m³/s: flow, not bar");
+                Assert.AreEqual(c.CityBuildings.Get(p.Id)!.Layout.Floors, h.Floors);
+            }
+        }
+
+        [Test]
         public void Route_EndingOnABuilding_IsNotStoppedByTheLinesEndingThere()
         {
             GameContext c = NewCity();

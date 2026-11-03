@@ -657,7 +657,7 @@ namespace HeadLoss.Unity.UI
                 HeatmapMode.Velocity => _hm.RoomsColoured ? $"Velocity (m/s) · rooms 0–{Units.Number(_hm.RoomMax, 1)} m/s" : "Velocity in pipes (m/s)",
                 HeatmapMode.Pressure => $"Pressure in {pipes} ({unit})",
                 HeatmapMode.Flow => $"Flow rate in {pipes} ({unit})",
-                HeatmapMode.Stress => _s.Game.City?.Utilities.EngineeringSoftware == true && _s.HasPendingDesign ? "Stress forecast after 24 h (burst chance rises from 0.6)" : "Stress (1 and above in the warning colour)",
+                HeatmapMode.Stress => _s.Game.City?.Utilities.EngineeringSoftware == true && _s.HasPendingDesign ? $"Stress after {_data.Balancing.Failure.ForecastHours:0} h (forecast)" : "Stress (amber from 1)",
                 _ => $"{HeatmapState.DisplayName(_hm.Mode)} ({unit}){layer}",
             };
             _legendBar.style.backgroundColor = StyleKeyword.None;

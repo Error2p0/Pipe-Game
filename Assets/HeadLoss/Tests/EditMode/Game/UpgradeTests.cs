@@ -196,6 +196,25 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
+        public void NextTier_WaitsUntilItsBuildingsExist()
+        {
+            var ctx = new GameContext(GameTestUtil.Data, GameContext.NewGame(GameTestUtil.Data, 7));
+            ctx.Game.City!.UnlockedTier = 3;
+            int opened = 0;
+            foreach (Plot p in ctx.City!.Plots)
+            {
+                if (p.Tier != 3 || opened == 3) continue;
+                ctx.Open(p.Id);
+                opened++;
+            }
+            ctx.Leave();
+            Assert.AreEqual(3, opened);
+            Tech.Update(ctx, s => true);
+            Assert.AreEqual(3, Tech.UnlockedTier(ctx.Game), "no tier 4 buildings in this version");
+            StringAssert.Contains("later version", Tech.Condition(ctx.Data, ctx, 4));
+        }
+
+        [Test]
         public void TwoTierOneBuildingsOnline_UnlockTierTwo_AndItStays()
         {
             (GameContext ctx, List<BuildingSession> t1) = City();
