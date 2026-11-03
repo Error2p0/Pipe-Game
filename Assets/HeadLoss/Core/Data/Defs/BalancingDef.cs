@@ -24,6 +24,107 @@ namespace HeadLoss.Core.Data.Defs
         public ProgressionDef Progression = new ProgressionDef();
         public ClimateDef Climate = new ClimateDef();
         public RoomGridDef RoomGrid = new RoomGridDef();
+        public WaterDef Water = new WaterDef();
+        public FailureDef Failure = new FailureDef();
+        public PowerDef Power = new PowerDef();
+        public CityUtilitiesDef City = new CityUtilitiesDef();
+    }
+
+    /// <summary>Building water networks (<c>05-simulation.md</c>, <c>06-fluids.md</c>).</summary>
+    public sealed class WaterDef
+    {
+        /// <summary>Temperature of city water in the building, °C (no thermal model for cold water yet).</summary>
+        public double MainsTemperatureC;
+        /// <summary>The auto-router's reference assumes a connection pressure of this share of the facility pressure.</summary>
+        public double ReferenceConnectionFactor;
+        /// <summary>Open pipe ends (a burst) discharge through this K referenced to the pipe area.</summary>
+        public double OpenEndK;
+    }
+
+    /// <summary>Burst model, repairs and water hammer (<c>08-failures.md</c>, <c>05-simulation.md</c> §6).</summary>
+    public sealed class FailureDef
+    {
+        /// <summary>Failure checks per second, Hz.</summary>
+        public double TickHz;
+        /// <summary>k_s: stress rate at overpressure ratio 2, 1/s.</summary>
+        public double StressRate;
+        /// <summary>a: exponent on (x − 1).</summary>
+        public double StressExponent;
+        /// <summary>Weibull shape β.</summary>
+        public double WeibullBeta;
+        /// <summary>Weibull scale η (stress units).</summary>
+        public double WeibullEta;
+        /// <summary>Stress at which a segment weeps (and leak sensors alert).</summary>
+        public double WeepThreshold;
+        /// <summary>Optional slow ageing below rating, stress per second (0 = off, the default).</summary>
+        public double AgeingRate;
+        /// <summary>Standard crew repair time, s.</summary>
+        public double RepairStandardSeconds;
+        /// <summary>Emergency crew repair time, s.</summary>
+        public double RepairEmergencySeconds;
+        /// <summary>Emergency price = factor × standard price.</summary>
+        public double RepairEmergencyFactor;
+        /// <summary>Standard repair price per metre at the reference diameter, $ (× D/D_ref × tier factor).</summary>
+        public double RepairPricePerMetre;
+        /// <summary>Minimum standard repair price, $ (× tier factor).</summary>
+        public double RepairMinPrice;
+        /// <summary>A water-hammer surge lasts this long, s.</summary>
+        public double HammerDurationSeconds;
+        /// <summary>Surges on a network with a pressure tank are multiplied by this.</summary>
+        public double AccumulatorSurgeFactor;
+        /// <summary>Change times for the surge scaling (2L/a)/t: manual valve, pump stop or start, burst, check valve, s.</summary>
+        public double ValveCloseSeconds;
+        public double PumpChangeSeconds;
+        public double BurstSeconds;
+        public double CheckValveSeconds;
+    }
+
+    /// <summary>Electricity (<c>03-city.md</c> §Electricity, <c>04-buildings.md</c> §Electrical panel).</summary>
+    public sealed class PowerDef
+    {
+        /// <summary>Every building's implicit connection until a cable is routed, kW.</summary>
+        public double BasicConnectionKW;
+        /// <summary>Capacity of each district substation, kW.</summary>
+        public double SubstationKW;
+        /// <summary>Draw above the panel limit for longer than this trips the panel, s.</summary>
+        public double TripDelaySeconds;
+        /// <summary>Tech tier at which power cables can be routed.</summary>
+        public int CableTier;
+    }
+
+    /// <summary>City utility network (<c>03-city.md</c>, <c>13-balancing.md</c> §City).</summary>
+    public sealed class CityUtilitiesDef
+    {
+        /// <summary>Facility source pressure per utility (water, gas-lp, gas-mp, gas-hp, heating, special-gas), Pa gauge.</summary>
+        public Dictionary<string, double> FacilityPressure = new Dictionary<string, double>();
+        /// <summary>One-off cost per main-road or rail tile crossed, $.</summary>
+        public double CrossingCost;
+        /// <summary>Directional drilling per tile, $.</summary>
+        public double DrillingPerTile;
+        /// <summary>Utility corridor per road tile, $.</summary>
+        public double CorridorPerTile;
+        /// <summary>Mains and cables a corridor tile holds.</summary>
+        public int CorridorCapacity;
+        /// <summary>Mains and cables an ordinary tile holds.</summary>
+        public int TileCapacity;
+        /// <summary>Recurring fines per income cycle (× the destination building's tier factor), $.</summary>
+        public Dictionary<string, double> Fines = new Dictionary<string, double>();
+        /// <summary>Multiplier on every fine of the industrial gas depot's mains.</summary>
+        public double DepotFineFactor;
+        /// <summary>Gas mains closer than this to a substation are a violation, city tiles.</summary>
+        public int SubstationClearance;
+        /// <summary>Gas and water mains closer than this are a violation, city tiles.</summary>
+        public int MainSeparation;
+        /// <summary>City solve interval, s (and on change).</summary>
+        public double SolveIntervalSeconds;
+        /// <summary>Capacity sharing passes per solve.</summary>
+        public int CapacityPasses;
+        /// <summary>Building ↔ city coupling iterations per change.</summary>
+        public int CouplingIterations;
+        /// <summary>Coupling relative tolerance.</summary>
+        public double CouplingTolerance;
+        /// <summary>Share of the price refunded when a main or cable is removed.</summary>
+        public double RemoveRefundFraction;
     }
 
     /// <summary>Outside conditions (<c>13-balancing.md</c> §Climate).</summary>
@@ -200,6 +301,14 @@ namespace HeadLoss.Core.Data.Defs
         public double WallCavityLayerOffset;
         /// <summary>Budget cap = factor × reference layout cost (<c>04-buildings.md</c>).</summary>
         public double BudgetCapFactor;
+        /// <summary>Ceiling capacity units per tile (the old-buildings modifier lowers it).</summary>
+        public int CeilingCapacity;
+        /// <summary>Core drilling a wall tile to pass a pipe (tier 2+), $ each.</summary>
+        public double CoreDrillPrice;
+        /// <summary>Lowest tier that may core-drill walls.</summary>
+        public int CoreDrillTier;
+        /// <summary>Tier at which the wall cavity layer unlocks.</summary>
+        public int WallCavityTier;
     }
 
     public sealed class HeatmapDef

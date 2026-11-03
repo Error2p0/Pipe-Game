@@ -5,7 +5,7 @@ namespace HeadLoss.Core.Data.Defs
     {
         public string Id = "";
         public string DisplayName = "";
-        /// <summary>fixed, elbow, tee, reducer, valve, filter.</summary>
+        /// <summary>fixed, elbow, tee, reducer, valve, check, regulator, relief, filter.</summary>
         public string Model = "";
         public int Tier;
         /// <summary>Loss coefficient for the fixed and valve models (valve: K at 100% open).</summary>
@@ -28,6 +28,12 @@ namespace HeadLoss.Core.Data.Defs
         public double MinOpening;
         /// <summary>Filter pressure drop at rated flow, Pa (proportional to Q²).</summary>
         public double RatedPressureDropPa;
+        /// <summary>Regulators and relief valves: default setpoint, Pa (gauge).</summary>
+        public double DefaultSetting;
+        /// <summary>Setpoint adjustment step, Pa (0.1 bar for water, <c>07-equipment.md</c> §Control parts).</summary>
+        public double SettingStep;
+        public double SettingMin;
+        public double SettingMax;
         /// <summary>Price at the reference diameter, $ (× D/D_ref above it).</summary>
         public double Price;
         public string Notes = "";

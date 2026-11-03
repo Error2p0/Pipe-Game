@@ -10,8 +10,9 @@ namespace HeadLoss.Core.Data
     public static class DataValidator
     {
         static readonly HashSet<string> MaterialKinds = new HashSet<string> { "duct", "pipe" };
-        static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "filter" };
-        static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable" };
+        static readonly HashSet<string> FamilyKinds = new HashSet<string> { "duct", "pipe", "main", "cable" };
+        static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "check", "regulator", "relief", "filter" };
+        static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable", "none" };
         static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon" };
         static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };
@@ -80,7 +81,8 @@ namespace HeadLoss.Core.Data
             foreach (string id in data.Game.Toolbox.Parts)
             {
                 bool fan = data.FindEquipment(id)?.Placement == "inline";
-                bool valve = data.FindFitting(id)?.Model == "valve";
+                string? model = data.FindFitting(id)?.Model;
+                bool valve = model == "valve" || model == "check" || model == "regulator" || model == "relief";
                 if (!fan && !valve) errors.Add($"game.json toolbox: '{id}' is not an inline fan or valve");
             }
             foreach (var kv in t.RoomFills) Colour($"game.json theme.roomFills.{kv.Key}", kv.Value, errors);
@@ -249,6 +251,13 @@ namespace HeadLoss.Core.Data
                 Tier(w, m.Tier, errors);
                 foreach (string fl in m.Fluids)
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
+                if (m.Kind == "pipe")
+                {
+                    if (m.Walls.Count == 0) errors.Add($"{w}: pipes need wall thicknesses");
+                    if (!(m.WaveSpeed > 0)) errors.Add($"{w}: pipes need a wave speed");
+                    foreach (PipeWallDef wall in m.Walls)
+                        if (!(wall.WallMm > 0 && 2 * wall.WallMm < wall.DiameterMm)) errors.Add($"{w}: wall {wall.WallMm} mm does not fit {wall.DiameterMm} mm");
+                }
             }
         }
 
@@ -258,12 +267,28 @@ namespace HeadLoss.Core.Data
             {
                 string w = $"pipes.json '{p.Id}'";
                 Id("pipes.json", p.Id, errors);
-                if (!MaterialKinds.Contains(p.Kind)) errors.Add($"{w}: kind '{p.Kind}' unknown");
+                if (!FamilyKinds.Contains(p.Kind)) errors.Add($"{w}: kind '{p.Kind}' unknown");
                 if (p.Sizes.Count == 0) errors.Add($"{w}: no sizes");
+                bool city = p.Kind == "main" || p.Kind == "cable";
+                if (city && !Utilities.Contains(p.Utility)) errors.Add($"{w}: utility '{p.Utility}' unknown");
+                if (p.Kind == "main")
+                {
+                    Positive(w + " capacityVelocity", p.CapacityVelocity, errors);
+                    Positive(w + " pricePerTile", p.PricePerTile, errors);
+                    Positive(w + " priceReferenceDiameterMm", p.PriceReferenceDiameterMm, errors);
+                }
                 for (int i = 0; i < p.Sizes.Count; i++)
                 {
+                    Tier($"{w} sizes[{i}]", p.Sizes[i].Tier, errors);
+                    if (p.Kind == "cable")
+                    {
+                        Positive($"{w} sizes[{i}].capacityKW", p.Sizes[i].CapacityKW, errors);
+                        Positive($"{w} sizes[{i}].pricePerTile", p.Sizes[i].PricePerTile, errors);
+                        if (i > 0 && !(p.Sizes[i].CapacityKW > p.Sizes[i - 1].CapacityKW)) errors.Add($"{w}: sizes not ascending at {i}");
+                        continue;
+                    }
                     Positive($"{w} sizes[{i}].diameterMm", p.Sizes[i].DiameterMm, errors);
-                    if (p.Sizes[i].CapacityUnits < 1) errors.Add($"{w} sizes[{i}]: capacityUnits must be ≥ 1");
+                    if (!city && p.Sizes[i].CapacityUnits < 1) errors.Add($"{w} sizes[{i}]: capacityUnits must be ≥ 1");
                     if (i > 0 && !(p.Sizes[i].DiameterMm > p.Sizes[i - 1].DiameterMm)) errors.Add($"{w}: sizes not ascending at {i}");
                 }
             }
@@ -280,7 +305,15 @@ namespace HeadLoss.Core.Data
                 if (!FittingModels.Contains(ft.Model)) { errors.Add($"{w}: model '{ft.Model}' unknown"); continue; }
                 switch (ft.Model)
                 {
-                    case "fixed": Positive(w + " k", ft.K, errors); break;
+                    case "fixed":
+                    case "check": Positive(w + " k", ft.K, errors); break;
+                    case "regulator":
+                    case "relief":
+                        Positive(w + " k", ft.K, errors);
+                        Positive(w + " settingStep", ft.SettingStep, errors);
+                        if (!(ft.SettingMin > 0 && ft.SettingMin <= ft.DefaultSetting && ft.DefaultSetting <= ft.SettingMax))
+                            errors.Add($"{w}: need 0 < settingMin ≤ defaultSetting ≤ settingMax");
+                        break;
                     case "valve":
                         Positive(w + " k", ft.K, errors);
                         if (!(ft.MinOpening > 0 && ft.MinOpening <= 1)) errors.Add($"{w}: minOpening must be in (0, 1]");
@@ -310,7 +343,7 @@ namespace HeadLoss.Core.Data
                 if (!SpeedControls.Contains(e.SpeedControl)) errors.Add($"{w}: speedControl '{e.SpeedControl}' unknown");
                 if (!Placements.Contains(e.Placement)) errors.Add($"{w}: placement '{e.Placement}' unknown");
                 if (!PowerModels.Contains(e.PowerModel)) errors.Add($"{w}: powerModel '{e.PowerModel}' unknown");
-                if (!Layers.Contains(e.Footprint.Layer)) errors.Add($"{w}: footprint.layer '{e.Footprint.Layer}' unknown");
+                if (!Layers.Contains(e.Footprint.Layer) && e.Footprint.Layer != "none") errors.Add($"{w}: footprint.layer '{e.Footprint.Layer}' unknown");
                 if (e.Footprint.Width < 1 || e.Footprint.Height < 1) errors.Add($"{w}: footprint must be ≥ 1×1");
                 foreach (string fl in e.Fluids)
                     if (data.FindFluid(fl) == null) errors.Add($"{w}: fluid '{fl}' unknown");
@@ -319,6 +352,16 @@ namespace HeadLoss.Core.Data
                 {
                     if (!(e.EfficiencyFactor > 0 && e.EfficiencyFactor <= 1)) errors.Add($"{w}: efficiencyFactor must be in (0, 1]");
                     if (e.FitsCategories.Count == 0) errors.Add($"{w}: add-on fits no category");
+                    continue;
+                }
+                if (e.Category == "panel")
+                {
+                    Positive(w + " panelLimitKW", e.PanelLimitKW, errors);
+                    continue;
+                }
+                if (e.Curve.Count == 0)
+                {
+                    if (e.PowerModel == "curve") errors.Add($"{w}: powerModel curve needs a curve");
                     continue;
                 }
                 Positive(w + " connectionDiameterMm", e.ConnectionDiameterMm, errors);
@@ -365,6 +408,7 @@ namespace HeadLoss.Core.Data
                     OutletRequirementDef r = kv.Value;
                     if (!(r.Min > 0 && r.Ideal >= r.Min)) errors.Add($"{w} tier {kv.Key}: need 0 < min ≤ ideal");
                     if (r.Max != 0 && r.Max < r.Ideal) errors.Add($"{w} tier {kv.Key}: code max below ideal");
+                    if (o.Measured == "pressure" && !(r.DesignFlowLps > 0)) errors.Add($"{w} tier {kv.Key}: pressure outlets need designFlowLps");
                 }
             }
         }

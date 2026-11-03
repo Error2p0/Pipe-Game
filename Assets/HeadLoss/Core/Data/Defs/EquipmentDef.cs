@@ -31,6 +31,8 @@ namespace HeadLoss.Core.Data.Defs
         public double ConnectionDiameterMm;
         /// <summary>Purchase price, $.</summary>
         public double Price;
+        /// <summary>Electrical panels: total kW limit.</summary>
+        public double PanelLimitKW;
         public string Notes = "";
     }
 
@@ -38,7 +40,7 @@ namespace HeadLoss.Core.Data.Defs
     {
         public int Width = 1;
         public int Height = 1;
-        /// <summary>floor or ceiling.</summary>
+        /// <summary>floor, ceiling or none (an opening fitting that takes no space).</summary>
         public string Layer = "";
     }
 

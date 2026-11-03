@@ -47,6 +47,8 @@ namespace HeadLoss.Sim.Network
         /// <summary>Velocity above 0.3 × speed of sound (incompressible assumption weak).</summary>
         public bool[] MachWarning = System.Array.Empty<bool>();
         public bool[] LinkActive = System.Array.Empty<bool>();
+        /// <summary>Final status per link (control valves: open, closed or active).</summary>
+        public LinkStatus[] Status = System.Array.Empty<LinkStatus>();
 
         /// <summary>Pressure at a link's start node, Pa.</summary>
         public double PressureFrom(NetworkGraph g, int link) => NodePressure[g.Links[link].From];

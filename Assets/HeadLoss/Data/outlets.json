@@ -10,11 +10,93 @@
     "grille": "vent-grille",
     "grilleFaceAreaM2": 0.04,
     "tiers": {
-      "1": { "min": 25, "ideal": 35, "max": 60 },
-      "2": { "min": 30, "ideal": 45, "max": 75 },
-      "3": { "min": 40, "ideal": 60, "max": 90 },
-      "4": { "min": 60, "ideal": 90, "max": 140 },
-      "5": { "min": 80, "ideal": 120, "max": 180 }
+      "1": {
+        "min": 25,
+        "ideal": 35,
+        "max": 60
+      },
+      "2": {
+        "min": 30,
+        "ideal": 45,
+        "max": 75
+      },
+      "3": {
+        "min": 40,
+        "ideal": 60,
+        "max": 90
+      },
+      "4": {
+        "min": 60,
+        "ideal": 90,
+        "max": 140
+      },
+      "5": {
+        "min": 80,
+        "ideal": 120,
+        "max": 180
+      }
+    }
+  },
+  {
+    "id": "cold-water-tap",
+    "displayName": "Cold water tap",
+    "fluid": "water",
+    "measured": "pressure",
+    "unit": "bar",
+    "codeMaxReason": "Tap pressure",
+    "payFactor": 1.2,
+    "grille": "",
+    "grilleFaceAreaM2": 0,
+    "tiers": {
+      "2": {
+        "min": 1.0,
+        "ideal": 2.0,
+        "max": 4.0,
+        "designFlowLps": 0.1
+      },
+      "3": {
+        "min": 1.5,
+        "ideal": 3.0,
+        "max": 5.0,
+        "designFlowLps": 0.1
+      },
+      "4": {
+        "min": 1.5,
+        "ideal": 3.0,
+        "max": 5.0,
+        "designFlowLps": 0.15
+      },
+      "5": {
+        "min": 1.5,
+        "ideal": 3.0,
+        "max": 5.0,
+        "designFlowLps": 0.15
+      }
+    }
+  },
+  {
+    "id": "hot-water-tap",
+    "displayName": "Hot water tap",
+    "fluid": "hot-water",
+    "measured": "pressure",
+    "unit": "bar",
+    "codeMaxReason": "Tap pressure",
+    "payFactor": 1.5,
+    "grille": "",
+    "grilleFaceAreaM2": 0,
+    "tiers": {
+      "4": {
+        "min": 1.5,
+        "ideal": 3.0,
+        "max": 5.0,
+        "designFlowLps": 0.1
+      },
+      "5": {
+        "min": 1.5,
+        "ideal": 3.0,
+        "max": 5.0,
+        "designFlowLps": 0.1
+      }
     }
   }
 ]
