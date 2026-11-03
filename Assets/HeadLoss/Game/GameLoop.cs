@@ -146,6 +146,35 @@ namespace HeadLoss.Game
             return q;
         }
 
+        /// <summary>
+        /// What a building would need from the mains: its current inflow, or the design flow of all its taps when that
+        /// is more (nothing built yet), m³/s.
+        /// </summary>
+        public double PlotWaterDemand(string plotId)
+        {
+            double built = FindSession(plotId)?.WaterDemand() ?? 0;
+            BuildingLayout? layout = CityBuildings?.Get(plotId)?.Layout;
+            if (layout == null) return built;
+            double design = 0;
+            foreach (OutletPlacementDef o in layout.Outlets)
+                if (BuildingState.OutletFluid(o.Type) == "water") design += Networks.NetworkCompiler.DesignFlow(Data, layout, o);
+            return System.Math.Max(built, design);
+        }
+
+        /// <summary>The route tool's live preview: the connection a water main would give its destination (null: it reaches no building).</summary>
+        public WaterConnection? PreviewWater(double diameterMm, IReadOnlyList<(int x, int y)> path, bool drilled, RouteQuote quote)
+        {
+            if (City == null || Game.City == null || !quote.Valid || quote.Destination.Length == 0) return null;
+            UtilityState u = Game.City.Utilities;
+            PipeFamilyDef? family = Utilities.FamilyFor(Data, "water");
+            if (family == null) return null;
+            var trial = new UtilityState { Corridors = u.Corridors, NextId = u.NextId };
+            trial.Mains.AddRange(u.Mains);
+            Utilities.Lay(trial, "water", family.Id, diameterMm, 0, path, drilled, quote);
+            CityNetworkResult r = CityNetwork.Solve(Data, City, trial, PlotWaterDemand, _ => 0);
+            return r.Water.TryGetValue(quote.Destination, out WaterConnection w) ? w : (WaterConnection?)null;
+        }
+
         /// <summary>Removes a main or cable (and branches that only it fed), refunding a share of what they cost.</summary>
         public bool RemoveMain(int mainId)
         {
@@ -331,25 +360,32 @@ namespace HeadLoss.Game
         public static void CityCosts(GameContext ctx, double dt)
         {
             GameState g = ctx.Game;
-            if (g.City == null) return;
-            double cycle = ctx.Data.Balancing.Economy.IncomeCycleSeconds;
-            double cost = ctx.FinesPerCycle / cycle;
-            if (g.City.Utilities.Insurance)
-            {
-                double gross = 0;
-                foreach (BuildingSession s in ctx.Sessions) gross += s.CommittedEvaluation.Gross;
-                MetaUpgradeDef? ins = ctx.Data.Upgrades.Meta.Find(m => m.Id == "insurance");
-                cost += gross * (ins?.PremiumFraction ?? 0);
-            }
-            foreach (BuildingSession s in ctx.Sessions)
-                if (s.Record.Failures.MaintenanceContract)
-                {
-                    MetaUpgradeDef? mc = ctx.Data.Upgrades.Meta.Find(m => m.Id == "maintenance-contract");
-                    cost += s.CommittedEvaluation.Gross * (mc?.PremiumFraction ?? 0);
-                }
+            FinesPerSecond(ctx, out double fines);
+            double cost = fines + PremiumsPerSecond(ctx);
             if (cost <= 0) return;
             g.ApplyIncome(-cost * dt);
             g.LifetimeIncome -= cost * dt;
+        }
+
+        /// <summary>Routing fines spread over the income cycle, $/s.</summary>
+        public static void FinesPerSecond(GameContext ctx, out double fines) =>
+            fines = ctx.Game.City == null ? 0 : ctx.FinesPerCycle / ctx.Data.Balancing.Economy.IncomeCycleSeconds;
+
+        /// <summary>Share of a building's gross that goes to premiums: insurance (city-wide) and its maintenance contract.</summary>
+        public static double PremiumFraction(GameContext ctx, BuildingSession s)
+        {
+            double fraction = 0;
+            if (ctx.Game.City?.Utilities.Insurance == true) fraction += ctx.Data.Upgrades.Meta.Find(m => m.Id == "insurance")?.PremiumFraction ?? 0;
+            if (s.Record.Failures.MaintenanceContract) fraction += ctx.Data.Upgrades.Meta.Find(m => m.Id == "maintenance-contract")?.PremiumFraction ?? 0;
+            return fraction;
+        }
+
+        /// <summary>Insurance and maintenance premiums on what is earning now, $/s.</summary>
+        public static double PremiumsPerSecond(GameContext ctx)
+        {
+            double total = 0;
+            foreach (BuildingSession s in ctx.Sessions) total += s.CommittedEvaluation.Gross * PremiumFraction(ctx, s);
+            return total;
         }
 
         public static void EconomyStep(GameState game, IReadOnlyList<BuildingSession> sessions, double dt)

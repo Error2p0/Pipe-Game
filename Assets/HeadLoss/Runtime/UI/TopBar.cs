@@ -87,6 +87,9 @@ namespace HeadLoss.Unity.UI
                 fines += ev.Fines;
                 premiums += ev.Premiums;
             }
+            GameLoop.FinesPerSecond(_ctx, out double cityFines);
+            fines += cityFines;
+            premiums += GameLoop.PremiumsPerSecond(_ctx);
             double net = gross - electricity - fines - premiums;
             _wallet.text = Units.FormatMoney(g.Wallet, _symbol);
             _debt.text = g.Debt > 0 ? "debt " + Units.FormatMoney(g.Debt, _symbol) : "";

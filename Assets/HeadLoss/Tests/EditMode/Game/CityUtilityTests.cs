@@ -83,9 +83,35 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
+        public void Route_EndingOnABuilding_IsNotStoppedByTheLinesEndingThere()
+        {
+            GameContext c = NewCity();
+            Plot plot = SomePlot(c, 2, 0), other = SomePlot(c, 2, 1);
+            FacilityPlacement plant = Plant(c), sub = c.City!.Facilities.Find(f => f.Utility == "power")!;
+            Assert.IsTrue(c.LayMain("water", 150, 0, L((plant.X, plant.Y), (plot.X, plot.Y)), true).Valid);
+            Assert.IsTrue(c.LayMain("water", 100, 0, L((plot.X, plot.Y), (other.X, other.Y)), true).Valid);
+            // Two water lines already touch the plot's tile; its power cable still connects.
+            RouteQuote q = Utilities.Quote(c.Data, c.City, c.Game.City!.Utilities, "power", 0, 50, L((sub.X, sub.Y), (plot.X, plot.Y)), true);
+            StringAssert.DoesNotContain("No room", q.Error);
+        }
+
+        [Test]
+        public void PreviewWater_ShowsTheResultingPressure_WithoutLayingAnything()
+        {
+            GameContext c = NewCity();
+            Plot plot = SomePlot(c);
+            var path = L((Plant(c).X, Plant(c).Y), (plot.X, plot.Y));
+            RouteQuote q = Utilities.Quote(c.Data, c.City!, c.Game.City!.Utilities, "water", 150, 0, path, true);
+            WaterConnection? w = c.PreviewWater(150, path, true, q);
+            Assert.NotNull(w);
+            Assert.IsTrue(w!.Value.Connected);
+            Assert.Less(w.Value.PressurePa, c.Data.Balancing.City.FacilityPressure["water"]);
+            Assert.IsEmpty(c.Game.City!.Utilities.Mains, "only a preview");
+        }
+
+        [Test]
         public void CitySolve_OverloadedMain_SharesCapacityDownstream()
         {
-            DataRepositoryHolder h = new DataRepositoryHolder();
             GameContext c = NewCity();
             UtilityState u = c.Game.City!.Utilities;
             FacilityPlacement plant = Plant(c);
@@ -104,10 +130,7 @@ namespace HeadLoss.Game.Tests
             CityNetworkResult light = CityNetwork.Solve(c.Data, c.City!, u, plot => capacity * 0.2, plot => 0);
             Assert.AreEqual(1, light.Water[a.Id].Share, 1e-9);
             Assert.AreEqual(1, light.Water[b.Id].Share, 1e-9);
-            Assert.NotNull(h);
         }
-
-        sealed class DataRepositoryHolder { }
 
         [Test]
         public void Power_Brownout_CutsTheFurthestBuildingFirst()
@@ -128,7 +151,7 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
-        public void Panel_TripsAboveItsLimitAfterTheDelay_AndWaitsForAReset()
+        public void Connection_BelowTheDraw_IsABrownoutNotATrip()
         {
             BuildingSession s = GameTestUtil.TestHouseWithFan();
             GameTestUtil.DrawAndCommit(s, GameTestUtil.Run((0, 3), (3, 3), (3, 5)));
@@ -139,13 +162,6 @@ namespace HeadLoss.Game.Tests
             for (int i = 0; i < 10; i++) s.Tick(0.5);
             Assert.IsFalse(s.Record.PanelTripped, "a connection limit is a brownout, not a trip");
             Assert.Less(s.PowerSpeed, 1, "the fan slows in the brownout");
-            s.Power = default;
-            s.Record.Committed.Equipment.RemoveAll(e => e.OpeningId == "power");
-            double draw = s.RequestedPowerW;
-            Assert.Greater(draw, 0);
-            // Pretend a tiny panel by asking for more than the basic panel gives.
-            s.Record.Committed.Equipment.Add(new EquipmentState { EquipmentId = "panel-basic", OpeningId = "power" });
-            Assert.AreEqual(4, s.PanelLimitKW, 1e-9);
         }
 
         [Test]

@@ -44,6 +44,8 @@ namespace HeadLoss.Core.Data.Defs
     /// <summary>Burst model, repairs and water hammer (<c>08-failures.md</c>, <c>05-simulation.md</c> §6).</summary>
     public sealed class FailureDef
     {
+        /// <summary>How far ahead the engineering software projects stress, h.</summary>
+        public double ForecastHours = 24;
         /// <summary>Failure checks per second, Hz.</summary>
         public double TickHz;
         /// <summary>k_s: stress rate at overpressure ratio 2, 1/s.</summary>
@@ -241,6 +243,8 @@ namespace HeadLoss.Core.Data.Defs
     {
         /// <summary>Starter house: minutes of cranking to pay a small axial fan plus ducts [low, high].</summary>
         public List<double> StarterCrankPaysFanMinutes = new List<double>();
+        /// <summary>Length of the 100 mm main a first water building is charged with in the balancing report, city tiles.</summary>
+        public int ReferenceMainTiles;
         /// <summary>First building payback per tier, minutes.</summary>
         public List<double> PaybackMinutes = new List<double>();
         /// <summary>Electricity share of gross at the reference layout [low, high].</summary>
@@ -483,6 +487,10 @@ namespace HeadLoss.Core.Data.Defs
         public double AirflowGain;
         /// <summary>Total air throughput that gives the full airflow level, m³/h (log scale below it).</summary>
         public double AirflowFullM3h;
+        /// <summary>Water noise gain at full throughput, 0–1.</summary>
+        public double WaterGain;
+        /// <summary>Total water throughput that gives the full water level, L/s (log scale below it).</summary>
+        public double WaterFullLps;
         /// <summary>Airflow low-pass cutoff range, Hz.</summary>
         public double AirflowCutoffMinHz;
         public double AirflowCutoffMaxHz;

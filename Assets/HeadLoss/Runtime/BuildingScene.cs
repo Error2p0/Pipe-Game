@@ -199,6 +199,8 @@ namespace HeadLoss.Unity
                 v.Network = state.Net(v.Fluid);
                 v.Solve = snap?.For(v.Fluid);
                 v.Active = v.Fluid == ViewState.Fluid;
+                v.BurstSegments.Clear();
+                foreach (int burst in s.Failures.BurstSegments(v.Fluid, v.Network)) v.BurstSegments.Add(burst);
                 v.GhostSegments.Clear();
                 if (preview)
                     foreach (DuctSegment seg in v.Network.Segments)
@@ -218,7 +220,10 @@ namespace HeadLoss.Unity
             View.Placing = ix.PlaceTool.Length > 0 && ix.PlaceHovering;
             View.PlaceTile = ix.PlaceTile;
             View.PlaceValid = ix.PlaceValid;
-            View.Stress = (fluid, seg) => s.Failures.StressOf(fluid, seg, s.State);
+            View.Stress ??= (fluid, seg) => s.StressShown(fluid, seg);
+            View.Surging ??= fluid => s.Failures.SurgePa(fluid) > 0;
+            View.ViolationTiles.Clear();
+            foreach (Game.Codes.Violation violation in s.DesignEvaluation.Violations) View.ViolationTiles.AddRange(violation.Tiles);
             Ducts.Rebuild(View);
         }
 

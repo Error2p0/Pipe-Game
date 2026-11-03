@@ -10,6 +10,17 @@ using HeadLoss.Sim.Network;
 
 namespace HeadLoss.Game.Failures
 {
+    /// <summary>The next burst drawn from the Weibull model (the offline event timeline).</summary>
+    public sealed class OfflineBurstSample
+    {
+        public string Fluid = "";
+        public int SegmentId;
+        /// <summary>The tile edge that goes.</summary>
+        public string Edge = "";
+        /// <summary>Time until the burst, s, at the solve's stress rate.</summary>
+        public double Seconds;
+    }
+
     /// <summary>
     /// The burst model for one building (<c>08-failures.md</c>): pipes and ducts above their rating build stress, which
     /// raises a Weibull hazard; a roll on the building's failure stream bursts the segment. Stress is kept per tile edge,
@@ -159,15 +170,100 @@ namespace HeadLoss.Game.Failures
         {
             State.Bursts.Add(new BurstState { Fluid = fs.Fluid, Edge = edge, At = now });
             Revision++;
+            if (OfflineMode)
+            {
+                if (State.MaintenanceContract) StartRepair(fs.Fluid, edge, State.PreferEmergency, "", 0, net, s, OfflinePay);
+                return;
+            }
             // The rupture is a sudden change in flow: a surge on the rest of the network.
             if (fs.Compiled.SegmentLink.TryGetValue(s.Id, out int link))
                 AddSurge(fs, net, Math.Abs(fs.Result.Velocity[link]), DistanceToSource(fs, link), WaveSpeed(net, s), F.BurstSeconds);
             Alert?.Invoke($"A {s.DiameterMm:0} mm {(fs.Fluid == "air" ? "duct" : "pipe")} burst · repair it or close a shutoff upstream");
-            if (State.MaintenanceContract && OfflineMode) StartRepair(fs.Fluid, edge, State.PreferEmergency, "", 0, net, s, null);
         }
 
-        /// <summary>Set while the offline catch-up runs (maintenance contracts dispatch crews then).</summary>
+        /// <summary>Set while the offline catch-up runs: maintenance contracts dispatch crews, no alerts (the report lists it all).</summary>
         public bool OfflineMode { get; set; }
+        /// <summary>Pays a contract crew's bill during the catch-up.</summary>
+        public Func<double, bool>? OfflinePay { get; set; }
+
+        // ---------- the offline timeline (12 §Offline catch-up) ----------
+
+        /// <summary>
+        /// Draws the next burst for a solved state: for each segment building stress, burst stress S_b from the inverse
+        /// Weibull CDF given its current stress (H(S_b) = H(S) − ln U), then the time to reach it at the current rate. The
+        /// hazard is memoryless in H, so drawing again at every stop on the timeline stays correct.
+        /// </summary>
+        /// <param name="onlySegment">Consider only this segment (0 = all).</param>
+        public OfflineBurstSample? SampleNextBurst(NetworkSnapshot snap, BuildingState state, int onlySegment = 0)
+        {
+            OfflineBurstSample? best = null;
+            foreach (FluidSolve fs in snap.All)
+            {
+                DuctNetworkState net = state.Net(fs.Fluid);
+                HashSet<int>? burst = null;
+                foreach (DuctSegment s in net.Segments)
+                {
+                    if (onlySegment != 0 && s.Id != onlySegment) continue;
+                    double rate = StressRate(RatingRatio(fs, net, s, 0));
+                    if (rate <= 0) continue;
+                    burst ??= BurstSegments(fs.Fluid, net);
+                    if (burst.Contains(s.Id)) continue;
+                    string worst = "";
+                    double sNow = -1;
+                    foreach (string e in Edges(fs.Fluid, net, s))
+                    {
+                        double v = State.Stress.TryGetValue(e, out double old) ? old : 0;
+                        if (v > sNow) { sNow = v; worst = e; }
+                    }
+                    double u = Math.Max(1e-12, Roll());
+                    double sBurst = F.WeibullEta * Math.Pow(CumulativeHazard(sNow) - Math.Log(u), 1 / F.WeibullBeta);
+                    double t = Math.Max(0, (sBurst - sNow) / rate);
+                    if (best == null || t < best.Seconds)
+                        best = new OfflineBurstSample { Fluid = fs.Fluid, SegmentId = s.Id, Edge = worst, Seconds = t };
+                }
+            }
+            return best;
+        }
+
+        /// <summary>Adds the stress of <paramref name="dt"/> seconds at the solve's rates (no rolls: the timeline drew the bursts).</summary>
+        public void AdvanceStress(NetworkSnapshot snap, BuildingState state, double dt)
+        {
+            if (dt <= 0) return;
+            foreach (FluidSolve fs in snap.All)
+            {
+                DuctNetworkState net = state.Net(fs.Fluid);
+                HashSet<int>? burst = null;
+                foreach (DuctSegment s in net.Segments)
+                {
+                    double dS = StressRate(RatingRatio(fs, net, s, 0)) * dt;
+                    if (dS <= 0) continue;
+                    burst ??= BurstSegments(fs.Fluid, net);
+                    if (burst.Contains(s.Id)) continue;
+                    foreach (string e in Edges(fs.Fluid, net, s)) State.Stress[e] = (State.Stress.TryGetValue(e, out double old) ? old : 0) + dS;
+                }
+            }
+        }
+
+        /// <summary>The burst the timeline drew happens now.</summary>
+        public void BurstSampled(NetworkSnapshot snap, BuildingState state, OfflineBurstSample b, double now)
+        {
+            FluidSolve? fs = snap.For(b.Fluid);
+            DuctNetworkState net = state.Net(b.Fluid);
+            DuctSegment? s = net.FindSegment(b.SegmentId);
+            if (fs != null && s != null) Burst(fs, net, s, b.Edge, now);
+        }
+
+        /// <summary>Bursts already waiting when the player left: a contract sends crews for them too.</summary>
+        public void DispatchContract(BuildingState state)
+        {
+            if (!State.MaintenanceContract) return;
+            foreach (BurstState b in new List<BurstState>(State.Bursts))
+            {
+                DuctNetworkState net = state.Net(b.Fluid);
+                DuctSegment? s = net.Segments.Find(x => Edges(b.Fluid, net, x).Contains(b.Edge));
+                if (s != null) StartRepair(b.Fluid, b.Edge, State.PreferEmergency, "", 0, net, s, OfflinePay);
+            }
+        }
 
         // ---------- bursts and isolation ----------
 
@@ -374,7 +470,7 @@ namespace HeadLoss.Game.Failures
                 DuctEditor.Normalize(net);
             }
             Revision++;
-            Alert?.Invoke(job.Emergency ? "Emergency crew finished the repair" : "Repair finished");
+            if (!OfflineMode) Alert?.Invoke(job.Emergency ? "Emergency crew finished the repair" : "Repair finished");
             return true;
         }
 

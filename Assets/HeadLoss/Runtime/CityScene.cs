@@ -33,15 +33,21 @@ namespace HeadLoss.Unity
         readonly ViewPalette _palette;
         readonly List<PlotLook> _looks = new List<PlotLook>();
         readonly System.Func<bool> _reduceMotion;
+        readonly HeatmapState _heatmap;
+        readonly CityOverlay _overlay = new CityOverlay();
+        bool _routing;
+        RouteQuote? _quote;
         bool _panning;
         float _lastClick = -10f;
         int _lastClickPlot = -1;
         int _starter;
 
         public CityScene(GameContext ctx, Materials materials, ViewPalette palette, UiKit ui, CameraController camera, BuildingInput input,
-            VisualElement uiRoot, System.Func<bool> reduceMotion)
+            VisualElement uiRoot, HeatmapState heatmap, System.Func<bool> reduceMotion)
         {
             _ctx = ctx;
+            _heatmap = heatmap;
+            _overlay.Palette = palette;
             _city = ctx.City!;
             _camera = camera;
             _input = input;
@@ -99,24 +105,140 @@ namespace HeadLoss.Unity
                 }
             }
 
-            Hovered = overUi ? -1 : PlotAt(_camera.ScreenToWorld(screen));
-            if (!overUi && _input.Primary.WasPressedThisFrame())
+            Vector2 world = _camera.ScreenToWorld(screen);
+            Hovered = overUi ? -1 : PlotAt(world);
+            float tileSize = (float)_city.TileMetres;
+            (int x, int y) tile = (Mathf.FloorToInt(world.x / tileSize), Mathf.FloorToInt(world.y / tileSize));
+            if (Hud.Tool == CityTool.Route) RouteTool(overUi, tile);
+            else if (Hud.Tool == CityTool.Corridor)
             {
-                if (Hovered >= 0 && Hovered == _lastClickPlot && time - _lastClick < 0.4f) Hud.OpenRequested = _city.Plots[Hovered].Id;
-                Selected = Hovered;
-                _lastClick = time;
-                _lastClickPlot = Hovered;
+                CancelRoute();
+                if (!overUi && _input.Primary.IsPressed() && _ctx.BuildCorridor(tile.x, tile.y)) Hud.Clicked = true;
+            }
+            else
+            {
+                CancelRoute();
+                if (!overUi && _input.Primary.WasPressedThisFrame())
+                {
+                    if (Hovered >= 0 && Hovered == _lastClickPlot && time - _lastClick < 0.4f) Hud.OpenRequested = _city.Plots[Hovered].Id;
+                    Selected = Hovered;
+                    _lastClick = time;
+                    _lastClickPlot = Hovered;
+                    // Off the plots, a click picks the main or cable running there.
+                    UtilityState u = _ctx.Game.City!.Utilities;
+                    int main = 0;
+                    if (Hovered < 0)
+                    {
+                        if (Hud.Filter != "power") main = Utilities.MainAt(u, "water", tile.x, tile.y);
+                        if (main == 0 && Hud.Filter != "water") main = Utilities.MainAt(u, "power", tile.x, tile.y);
+                    }
+                    Hud.SelectedMain = main;
+                }
             }
             if (_input.Commit.WasPressedThisFrame() && Selected >= 0) Hud.OpenRequested = _city.Plots[Selected].Id;
             if (_input.Cancel.WasPressedThisFrame())
             {
-                if (Selected >= 0) Selected = -1;
+                if (_routing) CancelRoute();
+                else if (Hud.Tool != CityTool.None) Hud.Tool = CityTool.None;
+                else if (Hud.SelectedMain != 0) Hud.SelectedMain = 0;
+                else if (Selected >= 0) Selected = -1;
                 else Hud.MenuRequested = true;
             }
             if (Hud.OpenRequested != null && !_ctx.CanOpen(Hud.OpenRequested)) Hud.OpenRequested = null;
 
             int shown = Selected >= 0 ? Selected : Hovered;
             Hud.Update(time, shown >= 0 ? _city.Plots[shown].Id : "", Selected >= 0);
+        }
+
+        /// <summary>
+        /// The route tool (<c>03-city.md</c> §Routing): press on a facility or an existing main of the utility, drag along city
+        /// tiles with a live quote, release to lay it. Right click cancels.
+        /// </summary>
+        void RouteTool(bool overUi, (int x, int y) tile)
+        {
+            List<(int x, int y)> route = _overlay.Route;
+            if (!_routing && !overUi && _input.Primary.WasPressedThisFrame() && _city.InMap(tile.x, tile.y))
+            {
+                _routing = true;
+                route.Clear();
+                route.Add(tile);
+                Requote();
+            }
+            if (!_routing) return;
+            if (_input.Secondary.WasPressedThisFrame())
+            {
+                CancelRoute();
+                return;
+            }
+            if (_city.InMap(tile.x, tile.y) && Extend(route, tile)) Requote();
+            if (_input.Primary.IsPressed()) return;
+
+            // Released: lay it if it can be laid.
+            RouteQuote result = _ctx.LayMain(Hud.Utility, Hud.DiameterMm, Hud.CapacityKW, route, Hud.Drilled);
+            if (result.Valid)
+            {
+                Hud.Laid = true;
+                Hud.ShowRoute(null, null);
+            }
+            else Hud.ShowRoute(result, null);
+            _routing = false;
+            route.Clear();
+            _overlay.RouteViolations = null;
+            _quote = null;
+        }
+
+        /// <summary>Walks the route to a tile: x first, then y; stepping back onto the route undoes back to there. True when it changed.</summary>
+        static bool Extend(List<(int x, int y)> route, (int x, int y) to)
+        {
+            bool changed = false;
+            for (int guard = 0; guard < 512 && route[route.Count - 1] != to; guard++)
+            {
+                (int x, int y) last = route[route.Count - 1];
+                (int x, int y) next = last.x != to.x ? (last.x + System.Math.Sign(to.x - last.x), last.y) : (last.x, last.y + System.Math.Sign(to.y - last.y));
+                int at = route.IndexOf(next);
+                if (at >= 0) route.RemoveRange(at + 1, route.Count - at - 1);
+                else route.Add(next);
+                changed = true;
+            }
+            return changed;
+        }
+
+        void Requote()
+        {
+            UtilityState u = _ctx.Game.City!.Utilities;
+            _quote = Utilities.Quote(_ctx.Data, _city, u, Hud.Utility, Hud.DiameterMm, Hud.CapacityKW, _overlay.Route, Hud.Drilled);
+            // One tile is not a route yet: judge the start alone, so a bad press says why at once.
+            if (_overlay.Route.Count == 1)
+            {
+                (int x, int y) s = _overlay.Route[0];
+                bool onFacility = _city.Facilities.Exists(f => f.Utility == Hud.Utility && s.x >= f.X && s.y >= f.Y && s.x < f.X + f.Width && s.y < f.Y + f.Height);
+                bool onMain = Utilities.MainAt(u, Hud.Utility, s.x, s.y) != 0;
+                _overlay.RouteValid = onFacility || onMain;
+                _overlay.RouteViolations = null;
+                Hud.ShowRoute(_overlay.RouteValid ? _quote : QuoteError(Hud.Utility == "power" ? "Start at a substation or an existing cable" : "Start at the facility or an existing main"), null);
+                return;
+            }
+            _overlay.RouteValid = _quote.Valid;
+            _overlay.RouteViolations = _quote.Violations;
+            WaterConnection? w = Hud.Utility == "water" ? _ctx.PreviewWater(Hud.DiameterMm, _overlay.Route, Hud.Drilled, _quote) : null;
+            Hud.ShowRoute(_quote, w);
+        }
+
+        static RouteQuote QuoteError(string error)
+        {
+            var q = new RouteQuote();
+            q.Error = error;
+            return q;
+        }
+
+        void CancelRoute()
+        {
+            if (!_routing && _overlay.Route.Count == 0) return;
+            _routing = false;
+            _overlay.Route.Clear();
+            _overlay.RouteViolations = null;
+            _quote = null;
+            Hud.ShowRoute(null, null);
         }
 
         public void LateUpdate(float dt, float time)
@@ -129,8 +251,39 @@ namespace HeadLoss.Unity
             }
             Hud.PositionStartHere();
             bool still = _reduceMotion();
-            _renderer.DrawPlots(_looks, Hovered, Selected, _starter, time, still, _palette.Walls);
+            FillOverlay();
+            _renderer.DrawPlots(_looks, Hovered, Selected, _starter, time, still, _palette.Walls, _overlay);
             _renderer.DrawClouds(dt, still);
+        }
+
+        void FillOverlay()
+        {
+            CityOverlay o = _overlay;
+            o.Utilities = _ctx.Game.City?.Utilities;
+            o.Utilisation = _ctx.CityResult?.Utilisation;
+            o.Heatmap = Hud.Heatmap;
+            o.Filter = Hud.Filter;
+            o.HeatmapPalette = _heatmap.Palette;
+            o.SelectedMain = Hud.SelectedMain;
+            o.Violations = _ctx.CityViolations;
+            o.RouteUtility = Hud.Utility;
+            o.RouteDiameterMm = Hud.DiameterMm;
+            o.Icons.Clear();
+            foreach (Plot p in _city.Plots)
+            {
+                BuildingSession? s = _ctx.FindSession(p.Id);
+                o.Icons.Add(s == null ? RoofIcon.None : IconOf(s));
+            }
+        }
+
+        RoofIcon IconOf(BuildingSession s)
+        {
+            if (s.Record.Failures.Bursts.Count > 0) return s.Record.Failures.Repairs.Count > 0 ? RoofIcon.Crew : RoofIcon.Burst;
+            if (s.Record.PanelTripped) return RoofIcon.PanelTripped;
+            // Only what leak sensors can see floats over the roof; otherwise weeping shows on the stress heatmap.
+            foreach (var kv in s.Record.Failures.Stress)
+                if (kv.Value >= _ctx.Data.Balancing.Failure.WeepThreshold && s.Record.Failures.WeepAlerted.Contains(kv.Key)) return RoofIcon.Weeping;
+            return RoofIcon.None;
         }
 
         int PlotAt(Vector2 world)

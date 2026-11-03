@@ -44,6 +44,7 @@ namespace HeadLoss.Unity.UI
         Label _designText = null!, _designReason = null!;
         Button _commit = null!, _discard = null!, _undo = null!, _redo = null!;
         DropdownField _size = null!, _material = null!;
+        Label _rating = null!;
         Label _lockNote = null!;
         Button _sharp = null!, _smooth = null!, _upgrade = null!;
         int _shownTier = -1;
@@ -54,7 +55,7 @@ namespace HeadLoss.Unity.UI
         readonly List<(int floor, Button button)> _floorButtons = new List<(int, Button)>();
         Button _layerFloor = null!, _layerCeiling = null!, _layerCavity = null!;
         Label _ductHeader = null!, _partsHeader = null!, _protectHeader = null!;
-        Button _sensors = null!, _contract = null!;
+        Button _sensors = null!, _contract = null!, _crewChoice = null!;
         string _shownFluid = "";
         int _viewRev = -1;
         VisualElement _violations = null!, _violationRows = null!, _stressTrack = null!, _stressFill = null!;
@@ -207,16 +208,20 @@ namespace HeadLoss.Unity.UI
             _violations.style.display = DisplayStyle.None;
             _readout = _ui.Panel(right, "hl-readout");
             _readoutTitle = UiKit.Text(_readout, "", "hl-readout-title");
-            for (int i = 0; i < ReadoutLines; i++) _lines[i] = UiKit.Text(_readout, "", "hl-readout-line");
+            // Long readouts scroll inside the panel: the right column never runs over the legend.
+            var readoutBody = new ScrollView(ScrollViewMode.Vertical);
+            readoutBody.style.flexShrink = 1;
+            _readout.Add(readoutBody);
+            for (int i = 0; i < ReadoutLines; i++) _lines[i] = UiKit.Text(readoutBody, "", "hl-readout-line");
             _stressTrack = new VisualElement();
             _stressTrack.AddToClassList("hl-stress-track");
             _stressTrack.style.backgroundColor = _p.GridLines;
             _stressFill = new VisualElement { pickingMode = PickingMode.Ignore };
             _stressFill.AddToClassList("hl-stress-fill");
             _stressTrack.Add(_stressFill);
-            _readout.Add(_stressTrack);
+            readoutBody.Add(_stressTrack);
             _stressTrack.style.display = DisplayStyle.None;
-            _readoutActions = UiKit.Row(_readout);
+            _readoutActions = UiKit.Row(readoutBody);
             _readoutActions.style.marginTop = 8;
 
             _hint = UiKit.Text(_layer, "", "hl-hint");
@@ -236,6 +241,12 @@ namespace HeadLoss.Unity.UI
             _debug.style.display = DisplayStyle.None;
 
             foreach (OutletPlacementDef _ in _s.Layout.Outlets) _ventLabels.Add(WorldLabel());
+        }
+
+        /// <summary>The rating of what would be drawn (larger pipes are rated lower).</summary>
+        void RefreshRating()
+        {
+            _rating.text = _materials.Count == 0 ? "" : $"Rated {Units.FormatPressure(_data.Material(_ix.DrawMaterialId).RatedPressure(_ix.DrawDiameterMm), View.Fluid)}";
         }
 
         /// <summary>Network tabs, floor tabs and the layer switcher, always visible (<c>11-ui-visuals-audio.md</c> §Building controls).</summary>
@@ -278,7 +289,11 @@ namespace HeadLoss.Unity.UI
             _size = new DropdownField();
             _size.AddToClassList("hl-dropdown");
             _ui.StyleField(_size);
-            _size.RegisterValueChangedCallback(_ => { if (_size.index >= 0) _ix.DrawDiameterMm = _sizes[_size.index]; });
+            _size.RegisterValueChangedCallback(_ =>
+            {
+                if (_size.index >= 0) _ix.DrawDiameterMm = _sizes[_size.index];
+                RefreshRating();
+            });
             tools.Add(_size);
             _material = new DropdownField();
             _material.AddToClassList("hl-dropdown");
@@ -290,6 +305,7 @@ namespace HeadLoss.Unity.UI
                 RebuildDrawChoices();
             });
             tools.Add(_material);
+            _rating = UiKit.Text(tools, "", "hl-subtitle");
 
             UiKit.Text(tools, "Fittings (elbows and tees)", "hl-section");
             VisualElement row = UiKit.Row(tools);
@@ -310,6 +326,7 @@ namespace HeadLoss.Unity.UI
             _protectHeader = UiKit.Text(tools, "Protection", "hl-section");
             _sensors = _ui.Button(tools, "", () => _s.BuyLeakSensors(View.Fluid));
             _contract = _ui.Button(tools, "", () => _s.SetMaintenanceContract(!_s.Record.Failures.MaintenanceContract, _s.Record.Failures.PreferEmergency));
+            _crewChoice = _ui.Button(tools, "", () => _s.SetMaintenanceContract(_s.Record.Failures.MaintenanceContract, !_s.Record.Failures.PreferEmergency));
 
             _crankBox = new VisualElement();
             tools.Add(_crankBox);
@@ -398,18 +415,17 @@ namespace HeadLoss.Unity.UI
             _sizes.Clear();
             var sizeChoices = new List<string>();
             PipeFamilyDef family = _data.PipeFamily(fluid == "air" ? _data.Balancing.Drawing.DefaultDuctFamily : "pipe");
-            MaterialDef mat = _data.Material(_ix.DrawMaterialId);
             foreach (PipeSizeDef sz in family.Sizes)
             {
                 if (!_s.Unlocked(sz.Tier)) continue;
                 _sizes.Add(sz.DiameterMm);
-                string rating = fluid == "air" ? "" : $" · rated {Units.FormatBar(mat.RatedPressure(sz.DiameterMm))}";
-                sizeChoices.Add($"{sz.DiameterMm:0} mm · {Units.FormatMoney(Pricing.PerMetre(_data, _ix.DrawMaterialId, sz.DiameterMm), _symbol)}/m{rating}");
+                sizeChoices.Add($"{sz.DiameterMm:0} mm · {Units.FormatMoney(Pricing.PerMetre(_data, _ix.DrawMaterialId, sz.DiameterMm), _symbol)}/m");
             }
             if (_sizes.Count == 0) return;
             if (!_sizes.Contains(_ix.DrawDiameterMm)) _ix.DrawDiameterMm = fluid == "air" && _sizes.Contains(_data.Balancing.Drawing.DefaultDuctSizeMm) ? _data.Balancing.Drawing.DefaultDuctSizeMm : _sizes[0];
             _size.choices = sizeChoices;
             _size.SetValueWithoutNotify(sizeChoices[_sizes.IndexOf(_ix.DrawDiameterMm)]);
+            RefreshRating();
         }
 
         // ---------- per frame ----------
@@ -525,6 +541,8 @@ namespace HeadLoss.Unity.UI
                 _contract.text = _s.Record.Failures.MaintenanceContract ? $"Maintenance contract on · {contract.PremiumFraction * 100:0}% of gross" : ok ? $"Maintenance contract · {contract.PremiumFraction * 100:0}% of gross" : $"Maintenance contract · tier {contract.Tier}";
                 _contract.SetEnabled(ok);
                 StyleButton(_contract, _s.Record.Failures.MaintenanceContract);
+                _crewChoice.style.display = _s.Record.Failures.MaintenanceContract ? DisplayStyle.Flex : DisplayStyle.None;
+                _crewChoice.text = _s.Record.Failures.PreferEmergency ? "While away: emergency crew" : "While away: standard crew";
             }
             foreach ((string f, Button b) in _fluidButtons) StyleButton(b, f == View.Fluid);
             foreach ((int f, Button b) in _floorButtons) StyleButton(b, f == View.Floor);
@@ -834,8 +852,9 @@ namespace HeadLoss.Unity.UI
             if (_s.Game.City?.Utilities.EngineeringSoftware == true)
             {
                 double rate = f.StressRate(x);
+                double hours = _data.Balancing.Failure.ForecastHours;
                 i = Line(i, rate > 0
-                    ? $"Forecast  50% burst chance in {Units.FormatDuration(f.TimeToHalfChance(stress, rate))} · stress {stress + rate * 86400:0.00} after 24 h"
+                    ? $"Forecast  50% burst chance in {Units.FormatDuration(f.TimeToHalfChance(stress, rate))} · stress {stress + rate * hours * 3600:0.00} after {hours:0} h"
                     : "Forecast  no stress building at this pressure");
             }
             return i;
@@ -1055,7 +1074,7 @@ namespace HeadLoss.Unity.UI
                 string flow = def.Measured == "pressure" ? $" while drawing {Units.FormatWaterFlow(NetworkCompiler.DesignFlow(_data, _s.Layout, o))}" : "";
                 i = Line(i, $"Delivery  {UiKit.FormatDelivery(def, st.Delivery)}{flow}");
                 i = Line(i, $"Zone  {UiKit.ZoneWord(st.Zone)} · ×{st.Multiplier:0.00} · {Units.FormatMoneyRate(st.BaseRate * st.Multiplier, _symbol)}");
-                if (st.Zone == OutletZone.AboveCodeMax) i = Line(i, $"Above code maximum: {def.CodeMaxReason.ToLowerInvariant()}. It pays nothing until the delivery comes down.");
+                if (st.Zone == OutletZone.AboveCodeMax) i = Line(i, $"Above code maximum: {def.CodeMaxReason.ToLowerInvariant()}. It pays nothing until the delivery comes down{(def.Measured == "pressure" ? ": a pressure regulator on the branch does it." : ".")}");
                 if (_s.Current != null && _s.Current.Compiled.OutletLink.TryGetValue(outletId, out int k) && _s.Current.Result.Flow[k] < 0)
                     i = Line(i, "Air is flowing backwards into the duct here.");
             }
@@ -1076,10 +1095,11 @@ namespace HeadLoss.Unity.UI
                 var names = new List<string>();
                 foreach (var o in options) names.Add(o.name);
                 int at = options.FindIndex(o => o.id == current);
-                var dd = new DropdownField(label, names, at < 0 ? 0 : at);
+                var dd = new DropdownField(names, at < 0 ? 0 : at);
                 dd.AddToClassList("hl-dropdown");
                 _ui.StyleField(dd);
-                dd.style.minWidth = 300;
+                dd.style.width = Length.Percent(96);
+                dd.tooltip = label;
                 dd.RegisterValueChangedCallback(_ =>
                 {
                     if (dd.index < 0) return;
@@ -1163,7 +1183,7 @@ namespace HeadLoss.Unity.UI
                 var dd = new DropdownField(names, 0);
                 dd.AddToClassList("hl-dropdown");
                 _ui.StyleField(dd);
-                dd.style.minWidth = 300;
+                dd.style.width = Length.Percent(96);
                 dd.RegisterValueChangedCallback(_ => upgrade = dd.index >= 0 ? options[dd.index].id : "");
                 _readoutActions.Add(dd);
             }

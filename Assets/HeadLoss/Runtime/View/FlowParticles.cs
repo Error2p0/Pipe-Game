@@ -67,11 +67,12 @@ namespace HeadLoss.Unity.View
             _time += dt;
             _matrices.Clear();
             foreach (NetworkView view in input.Views)
-                if (view.Solve != null) Add(view.Geometry, view.Solve);
+                if (view.Solve != null) Add(view.Geometry, view.Solve, !ReduceMotion && input.Surging?.Invoke(view.Fluid) == true);
             if (_matrices.Count > 0) Graphics.RenderMeshInstanced(_params, _disc, 0, _matrices);
         }
 
-        void Add(DuctGeometry geometry, Game.Session.FluidSolve solve)
+        /// <param name="surge">A surge rides on this network: a short ripple along its pipes (nothing flashes, <c>05-simulation.md</c> §6).</param>
+        void Add(DuctGeometry geometry, Game.Session.FluidSolve solve, bool surge)
         {
             float size = (float)_def!.Size;
             float spacing = (float)_def.SpacingMetres;
@@ -94,7 +95,13 @@ namespace HeadLoss.Unity.View
                 {
                     if (_matrices.Count >= _def.MaxParticles) break;
                     Vector2 p = s.A + dir * d;
-                    _matrices.Add(Matrix4x4.TRS(new Vector3(p.x, p.y, Z), Quaternion.identity, scale));
+                    Vector3 sized = scale;
+                    if (surge)
+                    {
+                        float ripple = 1f + 0.9f * Mathf.Max(0f, Mathf.Sin((float)(_time * 6.0) - d * 1.4f));
+                        sized = new Vector3(size * ripple, size * ripple, 1);
+                    }
+                    _matrices.Add(Matrix4x4.TRS(new Vector3(p.x, p.y, Z), Quaternion.identity, sized));
                 }
             }
         }

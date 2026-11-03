@@ -176,8 +176,8 @@ namespace HeadLoss.Game.City
             for (int i = 0; i < path.Count; i++)
             {
                 (int x, int y) = path[i];
-                bool joinTile = i == 0;
-                if (!joinTile)
+                bool joinTile = i == 0, connection = i == path.Count - 1 && dest != null;
+                if (!joinTile && !connection)
                 {
                     int cap = IsCorridor(u, x, y) ? cu.CorridorCapacity : cu.TileCapacity;
                     if (LinesOn(u, x, y) + 1 > cap && !IsFacilityOf(city, x, y, utility))

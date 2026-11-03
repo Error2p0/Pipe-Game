@@ -81,6 +81,14 @@ namespace HeadLoss.Game.Economy
             foreach (OutletStatus o in Outlets) o.Pay *= factor;
         }
 
+        /// <summary>A tripped panel stops all equipment and takes the building offline (<c>04-buildings.md</c> §Electrical panel).</summary>
+        public void ApplyPanelTrip()
+        {
+            Online = false;
+            Gross = 0;
+            foreach (OutletStatus o in Outlets) o.Pay = 0;
+        }
+
         /// <summary>Net income, $/s (can be negative).</summary>
         public double Net => Gross - Electricity - Fines - Premiums;
 

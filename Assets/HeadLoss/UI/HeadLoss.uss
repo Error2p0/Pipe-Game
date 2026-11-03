@@ -219,6 +219,7 @@
 
 .hl-readout {
     margin-top: 12px;
+    flex-shrink: 1;
 }
 
 .hl-readout-line {
@@ -356,10 +357,27 @@
 
 /* ---- city view ---- */
 
-.hl-citypanel {
+.hl-cityleft {
     position: absolute;
-    left: 16px; top: 16px;
-    width: 360px;
+    left: 16px; top: 16px; bottom: 80px;
+    width: 400px;
+}
+
+.hl-citytools {
+    margin-top: 10px;
+    flex-shrink: 1;
+}
+
+.hl-routepanel {
+    margin-top: 10px;
+    flex-shrink: 0;
+}
+
+.hl-legend-chip {
+    flex-grow: 1;
+    height: 22px;
+    font-size: 13px;
+    -unity-text-align: middle-center;
 }
 
 .hl-plotpanel {
@@ -426,6 +444,11 @@
 
 .hl-viewbar {
     margin-top: 10px;
+    flex-shrink: 0;
+}
+
+.hl-titlecard {
+    flex-shrink: 0;
 }
 
 .hl-toolbox {
@@ -433,7 +456,7 @@
 }
 
 .hl-outlets {
-    max-height: 50%;
+    max-height: 42%;
 }
 
 .hl-violations {

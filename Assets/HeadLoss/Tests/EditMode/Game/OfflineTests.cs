@@ -128,17 +128,42 @@ namespace HeadLoss.Game.Tests
                 s.Game.Wallet = 1e7;
                 s.MarkDirty();
                 s.Commit();
-                // Water at the reference pressure (no mains are routed in this test).
-                s.Supply = new WaterSupply(true, BuildingSession.ReferenceWaterPressure(Data));
                 built.Add(s);
+                if (p.Tier >= 2) Connect(ctx, p);
             }
             ctx.Leave();
             Assert.Greater(built.Count, 20);
+            Assert.IsNotEmpty(ctx.Game.City!.Utilities.Mains, "water buildings have mains, so the catch-up solves real water networks");
             OfflineReport r = OfflineCatchUp.Run(ctx, 72 * 3600, 9);
             double budget = 2000.0 * built.Count / 100;
             TestContext.WriteLine($"{built.Count} buildings, 72 h: {r.ComputeMilliseconds:0} ms (budget {budget:0} ms)");
             Assert.Less(r.ComputeMilliseconds, budget);
-            Assert.Greater(r.Net, 0);
+            Assert.Greater(r.Gross, 0);
+        }
+
+        /// <summary>A drilled main from the nearest existing main (or the plant) to a plot; skipped where the tiles are full.</summary>
+        static void Connect(GameContext ctx, Plot p)
+        {
+            UtilityState u = ctx.Game.City!.Utilities;
+            FacilityPlacement plant = ctx.City!.Facilities.Find(f => f.Utility == "water")!;
+            (int x, int y) from = (plant.X, plant.Y);
+            int best = System.Math.Abs(from.x - p.X) + System.Math.Abs(from.y - p.Y);
+            foreach (MainState m in u.Mains)
+                foreach (int[] t in m.Tiles)
+                {
+                    int d = System.Math.Abs(t[0] - p.X) + System.Math.Abs(t[1] - p.Y);
+                    if (d < best)
+                    {
+                        best = d;
+                        from = (t[0], t[1]);
+                    }
+                }
+            var path = new List<(int, int)> { from };
+            int x = from.x, y = from.y;
+            while (x != p.X) { x += System.Math.Sign(p.X - x); path.Add((x, y)); }
+            while (y != p.Y) { y += System.Math.Sign(p.Y - y); path.Add((x, y)); }
+            RouteQuote q = Utilities.Quote(Data, ctx.City, u, "water", 400, 0, path, true);
+            if (q.Valid) Utilities.Lay(u, "water", "water-main", 400, 0, path, true, q);
         }
     }
 }

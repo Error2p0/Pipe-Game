@@ -17,6 +17,8 @@ namespace HeadLoss.Unity.View
         public readonly DuctGeometry Geometry = new DuctGeometry();
         /// <summary>Ghosts on the floors above and below (20% opacity, no interaction).</summary>
         public readonly DuctGeometry Above = new DuctGeometry(), Below = new DuctGeometry();
+        /// <summary>Burst segments (drawn in the danger colour; a label says so too).</summary>
+        public readonly HashSet<int> BurstSegments = new HashSet<int>();
         /// <summary>Segments drawn as a ghost (part of the run being drawn).</summary>
         public readonly HashSet<int> GhostSegments = new HashSet<int>();
         /// <summary>The network the tools and the heatmap work on.</summary>
@@ -50,6 +52,10 @@ namespace HeadLoss.Unity.View
         public Rect? Box;
         /// <summary>Stress of a segment (fluid, segment id), 0–1+ (the stress heatmap).</summary>
         public System.Func<string, int, double>? Stress;
+        /// <summary>Tiles in code violation (outlined in the danger colour, <c>09-codes.md</c>).</summary>
+        public readonly List<TilePos> ViolationTiles = new List<TilePos>();
+        /// <summary>A surge rides on this network now (the ripple along its pipes).</summary>
+        public System.Func<string, bool>? Surging;
         /// <summary>The ceiling layer is in focus (else pipes are drawn faded under the floor layer).</summary>
         public bool CeilingInFocus = true;
 
@@ -90,6 +96,7 @@ namespace HeadLoss.Unity.View
         public Color SegmentColour(DuctViewInput input, NetworkView view, int segmentId)
         {
             Color plain = _palette!.Fluid(view.Fluid);
+            if (view.BurstSegments.Contains(segmentId)) return _palette.Danger;
             if (!view.Active)
             {
                 plain.a = 0.55f;
@@ -200,6 +207,10 @@ namespace HeadLoss.Unity.View
             foreach (NetworkView v in input.Views) if (!v.Active) DrawNetwork(m, input, v);
             foreach (NetworkView v in input.Views) if (v.Active) DrawNetwork(m, input, v);
 
+            Color violation = p.Danger;
+            violation.a = 0.8f;
+            foreach (TilePos t in input.ViolationTiles)
+                if (t.F == input.Floor) TileOutline(m, t, violation);
             if (input.HoverTile is TilePos ht && ht != input.SelectedTile)
                 TileOutline(m, ht, hover);
             if (input.SelectedTile is TilePos st)

@@ -580,12 +580,32 @@ namespace HeadLoss.Game.Session
             CommittedEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, CommittedSnapshot.State));
             ApplyBurstCut(CommittedEvaluation, CommittedSnapshot, Committed);
             ApplyBurstCut(DesignEvaluation, d, State);
+            if (Record.PanelTripped)
+            {
+                CommittedEvaluation.ApplyPanelTrip();
+                DesignEvaluation.ApplyPanelTrip();
+            }
             SolveRevision++;
             Solved?.Invoke();
         }
 
         /// <summary>Raised on the main thread after a new solve is accepted.</summary>
         public event Action? Solved;
+
+        /// <summary>
+        /// Stress a segment shows on the heatmap: what it has, or with the engineering software and a design pending, what it
+        /// would have after <c>failure.forecastHours</c> at the previewed steady state (<c>07-equipment.md</c> §Meta upgrades).
+        /// </summary>
+        public double StressShown(string fluid, int segmentId)
+        {
+            double now = Failures.StressOf(fluid, segmentId, State);
+            if (Game.City?.Utilities.EngineeringSoftware != true || !HasPendingDesign) return now;
+            FluidSolve? fs = Current?.For(fluid);
+            DuctNetworkState net = State.Net(fluid);
+            DuctSegment? s = net.FindSegment(segmentId);
+            if (fs == null || s == null) return now;
+            return now + Failures.StressRate(Failures.RatingRatio(fs, net, s, 0)) * Data.Balancing.Failure.ForecastHours * 3600;
+        }
 
         /// <summary>Stress, bursts, surges and repairs of what is built.</summary>
         public Failures.BuildingFailures Failures { get; }
@@ -681,9 +701,31 @@ namespace HeadLoss.Game.Session
             NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true));
             BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
             ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State));
-            if (Failures.HasActiveBurst(snap, snap.State)) ev.ApplyBurst(Data.Balancing.Economy.OfflineBurstFactor);
             LastSteadySnapshot = snap;
+            if (Failures.HasActiveBurst(snap, snap.State))
+            {
+                // Offline a burst cuts the income by 75%: a quarter of what the building earns whole (12 §Offline), even
+                // when the broken pipe has left its outlets short and the building could not count as online.
+                CompileOptions whole = OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true);
+                whole.BurstSegments = null;
+                BuildingEvaluation intact = BuildingEconomy.Evaluate(Data, Layout, SolveState(Committed.Clone(), null, _offlineSolver, whole));
+                intact.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State));
+                ev.Gross = intact.Gross;
+                ev.ApplyBurst(Data.Balancing.Economy.OfflineBurstFactor);
+            }
+            if (Record.PanelTripped) ev.ApplyPanelTrip();
             return ev;
+        }
+
+        /// <summary>
+        /// Before the catch-up: solves what is built, reads its draw and sets the power speed (a tripped panel stays
+        /// tripped; a brownout keeps its speed). Runs on the calling thread.
+        /// </summary>
+        public void PrepareOffline()
+        {
+            SolveNow();
+            TickPower(0);
+            if (Record.PanelTripped) PowerSpeed = 0;
         }
 
         /// <summary>The solve behind the last <see cref="SteadyState"/> (offline stress and burst sampling read it).</summary>
