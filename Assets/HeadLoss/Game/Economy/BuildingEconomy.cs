@@ -85,13 +85,15 @@ namespace HeadLoss.Game.Economy
             Evaluate(data, layout, snapshot?.All);
 
         /// <summary>Evaluates solves. Null (not solved yet) leaves every outlet unconnected.</summary>
-        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, IReadOnlyList<FluidSolve>? solves)
+        /// <param name="onlyFluid">Evaluate only this fluid's outlets (the auto-router's per-network passes); null = all.</param>
+        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, IReadOnlyList<FluidSolve>? solves, string? onlyFluid = null)
         {
             EconomyDef e = data.Balancing.Economy;
             var ev = new BuildingEvaluation();
             foreach (OutletPlacementDef placement in layout.Outlets)
             {
                 OutletDef def = data.Outlet(placement.Type);
+                if (onlyFluid != null && def.Fluid != onlyFluid) continue;
                 var st = new OutletStatus
                 {
                     OutletId = placement.Id,

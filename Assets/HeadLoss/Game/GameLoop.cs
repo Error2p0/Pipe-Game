@@ -43,10 +43,43 @@ namespace HeadLoss.Game
                 CityBuildings = new CityBuildings(data, City);
             }
             Climate = City != null ? new Thermal.Climate(data, City.Modifiers) : Thermal.Climate.Fixed(data, data.Balancing.Physics.DefaultAirTemperatureC);
+            RegenerateOlder(game);
             SaveStore.Sanitize(game, data, _notes, FindLayout);
             foreach (BuildingRecord r in game.Buildings) _sessions.Add(CreateSession(r));
             if (game.CurrentBuildingId.Length > 0 && CanOpen(game.CurrentBuildingId)) Open(game.CurrentBuildingId);
             else game.CurrentBuildingId = "";
+        }
+
+        /// <summary>
+        /// Phase 4 rebuilt tier 2+ buildings (floors, water): a save from an older generator gets back what it spent on
+        /// them and they start fresh (D83). Tier 1 layouts are unchanged and keep their edits.
+        /// </summary>
+        void RegenerateOlder(GameState game)
+        {
+            if (game.GeneratorVersion >= 3 || City == null)
+            {
+                game.GeneratorVersion = Save.SaveSerializer.CurrentGeneratorVersion;
+                return;
+            }
+            for (int i = 0; i < game.Buildings.Count; i++)
+            {
+                BuildingRecord r = game.Buildings[i];
+                Plot? plot = City.FindPlot(r.BuildingId);
+                if (plot == null || plot.Tier < 2) continue;
+                BuildingLayout? layout = FindLayout(r.BuildingId);
+                if (r.SpentTotal > 0) game.Wallet += r.SpentTotal;
+                _notes.Add($"{r.BuildingId}: rebuilt with floors and water; {r.SpentTotal:0.##} refunded");
+                if (layout == null)
+                {
+                    game.Buildings.RemoveAt(i--);
+                    continue;
+                }
+                BuildingRecord fresh = BuildingRecord.CreateFor(layout);
+                fresh.LifetimeIncome = r.LifetimeIncome;
+                fresh.SheetSeen = r.SheetSeen;
+                game.Buildings[i] = fresh;
+            }
+            game.GeneratorVersion = Save.SaveSerializer.CurrentGeneratorVersion;
         }
 
         /// <summary>A new game in a new city: the starting wallet, nothing built, the city view open.</summary>

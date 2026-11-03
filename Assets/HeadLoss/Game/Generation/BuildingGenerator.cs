@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using HeadLoss.Core;
 using HeadLoss.Core.Data;
 using HeadLoss.Core.Data.Defs;
+using HeadLoss.Game.Buildings;
 
 namespace HeadLoss.Game.Generation
 {
@@ -46,6 +47,7 @@ namespace HeadLoss.Game.Generation
         {
             BuildingTypeDef type = data.BuildingType(req.BuildingType);
             if (type.Program.Count == 0) return null;
+            if (type.Tier >= 2) return FloorPlanGenerator.Generate(data, req, attempt);
             BuildingGenerationDef gen = data.Buildings.Generation;
             int roomVariant = attempt < gen.OpeningNudges ? 0 : attempt - gen.OpeningNudges + 1;
             for (int k = 0; k < MaxInternalAttempts; k++)
@@ -57,6 +59,11 @@ namespace HeadLoss.Game.Generation
                 if (b == null) continue;
                 var intakeRng = new Rng(Seeds.Derive(Seeds.Derive(roomSeed, "intake"), (ulong)attempt));
                 if (!Finish(data, type, b, rooms, intakeRng, outletCounts)) continue;
+                // Phase 4 additions draw from their own streams, so tier 1 rooms, outlets and intakes stay as they were.
+                if (FloorPlanGenerator.PlaceOpening(data, type, b, new Rng(Seeds.Derive(roomSeed, "power")), "power", FloorPlanGenerator.PowerId,
+                        new List<string> { "panel-basic" }))
+                    b.Equipment.Add(new EquipmentPlacementDef { EquipmentId = "panel-basic", OpeningId = FloorPlanGenerator.PowerId, On = true });
+                AddFurniture(data, b, new Rng(Seeds.Derive(req.Seed, "furniture")));
                 return b;
             }
             return null;
@@ -64,11 +71,19 @@ namespace HeadLoss.Game.Generation
 
         // ---------- footprint and rooms ----------
 
-        sealed class Slot
+        /// <summary>A room to place by the BSP: its type, area weight and outlet override.</summary>
+        internal sealed class SplitSlot
         {
-            public RoomTypeDef Type = null!;
-            public double Weight;
-            public int Outlets;
+            public readonly RoomTypeDef Type;
+            public readonly double Weight;
+            public readonly int Outlets;
+
+            public SplitSlot(RoomTypeDef type, double weight, int outlets)
+            {
+                Type = type;
+                Weight = weight;
+                Outlets = outlets;
+            }
         }
 
         /// <param name="outletCounts">Filled with each room's outlet override (0 = the room type's rules), parallel to the rooms.</param>
@@ -80,11 +95,11 @@ namespace HeadLoss.Game.Generation
             int w = rng.NextInt(min[0], max[0] + 1), h = rng.NextInt(min[1], max[1] + 1);
             if (rng.Chance(0.5)) (w, h) = (h, w);
 
-            var slots = new List<Slot>();
+            var slots = new List<SplitSlot>();
             foreach (ProgramRoomDef p in type.Program)
             {
                 int n = rng.NextInt(p.CountMin, p.CountMax + 1);
-                for (int i = 0; i < n; i++) slots.Add(new Slot { Type = data.RoomType(p.Room), Weight = p.AreaWeight, Outlets = p.Outlets });
+                for (int i = 0; i < n; i++) slots.Add(new SplitSlot(data.RoomType(p.Room), p.AreaWeight, p.Outlets));
             }
             for (int i = slots.Count - 1; i > 0; i--)
             {
@@ -116,7 +131,7 @@ namespace HeadLoss.Game.Generation
         /// Binary space partition: the rooms are divided into two groups whose area weights are closest to half
         /// each, the rectangle is cut across its longer side in that ratio, and both halves recurse.
         /// </summary>
-        static bool Split(int x, int y, int w, int h, List<Slot> rooms, List<RoomDef> output, List<int> outlets, int minSide)
+        internal static bool Split(int x, int y, int w, int h, List<SplitSlot> rooms, List<RoomDef> output, List<int> outlets, int minSide)
         {
             if (w < minSide || h < minSide) return false;
             if (rooms.Count == 1)
@@ -129,7 +144,7 @@ namespace HeadLoss.Game.Generation
             }
             if (w * h < rooms.Count * minSide * minSide) return false;
             double total = 0;
-            foreach (Slot s in rooms) total += s.Weight;
+            foreach (SplitSlot s in rooms) total += s.Weight;
             var ks = new List<(double score, int k)>();
             double prefix = 0;
             for (int k = 1; k < rooms.Count; k++)
@@ -149,7 +164,7 @@ namespace HeadLoss.Game.Generation
                     cut = Math.Max(minSide, Math.Min(len - minSide, cut));
                     if (cut < minSide || len - cut < minSide) continue;
                     int mark = output.Count;
-                    List<Slot> a = rooms.GetRange(0, k), b = rooms.GetRange(k, rooms.Count - k);
+                    List<SplitSlot> a = rooms.GetRange(0, k), b = rooms.GetRange(k, rooms.Count - k);
                     bool ok = alongX
                         ? Split(x, y, cut, h, a, output, outlets, minSide) && Split(x + cut, y, w - cut, h, b, output, outlets, minSide)
                         : Split(x, y, w, cut, a, output, outlets, minSide) && Split(x, y + cut, w, h - cut, b, output, outlets, minSide);
@@ -367,6 +382,78 @@ namespace HeadLoss.Game.Generation
                 if (RoomAt(b, tx, ty) != room || IsDoorTile(b, tx, ty) || b.Outlets.Exists(o => o.X == tx && o.Y == ty)) return false;
             }
             return true;
+        }
+
+        /// <summary>Furniture per room type: kind and footprint (width, height) of each piece.</summary>
+        static (string kind, int w, int h)[] FurnitureFor(RoomDef r)
+        {
+            int area = r.Width * r.Height;
+            int many(int per) => Math.Max(1, area / per);
+            var list = new List<(string, int, int)>();
+            switch (r.Type)
+            {
+                case "bedroom": list.Add(("bed", 2, 2)); break;
+                case "living": list.Add(("sofa", 2, 1)); break;
+                case "kitchen": list.Add(("counter", 1, 2)); break;
+                case "dining": for (int i = 0; i < many(10); i++) list.Add(("table", 1, 1)); break;
+                case "office": for (int i = 0; i < many(10); i++) list.Add(("desk", 1, 1)); break;
+                case "shop-floor": for (int i = 0; i < many(14); i++) list.Add(("shelf", 1, 2)); break;
+                case "storage": list.Add(("shelf", 1, 1)); list.Add(("shelf", 1, 1)); break;
+                case "workshop": list.Add(("bench", 2, 1)); break;
+            }
+            return list.ToArray();
+        }
+
+        /// <summary>
+        /// Furniture (<c>04-buildings.md</c> §Layers): decoration against the walls that blocks equipment, not pipes. Never on
+        /// door tiles, outlets, columns or within two tiles of an entry opening (so the reference equipment always fits).
+        /// </summary>
+        public static void AddFurniture(DataRepository data, BuildingLayoutDef b, Rng rng)
+        {
+            double chance = data.Buildings.Generation.FurnitureChance;
+            var taken = new HashSet<(int, int, int)>();
+            foreach (DoorDef d in b.Doors)
+            {
+                taken.Add((d.X, d.Y, d.Floor));
+                int nx = d.X + (d.Side == "east" ? 1 : d.Side == "west" ? -1 : 0), ny = d.Y + (d.Side == "north" ? 1 : d.Side == "south" ? -1 : 0);
+                taken.Add((nx, ny, d.Floor));
+            }
+            foreach (OutletPlacementDef o in b.Outlets) taken.Add((o.X, o.Y, o.Floor));
+            foreach (EntryOpeningDef o in b.EntryOpenings)
+                for (int dx = -2; dx <= 2; dx++)
+                    for (int dy = -2; dy <= 2; dy++) taken.Add((o.X + dx, o.Y + dy, o.Floor));
+            EntryOpeningDef? intake = b.EntryOpenings.Find(o => o.Utility == "air");
+            if (intake != null)
+            {
+                (int ix, int iy) = EquipmentFits.Inward(intake.Facing);
+                for (int k = 0; k <= data.Balancing.AutoRouter.LeadInTiles + 1; k++) taken.Add((intake.X + ix * k, intake.Y + iy * k, intake.Floor));
+            }
+            foreach (RoomDef r in b.Rooms)
+            {
+                var items = FurnitureFor(r);
+                if (items.Length == 0 || !rng.Chance(chance)) continue;
+                foreach ((string kind, int fw, int fh) in items)
+                {
+                    for (int attempt = 0; attempt < 12; attempt++)
+                    {
+                        bool turn = rng.Chance(0.5);
+                        int w = turn ? fh : fw, h = turn ? fw : fh;
+                        if (w > r.Width || h > r.Height) continue;
+                        int side = rng.NextInt(0, 4);
+                        int x = side switch { 0 => r.X, 1 => r.X + r.Width - w, _ => r.X + rng.NextInt(0, r.Width - w + 1) };
+                        int y = side switch { 2 => r.Y, 3 => r.Y + r.Height - h, _ => r.Y + rng.NextInt(0, r.Height - h + 1) };
+                        bool ok = true;
+                        for (int tx = x; tx < x + w && ok; tx++)
+                            for (int ty = y; ty < y + h && ok; ty++)
+                                if (taken.Contains((tx, ty, r.Floor)) || b.Columns.Exists(c => c.X == tx && c.Y == ty)) ok = false;
+                        if (!ok) continue;
+                        for (int tx = x; tx < x + w; tx++)
+                            for (int ty = y; ty < y + h; ty++) taken.Add((tx, ty, r.Floor));
+                        b.Furniture.Add(new FurnitureDef { X = x, Y = y, Width = w, Height = h, Floor = r.Floor, Kind = kind });
+                        break;
+                    }
+                }
+            }
         }
 
         /// <summary>Windows along each room's exterior walls, one every <c>windowSpacing</c> tiles (never at the intake).</summary>

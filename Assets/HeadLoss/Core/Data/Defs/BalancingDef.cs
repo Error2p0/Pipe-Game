@@ -228,6 +228,8 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Extra path cost, in tiles, for a branch that does not leave its outlet with two straight tiles (no room for a damper).</summary>
         public double ShortApproachPenalty;
 
+        /// <summary>Extra path cost of core-drilling a wall, tiles (routes prefer doors).</summary>
+        public double CoreDrillPenalty;
         /// <summary>Damper balancing passes (one solve each).</summary>
         public int BalancingPasses;
         /// <summary>Damper target within the overdelivery band: ideal + fraction × (max − ideal).</summary>

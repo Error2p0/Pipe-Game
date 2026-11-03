@@ -459,14 +459,10 @@ namespace HeadLoss.Core.Data
                     openingIds.Add(o.Id);
                     if (!Utilities.Contains(o.Utility)) errors.Add($"{w}: opening '{o.Id}' utility '{o.Utility}' unknown");
                     if (!Facings.Contains(o.Facing)) errors.Add($"{w}: opening '{o.Id}' facing '{o.Facing}' unknown");
-                    bool onEdge = o.Facing switch
-                    {
-                        "west" => o.X == 0,
-                        "east" => o.X == b.Width - 1,
-                        "south" => o.Y == 0,
-                        "north" => o.Y == b.Height - 1,
-                        _ => false,
-                    };
+                    // On an outside wall: the tile is in a room and the one beyond its facing wall is not (L and U shapes
+                    // have outside walls inside the bounding box).
+                    int bx = o.X + (o.Facing == "east" ? 1 : o.Facing == "west" ? -1 : 0), by = o.Y + (o.Facing == "north" ? 1 : o.Facing == "south" ? -1 : 0);
+                    bool onEdge = RoomAt(b, o.X, o.Y, o.Floor) >= 0 && RoomAt(b, bx, by, o.Floor) < 0;
                     if (!onEdge || o.X < 0 || o.Y < 0 || o.X >= b.Width || o.Y >= b.Height)
                         errors.Add($"{w}: opening '{o.Id}' is not on its {o.Facing} wall");
                 }

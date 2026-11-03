@@ -202,7 +202,7 @@ namespace HeadLoss.Game.Session
             HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasTaps(layout);
             Supply = new WaterSupply(true, ReferenceWaterPressure(data));
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
-            DesignEvaluation = BuildingEconomy.Evaluate(data, layout, null, null);
+            DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
             CommittedEvaluation = DesignEvaluation;
             RefreshPending();
         }

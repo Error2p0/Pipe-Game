@@ -393,10 +393,10 @@ namespace HeadLoss.Game.Tests
         }
 
         [Test]
-        public void NewGame_TierThreePlots_CannotBeOpenedYet()
+        public void NewGame_TierFourPlots_CannotBeOpenedYet()
         {
             var ctx = new GameContext(Data, GameContext.NewGame(Data, 7));
-            Game.City.Plot? high = ctx.City!.Plots.Find(p => p.Tier >= 3);
+            Game.City.Plot? high = ctx.City!.Plots.Find(p => p.Tier >= 4);
             Assert.IsNotNull(high);
             Assert.IsFalse(ctx.CanOpen(high!.Id));
             Assert.IsTrue(ctx.CanOpen(ctx.City.Starter!.Id));

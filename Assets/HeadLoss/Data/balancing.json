@@ -209,7 +209,8 @@
     "turnPenalty": 0.6,
     "shortApproachPenalty": 12,
     "balancingPasses": 80,
-    "balanceTarget": 0.4
+    "balanceTarget": 0.4,
+    "coreDrillPenalty": 4
   },
   "difficulty": {
     "demandReferenceM3h": 120,

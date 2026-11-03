@@ -20,6 +20,8 @@ namespace HeadLoss.Game
         public CityState? City;
         public List<BuildingRecord> Buildings = new List<BuildingRecord>();
         public SettingsState Settings = new SettingsState();
+        /// <summary>Generator version the buildings' layouts came from (older tier 2+ buildings are refunded and reset on load).</summary>
+        public int GeneratorVersion = Save.SaveSerializer.CurrentGeneratorVersion;
 
         public BuildingRecord? FindBuilding(string id) => Buildings.Find(b => b.BuildingId == id);
 

@@ -26,9 +26,9 @@ namespace HeadLoss.Game.Save
     /// <summary>JSON for saves: public fields only (properties are derived), camelCase, invariant.</summary>
     public static class SaveSerializer
     {
-        public const int CurrentSaveVersion = 2;
-        /// <summary>Generator version written into saves (2: the Phase 3 city and building generators).</summary>
-        public const int CurrentGeneratorVersion = 2;
+        public const int CurrentSaveVersion = 3;
+        /// <summary>Generator version written into saves (2: the Phase 3 city and building generators; 3: Phase 4 floors and water).</summary>
+        public const int CurrentGeneratorVersion = 3;
 
         sealed class FieldsOnlyResolver : CamelCasePropertyNamesContractResolver
         {
@@ -82,7 +82,19 @@ namespace HeadLoss.Game.Save
         static readonly Dictionary<int, Action<JObject>> Steps = new Dictionary<int, Action<JObject>>
         {
             [1] = V1ToV2,
+            [2] = V2ToV3,
         };
+
+        /// <summary>
+        /// Phase 3 → Phase 4: the game state learns which generator made its buildings, so loading can refund and reset
+        /// the tier 2+ buildings the Phase 4 generator rebuilds with floors and water (D83).
+        /// </summary>
+        static void V2ToV3(JObject o)
+        {
+            JObject game = (JObject?)o["gameState"] ?? new JObject();
+            game["generatorVersion"] = o.Value<int?>("generatorVersion") ?? 2;
+            o["gameState"] = game;
+        }
 
         /// <summary>
         /// Phase 2 → Phase 3: the hand-made houses leave the game (D45). Their committed spending goes back into the

@@ -33,7 +33,8 @@
       "plant-room": "#8A9AA6",
       "protected-room": "#A65B5B",
       "shaft": "#7A7F86",
-      "stairwell": "#8E8A80"
+      "stairwell": "#8E8A80",
+      "dining": "#B0855B"
     },
     "city": {
       "ground": "#EEEAE0",
@@ -83,7 +84,8 @@
       "plant-room": "#8A9AA6",
       "protected-room": "#A65B5B",
       "shaft": "#7A7F86",
-      "stairwell": "#8E8A80"
+      "stairwell": "#8E8A80",
+      "dining": "#B0855B"
     },
     "city": {
       "ground": "#22292F",
