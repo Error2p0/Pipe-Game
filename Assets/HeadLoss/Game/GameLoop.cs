@@ -65,7 +65,7 @@ namespace HeadLoss.Game
 
         /// <summary>The layout of a hand-made building (test fixtures and tools).</summary>
         public static BuildingLayout LayoutFor(DataRepository data, string buildingId) =>
-            new BuildingLayout(data.HandmadeBuilding(buildingId));
+            BuildingLayout.From(data, data.HandmadeBuilding(buildingId));
 
         /// <summary>The layout of a building in this game (a city plot, or a hand-made fixture), or null.</summary>
         public BuildingLayout? FindLayout(string buildingId)

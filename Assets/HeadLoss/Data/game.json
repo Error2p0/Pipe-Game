@@ -31,7 +31,9 @@
       "ward": "#7BB08A",
       "electrical-room": "#C7B05B",
       "plant-room": "#8A9AA6",
-      "protected-room": "#A65B5B"
+      "protected-room": "#A65B5B",
+      "shaft": "#7A7F86",
+      "stairwell": "#8E8A80"
     },
     "city": {
       "ground": "#EEEAE0",
@@ -79,7 +81,9 @@
       "ward": "#7BB08A",
       "electrical-room": "#C7B05B",
       "plant-room": "#8A9AA6",
-      "protected-room": "#A65B5B"
+      "protected-room": "#A65B5B",
+      "shaft": "#7A7F86",
+      "stairwell": "#8E8A80"
     },
     "city": {
       "ground": "#22292F",

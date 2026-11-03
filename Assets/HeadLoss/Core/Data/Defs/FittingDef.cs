@@ -34,6 +34,8 @@ namespace HeadLoss.Core.Data.Defs
         public double SettingStep;
         public double SettingMin;
         public double SettingMax;
+        /// <summary>Networks an inline part of this kind goes on (empty = air only).</summary>
+        public System.Collections.Generic.List<string> Fluids = new System.Collections.Generic.List<string>();
         /// <summary>Price at the reference diameter, $ (× D/D_ref above it).</summary>
         public double Price;
         public string Notes = "";

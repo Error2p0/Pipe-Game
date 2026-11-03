@@ -20,26 +20,30 @@ namespace HeadLoss.Game.Buildings
         public int Id;
         public int X;
         public int Y;
+        /// <summary>Floor index.</summary>
+        public int Floor;
         public DuctNodeKind Kind;
         /// <summary>Entry opening id (Intake) or outlet id (Outlet).</summary>
         public string AnchorId = "";
         /// <summary>Long-radius elbow at this node instead of a sharp one.</summary>
         public bool SmoothFittings;
-        /// <summary>Inline nodes: fitting id (damper) or equipment id (inline fan).</summary>
+        /// <summary>Inline nodes: fitting id (damper, valve, regulator, relief valve) or equipment id (inline fan or pump, pressure tank).</summary>
         public string PartId = "";
         /// <summary>Inline nodes: unit direction along the run; fans blow this way.</summary>
         public int DirX;
         public int DirY;
         /// <summary>Dampers: opening θ (minOpening–1).</summary>
         public double Opening = 1;
-        /// <summary>Inline fans: switched on.</summary>
+        /// <summary>Inline fans and pumps: switched on. Shutoff valves: open.</summary>
         public bool On = true;
+        /// <summary>Regulators: downstream setpoint; relief valves: opening pressure. Pa gauge (0 = the fitting's default).</summary>
+        public double Setting;
         /// <summary>Inline fans: a variable-speed drive is fitted.</summary>
         public bool Vsd;
         /// <summary>Inline fans with a VSD: speed fraction (0.2–1).</summary>
         public double Speed = 1;
 
-        public TilePos Pos => new TilePos(X, Y);
+        public TilePos Pos => new TilePos(X, Y, Floor);
         public DuctNode Clone() => (DuctNode)MemberwiseClone();
     }
 
@@ -81,7 +85,7 @@ namespace HeadLoss.Game.Buildings
 
         public DuctNode? FindNode(int id) => Nodes.Find(n => n.Id == id);
         public DuctSegment? FindSegment(int id) => Segments.Find(s => s.Id == id);
-        public DuctNode? NodeAt(TilePos t) => Nodes.Find(n => n.X == t.X && n.Y == t.Y);
+        public DuctNode? NodeAt(TilePos t) => Nodes.Find(n => n.X == t.X && n.Y == t.Y && n.Floor == t.F);
 
         public int Degree(int nodeId)
         {
@@ -121,13 +125,36 @@ namespace HeadLoss.Game.Buildings
     {
         public string BuildingId = "";
         public DuctNetworkState Air = new DuctNetworkState();
+        /// <summary>Cold water network (tier 2+).</summary>
+        public DuctNetworkState Water = new DuctNetworkState { FluidId = "water" };
         public List<EquipmentState> Equipment = new List<EquipmentState>();
+
+        /// <summary>Fluid ids of the building networks, in solve order.</summary>
+        public static readonly string[] FluidIds = { "air", "water" };
 
         public EquipmentState? EquipmentAt(string openingId) => Equipment.Find(e => e.OpeningId == openingId);
 
+        /// <summary>The network of a fluid.</summary>
+        public DuctNetworkState Net(string fluidId) => fluidId switch
+        {
+            "air" => Air,
+            "water" => Water,
+            _ => throw new System.ArgumentException($"No building network for '{fluidId}'"),
+        };
+
+        /// <summary>Every network (air, water).</summary>
+        public IEnumerable<DuctNetworkState> Networks
+        {
+            get
+            {
+                yield return Air;
+                yield return Water;
+            }
+        }
+
         public BuildingState Clone()
         {
-            var c = new BuildingState { BuildingId = BuildingId, Air = Air.Clone() };
+            var c = new BuildingState { BuildingId = BuildingId, Air = Air.Clone(), Water = Water.Clone() };
             foreach (EquipmentState e in Equipment) c.Equipment.Add(e.Clone());
             return c;
         }
@@ -139,21 +166,31 @@ namespace HeadLoss.Game.Buildings
         public string Fingerprint()
         {
             var parts = new List<string>();
-            foreach (DuctSegment s in Air.Segments)
+            foreach (DuctNetworkState net in Networks)
             {
-                TilePos a = Air.FindNode(s.NodeA)!.Pos, b = Air.FindNode(s.NodeB)!.Pos;
-                if (a.X > b.X || (a.X == b.X && a.Y > b.Y)) (a, b) = (b, a);
-                parts.Add($"s{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}");
-            }
-            foreach (DuctNode n in Air.Nodes)
-            {
-                if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
-                parts.Add($"n{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}");
+                string w = net == Air ? "" : net.FluidId + ":";
+                foreach (DuctSegment s in net.Segments)
+                {
+                    TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
+                    if (a.F > b.F || (a.F == b.F && (a.X > b.X || (a.X == b.X && a.Y > b.Y)))) (a, b) = (b, a);
+                    string fa = a.F == 0 && b.F == 0 ? "" : $"f{a.F},{b.F},";
+                    parts.Add($"{w}s{fa}{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}");
+                }
+                foreach (DuctNode n in net.Nodes)
+                {
+                    if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
+                    string f = n.Floor == 0 ? "" : $"f{n.Floor},";
+                    string set = n.Setting == 0 ? "" : $",{n.Setting}";
+                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}");
+                }
             }
             foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}");
             parts.Sort(System.StringComparer.Ordinal);
             return string.Join(";", parts);
         }
+
+        /// <summary>The network fluid of an outlet type (taps are water; everything else is air for now).</summary>
+        public static string OutletFluid(string outletType) => outletType.Contains("water-tap") ? "water" : "air";
 
         /// <summary>A fresh state for a layout: anchor nodes at openings and outlets, initial equipment.</summary>
         public static BuildingState CreateFor(BuildingLayout layout)
@@ -161,11 +198,15 @@ namespace HeadLoss.Game.Buildings
             var s = new BuildingState { BuildingId = layout.Id };
             foreach (var o in layout.EntryOpenings)
             {
-                if (o.Utility != "air") continue;
-                s.Air.Nodes.Add(new DuctNode { Id = s.Air.NextNodeId++, X = o.X, Y = o.Y, Kind = DuctNodeKind.Intake, AnchorId = o.Id });
+                if (o.Utility != "air" && o.Utility != "water") continue;
+                DuctNetworkState net = s.Net(o.Utility);
+                net.Nodes.Add(new DuctNode { Id = net.NextNodeId++, X = o.X, Y = o.Y, Floor = o.Floor, Kind = DuctNodeKind.Intake, AnchorId = o.Id });
             }
             foreach (var o in layout.Outlets)
-                s.Air.Nodes.Add(new DuctNode { Id = s.Air.NextNodeId++, X = o.X, Y = o.Y, Kind = DuctNodeKind.Outlet, AnchorId = o.Id });
+            {
+                DuctNetworkState net = s.Net(OutletFluid(o.Type));
+                net.Nodes.Add(new DuctNode { Id = net.NextNodeId++, X = o.X, Y = o.Y, Floor = o.Floor, Kind = DuctNodeKind.Outlet, AnchorId = o.Id });
+            }
             foreach (var e in layout.InitialEquipment)
                 s.Equipment.Add(new EquipmentState { EquipmentId = e.EquipmentId, OpeningId = e.OpeningId, On = e.On });
             return s;

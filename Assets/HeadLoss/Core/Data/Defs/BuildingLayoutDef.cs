@@ -19,6 +19,16 @@ namespace HeadLoss.Core.Data.Defs
         public int Width;
         /// <summary>Footprint height, tiles.</summary>
         public int Height;
+        /// <summary>Number of floors (the footprint is the same on every floor).</summary>
+        public int Floors = 1;
+        /// <summary>Lowest floor index (−1 with a basement, else 0).</summary>
+        public int LowestFloor;
+        /// <summary>Structural columns: 1×1 tiles that block every layer on every floor.</summary>
+        public List<TileDef> Columns = new List<TileDef>();
+        /// <summary>Fire walls: wall edges between fire compartments (ducts crossing need a fire damper).</summary>
+        public List<DoorDef> FireWalls = new List<DoorDef>();
+        /// <summary>Generated furniture: blocks equipment on the floor layer, not pipes.</summary>
+        public List<FurnitureDef> Furniture = new List<FurnitureDef>();
         public List<RoomDef> Rooms = new List<RoomDef>();
         public List<EntryOpeningDef> EntryOpenings = new List<EntryOpeningDef>();
         public List<OutletPlacementDef> Outlets = new List<OutletPlacementDef>();
@@ -33,20 +43,41 @@ namespace HeadLoss.Core.Data.Defs
         public double ReferenceCrankSpeed;
     }
 
+    /// <summary>A tile (columns).</summary>
+    public sealed class TileDef
+    {
+        public int X;
+        public int Y;
+    }
+
+    /// <summary>A piece of furniture on the floor layer.</summary>
+    public sealed class FurnitureDef
+    {
+        public int X;
+        public int Y;
+        public int Width = 1;
+        public int Height = 1;
+        public int Floor;
+        /// <summary>bed, table, sofa, counter, shelf, desk (drawing only).</summary>
+        public string Kind = "";
+    }
+
     /// <summary>A window in the exterior wall on one side of a tile.</summary>
     public sealed class WindowDef
     {
         public int X;
         public int Y;
+        public int Floor;
         /// <summary>Wall side of the tile: north, south, east or west.</summary>
         public string Side = "";
     }
 
-    /// <summary>A door in the wall on one side of a tile.</summary>
+    /// <summary>A door (or fire-wall edge) in the wall on one side of a tile.</summary>
     public sealed class DoorDef
     {
         public int X;
         public int Y;
+        public int Floor;
         /// <summary>Wall side of the tile: north, south, east or west.</summary>
         public string Side = "";
     }
@@ -60,6 +91,7 @@ namespace HeadLoss.Core.Data.Defs
         public int Y;
         public int Width;
         public int Height;
+        public int Floor;
         /// <summary>People in the room (heat and CO₂ in the room grid).</summary>
         public double Occupants;
         /// <summary>Machine heat load, W.</summary>
@@ -74,6 +106,7 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Tile just inside the outside wall.</summary>
         public int X;
         public int Y;
+        public int Floor;
         /// <summary>Wall side: north, south, east or west.</summary>
         public string Facing = "";
     }
@@ -85,6 +118,7 @@ namespace HeadLoss.Core.Data.Defs
         public string Type = "";
         public int X;
         public int Y;
+        public int Floor;
         /// <summary>Requirement in the outlet's display unit; 0 = the tier's value from <c>outlets.json</c>.</summary>
         public double Min;
         public double Ideal;

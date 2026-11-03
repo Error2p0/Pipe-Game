@@ -155,8 +155,8 @@ namespace HeadLoss.Game.Economy
         /// <summary>A state's parts by place: duct metres by tile edge, fittings and inline parts by tile, equipment by opening.</summary>
         sealed class Bill
         {
-            public readonly Dictionary<(TilePos, TilePos), Item> Ducts = new Dictionary<(TilePos, TilePos), Item>();
-            public readonly Dictionary<TilePos, Item> Fittings = new Dictionary<TilePos, Item>();
+            public readonly Dictionary<(string, TilePos, TilePos), Item> Ducts = new Dictionary<(string, TilePos, TilePos), Item>();
+            public readonly Dictionary<(string, TilePos), Item> Fittings = new Dictionary<(string, TilePos), Item>();
             public readonly Dictionary<string, Item> Equipment = new Dictionary<string, Item>();
             /// <summary>Add-ons fitted to equipment (variable-speed drives), keyed by the device's place.</summary>
             public readonly Dictionary<string, Item> Addons = new Dictionary<string, Item>();
@@ -164,17 +164,30 @@ namespace HeadLoss.Game.Economy
             public static Bill Of(DataRepository data, BuildingLayout layout, BuildingState s)
             {
                 var bill = new Bill();
-                DuctNetworkState net = s.Air;
+                double floorHeight = data.Balancing.Building.FloorHeight;
+                foreach (DuctNetworkState net in s.Networks) AddNetwork(bill, data, layout, net, floorHeight);
+                AddEquipment(bill, data, layout, s);
+                return bill;
+            }
+
+            static void AddNetwork(Bill bill, DataRepository data, BuildingLayout layout, DuctNetworkState net, double floorHeight)
+            {
+                string fluid = net.FluidId;
+                double drill = data.Balancing.Building.CoreDrillPrice;
                 foreach (DuctSegment seg in net.Segments)
                 {
                     TilePos a = net.FindNode(seg.NodeA)!.Pos, b = net.FindNode(seg.NodeB)!.Pos;
-                    (int dx, int dy) = a.DirectionTo(b);
                     double perMetre = SegmentPerMetre(data, seg);
                     string spec = $"{seg.MaterialId}/{seg.DiameterMm}/{seg.Sealing}/{seg.Insulation}";
                     for (TilePos t = a; t != b; )
                     {
-                        var next = new TilePos(t.X + dx, t.Y + dy);
-                        bill.Ducts[Edge(t, next)] = new Item(spec, perMetre);
+                        TilePos next = t.Toward(b);
+                        // A riser step is a whole floor height of pipe.
+                        double metres = t.F != next.F ? floorHeight : 1;
+                        (TilePos e0, TilePos e1) = Edge(t, next);
+                        bill.Ducts[(fluid, e0, e1)] = new Item(spec, perMetre * metres);
+                        // A pipe through an interior wall without a door is core-drilled (09 §Constraints).
+                        if (layout.NeedsCoreDrill(t, next)) bill.Ducts[(fluid + ":drill", e0, e1)] = new Item("drill", drill);
                         t = next;
                     }
                 }
@@ -210,7 +223,7 @@ namespace HeadLoss.Game.Economy
                         {
                             specs.Add(fan.Id);
                             price += fan.Price;
-                            if (n.Vsd) bill.Addons[$"{n.X},{n.Y}:vsd"] = new Item("vsd", DrivePrice(data, fan.Category));
+                            if (n.Vsd) bill.Addons[$"{fluid}:{n.X},{n.Y},{n.Floor}:vsd"] = new Item("vsd", DrivePrice(data, fan.Category));
                         }
                         else Add(n.PartId, dMax);
                     }
@@ -219,9 +232,12 @@ namespace HeadLoss.Game.Economy
                             if (seg.DiameterMm < dMax) Add("reducer", dMax);
                     if (specs.Count == 0) continue;
                     specs.Sort(StringComparer.Ordinal);
-                    bill.Fittings[n.Pos] = new Item(string.Join("+", specs), price);
+                    bill.Fittings[(fluid, n.Pos)] = new Item(string.Join("+", specs), price);
                 }
+            }
 
+            static void AddEquipment(Bill bill, DataRepository data, BuildingLayout layout, BuildingState s)
+            {
                 foreach (EquipmentState e in s.Equipment)
                 {
                     bool preplaced = false;
@@ -231,11 +247,10 @@ namespace HeadLoss.Game.Economy
                     bill.Equipment[e.OpeningId] = new Item(e.EquipmentId, preplaced ? 0 : def.Price);
                     if (e.Vsd) bill.Addons[e.OpeningId + ":vsd"] = new Item("vsd", DrivePrice(data, def.Category));
                 }
-                return bill;
             }
 
             static (TilePos, TilePos) Edge(TilePos a, TilePos b) =>
-                a.X < b.X || (a.X == b.X && a.Y < b.Y) ? (a, b) : (b, a);
+                a.F < b.F || (a.F == b.F && (a.X < b.X || (a.X == b.X && a.Y < b.Y))) ? (a, b) : (b, a);
         }
     }
 }

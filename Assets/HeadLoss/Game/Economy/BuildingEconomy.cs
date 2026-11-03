@@ -3,6 +3,7 @@ using HeadLoss.Core.Data;
 using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Networks;
+using HeadLoss.Game.Session;
 using HeadLoss.Sim.Network;
 
 namespace HeadLoss.Game.Economy
@@ -15,7 +16,7 @@ namespace HeadLoss.Game.Economy
         public OutletRequirement Requirement;
         /// <summary>A duct reaches the outlet.</summary>
         public bool Connected;
-        /// <summary>Measured delivery, SI (flow m³/s for vents).</summary>
+        /// <summary>Measured delivery, SI (flow m³/s for vents, residual pressure Pa for taps).</summary>
         public double Delivery;
         public OutletZone Zone;
         /// <summary>Payout multiplier m.</summary>
@@ -75,8 +76,16 @@ namespace HeadLoss.Game.Economy
         static double DevicePower(CompiledNetwork network, SolveResult result, int link) =>
             network.DriveFactor.TryGetValue(link, out double f) ? result.Power[link] / f : result.Power[link];
 
-        /// <summary>Evaluates a solve. A null network (not solved yet) leaves every outlet unconnected.</summary>
-        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, CompiledNetwork? network, SolveResult? result)
+        /// <summary>Evaluates an air-only solve (the auto-router, tools and tests).</summary>
+        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, CompiledNetwork? network, SolveResult? result) =>
+            Evaluate(data, layout, network != null && result != null ? new[] { new FluidSolve(network, result) } : null);
+
+        /// <summary>Evaluates every network of a snapshot.</summary>
+        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, NetworkSnapshot? snapshot) =>
+            Evaluate(data, layout, snapshot?.All);
+
+        /// <summary>Evaluates solves. Null (not solved yet) leaves every outlet unconnected.</summary>
+        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, IReadOnlyList<FluidSolve>? solves)
         {
             EconomyDef e = data.Balancing.Economy;
             var ev = new BuildingEvaluation();
@@ -90,10 +99,17 @@ namespace HeadLoss.Game.Economy
                     Requirement = Requirement(data, layout, placement),
                     BaseRate = BaseRate(data, def, layout.Tier),
                 };
-                if (network != null && result != null && network.OutletLink.TryGetValue(placement.Id, out int link))
+                FluidSolve? solve = null;
+                if (solves != null) foreach (FluidSolve fs in solves) if (fs.Fluid == def.Fluid) solve = fs;
+                if (solve != null && solve.Compiled.OutletLink.TryGetValue(placement.Id, out int link))
                 {
                     st.Connected = true;
-                    st.Delivery = System.Math.Max(0, result.Flow[link]);
+                    st.Delivery = System.Math.Max(0, solve.Result.Flow[link]);
+                }
+                else if (solve != null && solve.Compiled.OutletNode.TryGetValue(placement.Id, out int node))
+                {
+                    st.Connected = true;
+                    st.Delivery = solve.Result.NodeActive[node] ? System.Math.Max(0, solve.Result.NodePressure[node]) : 0;
                 }
                 bool risky = data.Fluid(def.Fluid).Risky;
                 st.Multiplier = Payout.Multiplier(st.Requirement, st.Delivery, risky, e, out st.Zone);
@@ -110,11 +126,12 @@ namespace HeadLoss.Game.Economy
                 ev.Gross = ev.PotentialGross;
             }
 
-            if (network != null && result != null)
-            {
-                foreach (var kv in network.FanLink) ev.PowerW += DevicePower(network, result, kv.Value);
-                foreach (var kv in network.InlineLink) ev.PowerW += DevicePower(network, result, kv.Value);
-            }
+            if (solves != null)
+                foreach (FluidSolve fs in solves)
+                {
+                    foreach (var kv in fs.Compiled.FanLink) ev.PowerW += DevicePower(fs.Compiled, fs.Result, kv.Value);
+                    foreach (var kv in fs.Compiled.InlineLink) ev.PowerW += DevicePower(fs.Compiled, fs.Result, kv.Value);
+                }
             ev.Electricity = ev.PowerW / 1000.0 * e.ElectricityPricePerKWs * e.ElectricityTierFactor[layout.Tier - 1];
             return ev;
         }

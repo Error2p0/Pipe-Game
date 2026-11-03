@@ -114,27 +114,27 @@ namespace HeadLoss.Game.Commands
         readonly double _diameterMm;
         readonly string _materialId;
         readonly bool _smoothElbows;
+        readonly string _fluid;
 
         /// <param name="diameterMm">mm.</param>
-        public PlaceRunCommand(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
+        /// <param name="fluid">Network to draw on (air, water).</param>
+        public PlaceRunCommand(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
         {
+            _fluid = fluid;
             _path = new List<TilePos>(path);
             _diameterMm = diameterMm;
             _materialId = materialId;
             _smoothElbows = smoothElbows;
         }
 
-        public override string Description => $"Draw duct ({_path.Count - 1} m)";
+        public override string Description => _fluid == "air" ? $"Draw duct ({_path.Count - 1} m)" : $"Draw pipe ({_path.Count - 1} m)";
         public DrawError LastError { get; private set; }
 
         protected override bool Apply(BuildingSession s)
         {
-            LastError = DuctEditor.Validate(s.State.Air, s.Layout, _path, s.Data.Balancing.Drawing.MaxNodeDegree);
-            if (LastError == DrawError.None && (!s.Unlocked(Tech.SizeTier(s.Data, _materialId, _diameterMm))
-                || !s.Unlocked(Tech.ItemTier(s.Data, _materialId)) || (_smoothElbows && !s.Unlocked(Tech.SmoothFittingsTier(s.Data)))))
-                LastError = DrawError.Locked;
+            LastError = s.ValidateRun(_fluid, _path, _diameterMm, _materialId, _smoothElbows);
             if (LastError != DrawError.None) return false;
-            DuctEditor.PlaceRun(s.State.Air, _path, _diameterMm, _materialId, _smoothElbows);
+            DuctEditor.PlaceRun(s.State.Net(_fluid), _path, _diameterMm, _materialId, _smoothElbows);
             return true;
         }
     }
@@ -142,34 +142,61 @@ namespace HeadLoss.Game.Commands
     public sealed class DeleteSegmentCommand : DesignCommand
     {
         readonly List<int> _segmentIds;
-        public DeleteSegmentCommand(int segmentId) => _segmentIds = new List<int> { segmentId };
-        public DeleteSegmentCommand(IEnumerable<int> segmentIds) => _segmentIds = new List<int>(segmentIds);
+        readonly string _fluid;
+
+        public DeleteSegmentCommand(int segmentId, string fluid = "air")
+        {
+            _segmentIds = new List<int> { segmentId };
+            _fluid = fluid;
+        }
+
+        public DeleteSegmentCommand(IEnumerable<int> segmentIds, string fluid = "air")
+        {
+            _segmentIds = new List<int>(segmentIds);
+            _fluid = fluid;
+        }
+
         public override string Description => _segmentIds.Count == 1 ? "Delete duct" : $"Delete {_segmentIds.Count} ducts";
-        protected override bool Apply(BuildingSession s) => DuctEditor.DeleteSegments(s.State.Air, _segmentIds);
+        protected override bool Apply(BuildingSession s) => DuctEditor.DeleteSegments(s.State.Net(_fluid), _segmentIds);
     }
 
     public sealed class SetSegmentSizeCommand : DesignCommand
     {
         readonly List<int> _segmentIds;
         readonly double _diameterMm;
+        readonly string _fluid;
 
         /// <param name="diameterMm">mm.</param>
-        public SetSegmentSizeCommand(int segmentId, double diameterMm) : this(new[] { segmentId }, diameterMm) { }
+        public SetSegmentSizeCommand(int segmentId, double diameterMm, string fluid = "air") : this(new[] { segmentId }, diameterMm, fluid) { }
 
         /// <param name="diameterMm">mm.</param>
-        public SetSegmentSizeCommand(IEnumerable<int> segmentIds, double diameterMm)
+        public SetSegmentSizeCommand(IEnumerable<int> segmentIds, double diameterMm, string fluid = "air")
         {
             _segmentIds = new List<int>(segmentIds);
             _diameterMm = diameterMm;
+            _fluid = fluid;
         }
+
+        /// <summary>Why the last attempt failed (ceiling space), or None.</summary>
+        public DrawError LastError { get; private set; }
 
         public override string Description => $"Change duct size to {_diameterMm} mm";
 
         protected override bool Apply(BuildingSession s)
         {
+            DuctNetworkState net = s.State.Net(_fluid);
+            LastError = DrawError.None;
             foreach (int id in _segmentIds)
-                if (s.State.Air.FindSegment(id) is DuctSegment seg && !s.Unlocked(Tech.SizeTier(s.Data, seg.MaterialId, _diameterMm))) return false;
-            return DuctEditor.SetSize(s.State.Air, _segmentIds, _diameterMm);
+                if (net.FindSegment(id) is DuctSegment seg && !s.Unlocked(Tech.SizeTier(s.Data, seg.MaterialId, _diameterMm))) { LastError = DrawError.Locked; return false; }
+            BuildingState before = s.State.Clone();
+            if (!DuctEditor.SetSize(net, _segmentIds, _diameterMm)) return false;
+            if (s.CeilingOverfull(s.State) && !s.CeilingOverfull(before))
+            {
+                s.Record.Design = before;
+                LastError = DrawError.NoCeilingSpace;
+                return false;
+            }
+            return true;
         }
     }
 
@@ -178,9 +205,11 @@ namespace HeadLoss.Game.Commands
     {
         readonly List<int> _segmentIds;
         readonly string? _material, _sealing, _insulation;
+        readonly string _fluid;
 
-        public SetSegmentSpecCommand(IEnumerable<int> segmentIds, string? materialId = null, string? sealing = null, string? insulation = null)
+        public SetSegmentSpecCommand(IEnumerable<int> segmentIds, string? materialId = null, string? sealing = null, string? insulation = null, string fluid = "air")
         {
+            _fluid = fluid;
             _segmentIds = new List<int>(segmentIds);
             _material = materialId;
             _sealing = sealing;
@@ -193,10 +222,17 @@ namespace HeadLoss.Game.Commands
         {
             foreach (string? id in new[] { _material, _sealing, _insulation })
                 if (id != null && !s.Unlocked(Tech.ItemTier(s.Data, id))) return false;
-            if (_material != null && s.Data.FindMaterial(_material)?.Kind != "duct") return false;
-            if (_sealing != null && _sealing.Length > 0 && s.Data.FindSealing(_sealing) == null) return false;
+            if (_material != null && s.Data.FindMaterial(_material)?.Fluids.Contains(_fluid) != true) return false;
+            if (_sealing != null && (_fluid != "air" || _sealing.Length > 0 && s.Data.FindSealing(_sealing) == null)) return false;
             if (_insulation != null && _insulation.Length > 0 && s.Data.FindInsulation(_insulation) == null) return false;
-            return DuctEditor.SetSpec(s.State.Air, _segmentIds, _material, _sealing, _insulation);
+            BuildingState before = s.State.Clone();
+            if (!DuctEditor.SetSpec(s.State.Net(_fluid), _segmentIds, _material, _sealing, _insulation)) return false;
+            if (s.CeilingOverfull(s.State) && !s.CeilingOverfull(before))
+            {
+                s.Record.Design = before;
+                return false;
+            }
+            return true;
         }
     }
 
@@ -205,19 +241,21 @@ namespace HeadLoss.Game.Commands
     {
         readonly int _nodeId;
         readonly bool _smooth;
+        readonly string _fluid;
 
-        public SetElbowCommand(int nodeId, bool smooth)
+        public SetElbowCommand(int nodeId, bool smooth, string fluid = "air")
         {
             _nodeId = nodeId;
             _smooth = smooth;
+            _fluid = fluid;
         }
 
         public override string Description => _smooth ? "Smooth fitting" : "Sharp fitting";
 
         protected override bool Apply(BuildingSession s)
         {
-            DuctNode? n = s.State.Air.FindNode(_nodeId);
-            if (n == null || !(DuctEditor.IsElbow(s.State.Air, n) || DuctEditor.IsTee(s.State.Air, n)) || n.SmoothFittings == _smooth) return false;
+            DuctNode? n = s.State.Net(_fluid).FindNode(_nodeId);
+            if (n == null || !(DuctEditor.IsElbow(s.State.Net(_fluid), n) || DuctEditor.IsTee(s.State.Net(_fluid), n)) || n.SmoothFittings == _smooth) return false;
             if (_smooth && !s.Unlocked(Tech.SmoothFittingsTier(s.Data))) return false;
             n.SmoothFittings = _smooth;
             return true;
@@ -227,15 +265,17 @@ namespace HeadLoss.Game.Commands
     /// <summary>"Upgrade all bends": every elbow becomes long-radius and every tee smooth.</summary>
     public sealed class UpgradeAllBendsCommand : DesignCommand
     {
+        readonly string _fluid;
+        public UpgradeAllBendsCommand(string fluid = "air") => _fluid = fluid;
         public override string Description => "Upgrade all bends";
 
         protected override bool Apply(BuildingSession s)
         {
             if (!s.Unlocked(Tech.SmoothFittingsTier(s.Data))) return false;
             bool any = false;
-            foreach (DuctNode n in s.State.Air.Nodes)
+            foreach (DuctNode n in s.State.Net(_fluid).Nodes)
             {
-                if (n.SmoothFittings || !(DuctEditor.IsElbow(s.State.Air, n) || DuctEditor.IsTee(s.State.Air, n))) continue;
+                if (n.SmoothFittings || !(DuctEditor.IsElbow(s.State.Net(_fluid), n) || DuctEditor.IsTee(s.State.Net(_fluid), n))) continue;
                 n.SmoothFittings = true;
                 any = true;
             }
@@ -256,6 +296,8 @@ namespace HeadLoss.Game.Commands
         }
 
         public override string Description => _equipmentId.Length == 0 ? "Remove equipment" : "Place equipment";
+        /// <summary>Why the last attempt failed (floor space), or None.</summary>
+        public DrawError LastError { get; private set; }
 
         protected override bool Apply(BuildingSession s)
         {
@@ -269,6 +311,9 @@ namespace HeadLoss.Game.Commands
             }
             EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
             if (def == null || def.Placement != "intake" || !s.Unlocked(def.Tier)) return false;
+            if (!EquipmentFits.Opening(s.Data, s.Layout.FindOpening(_openingId)!, def)) return false;
+            LastError = EquipmentFits.FloorSpace(s, _openingId, def, out _);
+            if (LastError != DrawError.None) return false;
             if (e != null && e.EquipmentId == _equipmentId) return false;
             bool vsd = e != null && e.Vsd && def.SpeedControl == "on-off";
             if (e != null) s.State.Equipment.Remove(e);
@@ -283,10 +328,12 @@ namespace HeadLoss.Game.Commands
         readonly TilePos _tile;
         readonly string _partId;
         readonly bool _reverse;
+        readonly string _fluid;
 
         /// <param name="reverse">Point a fan against the default (away from the intake) direction.</param>
-        public PlaceInlineCommand(TilePos tile, string partId, bool reverse = false)
+        public PlaceInlineCommand(TilePos tile, string partId, bool reverse = false, string fluid = "air")
         {
+            _fluid = fluid;
             _tile = tile;
             _partId = partId;
             _reverse = reverse;
@@ -297,12 +344,13 @@ namespace HeadLoss.Game.Commands
 
         protected override bool Apply(BuildingSession s)
         {
-            LastError = DuctEditor.ValidateInline(s.State.Air, _tile);
+            LastError = DuctEditor.ValidateInline(s.State.Net(_fluid), _tile);
+            if (LastError == DrawError.None && !EquipmentFits.InlinePart(s.Data, _partId, _fluid)) LastError = DrawError.WrongNetwork;
             if (LastError == DrawError.None && !s.Unlocked(Tech.ItemTier(s.Data, _partId))) LastError = DrawError.Locked;
             if (LastError != DrawError.None) return false;
-            (int dx, int dy) = DuctEditor.DefaultInlineDirection(s.State.Air, _tile);
+            (int dx, int dy) = DuctEditor.DefaultInlineDirection(s.State.Net(_fluid), _tile);
             if (_reverse) (dx, dy) = (-dx, -dy);
-            DuctEditor.PlaceInline(s.State.Air, _tile, _partId, dx, dy);
+            DuctEditor.PlaceInline(s.State.Net(_fluid), _tile, _partId, dx, dy);
             return true;
         }
     }
@@ -310,21 +358,35 @@ namespace HeadLoss.Game.Commands
     public sealed class RemoveInlineCommand : DesignCommand
     {
         readonly int _nodeId;
-        public RemoveInlineCommand(int nodeId) => _nodeId = nodeId;
+        readonly string _fluid;
+
+        public RemoveInlineCommand(int nodeId, string fluid = "air")
+        {
+            _nodeId = nodeId;
+            _fluid = fluid;
+        }
+
         public override string Description => "Remove part";
-        protected override bool Apply(BuildingSession s) => DuctEditor.RemoveInline(s.State.Air, _nodeId);
+        protected override bool Apply(BuildingSession s) => DuctEditor.RemoveInline(s.State.Net(_fluid), _nodeId);
     }
 
     /// <summary>Turns an inline fan around.</summary>
     public sealed class FlipInlineCommand : DesignCommand
     {
         readonly int _nodeId;
-        public FlipInlineCommand(int nodeId) => _nodeId = nodeId;
+        readonly string _fluid;
+
+        public FlipInlineCommand(int nodeId, string fluid = "air")
+        {
+            _nodeId = nodeId;
+            _fluid = fluid;
+        }
+
         public override string Description => "Turn fan around";
 
         protected override bool Apply(BuildingSession s)
         {
-            DuctNode? n = s.State.Air.FindNode(_nodeId);
+            DuctNode? n = s.State.Net(_fluid).FindNode(_nodeId);
             if (n == null || n.Kind != DuctNodeKind.Inline) return false;
             n.DirX = -n.DirX;
             n.DirY = -n.DirY;
@@ -341,6 +403,7 @@ namespace HeadLoss.Game.Commands
         readonly string _openingId;
         readonly TilePos _tile;
         readonly bool _fit;
+        readonly string _fluid = "air";
 
         public SetVsdCommand(string openingId, bool fit)
         {
@@ -348,30 +411,38 @@ namespace HeadLoss.Game.Commands
             _fit = fit;
         }
 
-        public SetVsdCommand(TilePos inlineTile, bool fit)
+        public SetVsdCommand(TilePos inlineTile, bool fit, string fluid = "air")
         {
             _openingId = "";
             _tile = inlineTile;
             _fit = fit;
+            _fluid = fluid;
+        }
+
+        static EquipmentDef? DriveFor(BuildingSession s, string category)
+        {
+            foreach (EquipmentDef d in s.Data.Equipment) if (d.Placement == "addon" && d.FitsCategories.Contains(category)) return d;
+            return null;
         }
 
         public override string Description => _fit ? "Fit variable-speed drive" : "Remove variable-speed drive";
 
         protected override bool Apply(BuildingSession s)
         {
-            EquipmentDef? drive = null;
-            foreach (EquipmentDef d in s.Data.Equipment) if (d.Placement == "addon" && d.FitsCategories.Contains("air-mover")) drive = d;
-            if (drive == null || (_fit && !s.Unlocked(drive.Tier))) return false;
             if (_openingId.Length > 0)
             {
                 EquipmentState? e = s.State.EquipmentAt(_openingId);
                 if (e == null || e.Vsd == _fit || s.Data.EquipmentItem(e.EquipmentId).SpeedControl != "on-off") return false;
+                EquipmentDef? drive = DriveFor(s, s.Data.EquipmentItem(e.EquipmentId).Category);
+                if (drive == null || (_fit && !s.Unlocked(drive.Tier))) return false;
                 e.Vsd = _fit;
                 e.Speed = 1;
                 return true;
             }
-            DuctNode? n = s.State.Air.NodeAt(_tile);
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
             if (n == null || n.Kind != DuctNodeKind.Inline || n.Vsd == _fit || s.Data.FindEquipment(n.PartId)?.SpeedControl != "on-off") return false;
+            EquipmentDef? d2 = DriveFor(s, s.Data.EquipmentItem(n.PartId).Category);
+            if (d2 == null || (_fit && !s.Unlocked(d2.Tier))) return false;
             n.Vsd = _fit;
             n.Speed = 1;
             return true;
@@ -519,8 +590,11 @@ namespace HeadLoss.Game.Commands
         double _wasDesign, _wasCommitted;
         bool _hadCommitted;
 
-        public SetInlineSpeedCommand(TilePos tile, double speed)
+        readonly string _fluid;
+
+        public SetInlineSpeedCommand(TilePos tile, double speed, string fluid = "air")
         {
+            _fluid = fluid;
             _tile = tile;
             _speed = speed;
         }
@@ -529,11 +603,11 @@ namespace HeadLoss.Game.Commands
 
         public override bool Execute(BuildingSession s)
         {
-            DuctNode? n = s.State.Air.NodeAt(_tile);
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
             double v = SetEquipmentSpeedCommand.SpeedStep(_speed);
             if (n == null || n.Kind != DuctNodeKind.Inline || !n.Vsd || n.Speed == v) return false;
             _speed = v;
-            DuctNode? c = s.CommittedTwin(n);
+            DuctNode? c = s.CommittedTwin(n, _fluid);
             if (c != null && !c.Vsd) c = null;
             _wasDesign = n.Speed;
             n.Speed = v;
@@ -548,8 +622,8 @@ namespace HeadLoss.Game.Commands
 
         public override void Undo(BuildingSession s)
         {
-            if (s.State.Air.NodeAt(_tile) is DuctNode n) n.Speed = _wasDesign;
-            if (_hadCommitted && s.Committed.Air.NodeAt(_tile) is DuctNode c) c.Speed = _wasCommitted;
+            if (s.State.Net(_fluid).NodeAt(_tile) is DuctNode n) n.Speed = _wasDesign;
+            if (_hadCommitted && s.Committed.Net(_fluid).NodeAt(_tile) is DuctNode c) c.Speed = _wasCommitted;
         }
 
         public override bool TryMerge(ICommand next)
@@ -567,19 +641,25 @@ namespace HeadLoss.Game.Commands
         readonly bool _on;
         bool _wasDesign, _wasCommitted, _hadCommitted;
 
-        public SetInlineOnCommand(TilePos tile, bool on)
+        readonly string _fluid;
+
+        public SetInlineOnCommand(TilePos tile, bool on, string fluid = "air")
         {
+            _fluid = fluid;
             _tile = tile;
             _on = on;
         }
 
         public override string Description => _on ? "Switch on" : "Switch off";
 
+        /// <summary>The part changed in the built network (a valve closing or a pump stopping causes a surge).</summary>
+        public bool ChangedBuilt => _hadCommitted;
+
         public override bool Execute(BuildingSession s)
         {
-            DuctNode? n = s.State.Air.NodeAt(_tile);
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
             if (n == null || n.Kind != DuctNodeKind.Inline || n.On == _on) return false;
-            DuctNode? c = s.CommittedTwin(n);
+            DuctNode? c = s.CommittedTwin(n, _fluid);
             _wasDesign = n.On;
             n.On = _on;
             _hadCommitted = c != null;
@@ -593,8 +673,8 @@ namespace HeadLoss.Game.Commands
 
         public override void Undo(BuildingSession s)
         {
-            if (s.State.Air.NodeAt(_tile) is DuctNode n) n.On = _wasDesign;
-            if (_hadCommitted && s.Committed.Air.NodeAt(_tile) is DuctNode c) c.On = _wasCommitted;
+            if (s.State.Net(_fluid).NodeAt(_tile) is DuctNode n) n.On = _wasDesign;
+            if (_hadCommitted && s.Committed.Net(_fluid).NodeAt(_tile) is DuctNode c) c.On = _wasCommitted;
         }
     }
 
@@ -609,9 +689,12 @@ namespace HeadLoss.Game.Commands
         double _wasDesign, _wasCommitted;
         bool _hadCommitted;
 
+        readonly string _fluid;
+
         /// <param name="opening">θ, clamped to the damper's minimum opening–1.</param>
-        public SetDamperOpeningCommand(TilePos tile, double opening)
+        public SetDamperOpeningCommand(TilePos tile, double opening, string fluid = "air")
         {
+            _fluid = fluid;
             _tile = tile;
             _opening = opening;
         }
@@ -620,14 +703,14 @@ namespace HeadLoss.Game.Commands
 
         public override bool Execute(BuildingSession s)
         {
-            DuctNode? n = s.State.Air.NodeAt(_tile);
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
             if (n == null || n.Kind != DuctNodeKind.Inline) return false;
             FittingDef? f = s.Data.FindFitting(n.PartId);
-            if (f == null || f.Model != "valve") return false;
+            if (f == null || f.Model != "valve" || f.MinOpening >= 1) return false;
             double v = System.Math.Max(f.MinOpening, System.Math.Min(1.0, _opening));
             if (System.Math.Abs(n.Opening - v) < 1e-12) return false;
             _opening = v;
-            DuctNode? c = s.CommittedTwin(n);
+            DuctNode? c = s.CommittedTwin(n, _fluid);
             _wasDesign = n.Opening;
             n.Opening = v;
             _hadCommitted = c != null;
@@ -641,14 +724,78 @@ namespace HeadLoss.Game.Commands
 
         public override void Undo(BuildingSession s)
         {
-            if (s.State.Air.NodeAt(_tile) is DuctNode n) n.Opening = _wasDesign;
-            if (_hadCommitted && s.Committed.Air.NodeAt(_tile) is DuctNode c) c.Opening = _wasCommitted;
+            if (s.State.Net(_fluid).NodeAt(_tile) is DuctNode n) n.Opening = _wasDesign;
+            if (_hadCommitted && s.Committed.Net(_fluid).NodeAt(_tile) is DuctNode c) c.Opening = _wasCommitted;
         }
 
         public override bool TryMerge(ICommand next)
         {
             if (!(next is SetDamperOpeningCommand d) || d._tile != _tile || d._hadCommitted != _hadCommitted) return false;
             _opening = d._opening;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Sets a regulator's downstream setpoint or a relief valve's opening pressure (<c>07-equipment.md</c> §Control parts:
+    /// steps of 0.1 bar for water). Free and live like a damper; consecutive moves merge.
+    /// </summary>
+    public sealed class SetValveSettingCommand : OperationalCommand
+    {
+        readonly TilePos _tile;
+        readonly string _fluid;
+        double _setting;
+        double _wasDesign, _wasCommitted;
+        bool _hadCommitted;
+
+        /// <param name="setting">Pa gauge; snapped to the fitting's step and range.</param>
+        public SetValveSettingCommand(TilePos tile, double setting, string fluid = "water")
+        {
+            _tile = tile;
+            _setting = setting;
+            _fluid = fluid;
+        }
+
+        public override string Description => $"Set {_setting / 1e5:0.0} bar";
+
+        public static double Snap(FittingDef f, double v)
+        {
+            v = System.Math.Max(f.SettingMin, System.Math.Min(f.SettingMax, v));
+            return f.SettingStep > 0 ? System.Math.Round(v / f.SettingStep) * f.SettingStep : v;
+        }
+
+        public override bool Execute(BuildingSession s)
+        {
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
+            if (n == null || n.Kind != DuctNodeKind.Inline) return false;
+            FittingDef? f = s.Data.FindFitting(n.PartId);
+            if (f == null || (f.Model != "regulator" && f.Model != "relief")) return false;
+            double v = Snap(f, _setting);
+            double current = n.Setting > 0 ? n.Setting : f.DefaultSetting;
+            if (System.Math.Abs(current - v) < 1e-9) return false;
+            _setting = v;
+            DuctNode? c = s.CommittedTwin(n, _fluid);
+            _wasDesign = n.Setting;
+            n.Setting = v;
+            _hadCommitted = c != null;
+            if (c != null)
+            {
+                _wasCommitted = c.Setting;
+                c.Setting = v;
+            }
+            return true;
+        }
+
+        public override void Undo(BuildingSession s)
+        {
+            if (s.State.Net(_fluid).NodeAt(_tile) is DuctNode n) n.Setting = _wasDesign;
+            if (_hadCommitted && s.Committed.Net(_fluid).NodeAt(_tile) is DuctNode c) c.Setting = _wasCommitted;
+        }
+
+        public override bool TryMerge(ICommand next)
+        {
+            if (!(next is SetValveSettingCommand d) || d._tile != _tile || d._fluid != _fluid || d._hadCommitted != _hadCommitted) return false;
+            _setting = d._setting;
             return true;
         }
     }

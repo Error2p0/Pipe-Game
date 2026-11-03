@@ -20,8 +20,10 @@
     { "id": "workshop", "displayName": "Workshop", "occupants": 0, "occupantsPerM2": 0.05, "machinesW": 2000, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 16, "fromTier": 1 }] },
     { "id": "lab", "displayName": "Lab", "occupants": 0, "occupantsPerM2": 0.05, "machinesW": 1000, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 12, "fromTier": 1 }] },
     { "id": "ward", "displayName": "Ward", "occupants": 0, "occupantsPerM2": 0.15, "machinesW": 200, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{ "type": "air-supply-vent", "min": 1, "areaPerOutlet": 12, "fromTier": 1 }] },
-    { "id": "electrical-room", "displayName": "Electrical room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 500, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "electrical-room", "displayName": "Electrical room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 500, "hub": false, "protected": false, "electrical": true, "relativeHumidity": 0.45, "outlets": [] },
     { "id": "plant-room", "displayName": "Plant room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "shaft", "displayName": "Shaft", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "shaft": true, "relativeHumidity": 0.45, "outlets": [] },
+    { "id": "stairwell", "displayName": "Stairwell", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": true, "protected": false, "blocksPipes": true, "relativeHumidity": 0.45, "outlets": [] },
     { "id": "protected-room", "displayName": "Server room", "occupants": 0, "occupantsPerM2": 0, "machinesW": 3000, "hub": false, "protected": true, "relativeHumidity": 0.45, "outlets": [] }
   ],
   "types": [

@@ -15,20 +15,78 @@ using HeadLoss.Sim.Network;
 
 namespace HeadLoss.Game.Session
 {
-    /// <summary>A compiled network and its solve, always swapped together.</summary>
-    public sealed class NetworkSnapshot
+    /// <summary>One fluid's compiled network and its solve.</summary>
+    public sealed class FluidSolve
     {
-        public CompiledNetwork Compiled;
-        public SolveResult Result;
-        /// <summary>The state the snapshot was solved from (a private copy).</summary>
-        public BuildingState State;
+        public readonly CompiledNetwork Compiled;
+        public readonly SolveResult Result;
 
-        public NetworkSnapshot(CompiledNetwork compiled, SolveResult result, BuildingState state)
+        public FluidSolve(CompiledNetwork compiled, SolveResult result)
         {
             Compiled = compiled;
             Result = result;
+        }
+
+        public string Fluid => Compiled.Fluid;
+    }
+
+    /// <summary>A building's compiled networks and their solves, always swapped together.</summary>
+    public sealed class NetworkSnapshot
+    {
+        /// <summary>The air network (always present).</summary>
+        public readonly FluidSolve Air;
+        /// <summary>The water network (null when the building has none).</summary>
+        public readonly FluidSolve? Water;
+        /// <summary>The state the snapshot was solved from (a private copy).</summary>
+        public BuildingState State;
+
+        public NetworkSnapshot(FluidSolve air, FluidSolve? water, BuildingState state)
+        {
+            Air = air;
+            Water = water;
             State = state;
         }
+
+        /// <summary>Air network (the Phase 1–3 fields).</summary>
+        public CompiledNetwork Compiled => Air.Compiled;
+        public SolveResult Result => Air.Result;
+
+        /// <summary>The solve of a fluid's network, or null.</summary>
+        public FluidSolve? For(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : null;
+
+        /// <summary>Every solved network.</summary>
+        public IReadOnlyList<FluidSolve> All => Water != null ? new[] { Air, Water } : new[] { Air };
+
+        public bool Converged => Air.Result.Converged && (Water == null || Water.Result.Converged);
+        public double SolveMilliseconds => Air.Result.SolveMilliseconds + (Water?.Result.SolveMilliseconds ?? 0);
+    }
+
+    /// <summary>The building's city water connection (<c>03-city.md</c> §City network solve).</summary>
+    public readonly struct WaterSupply
+    {
+        public readonly bool Connected;
+        /// <summary>Connection pressure, Pa gauge at ground level.</summary>
+        public readonly double PressurePa;
+
+        public WaterSupply(bool connected, double pressurePa)
+        {
+            Connected = connected;
+            PressurePa = pressurePa;
+        }
+
+        public static readonly WaterSupply None = new WaterSupply(false, 0);
+    }
+
+    /// <summary>A pair of solvers (one per fluid) so each keeps its structure cache across drift re-solves.</summary>
+    sealed class SolverSet
+    {
+        public readonly NetworkSolver Air, Water;
+        public SolverSet(SolverSettings s)
+        {
+            Air = new NetworkSolver(s);
+            Water = new NetworkSolver(s);
+        }
+        public NetworkSolver For(string fluid) => fluid == "air" ? Air : Water;
     }
 
     /// <summary>Result of previewing a run while it is being drawn ("simulate before you buy").</summary>
@@ -104,6 +162,11 @@ namespace HeadLoss.Game.Session
         /// <summary>Outside air temperature now (the air the intake draws), K.</summary>
         public double AirTemperatureK => Units.CToK(Climate.OutsideTemperatureC);
         public IFluidProperties Air { get; }
+        public IFluidProperties Water { get; }
+        /// <summary>The city water connection (set by the city solve; fixtures without a city get the reference pressure).</summary>
+        public WaterSupply Supply { get; set; }
+        /// <summary>The layout has a water network (taps or a water connection).</summary>
+        public bool HasWater { get; }
         /// <summary>Outside conditions (shared by the city's buildings).</summary>
         public Climate Climate { get; }
         /// <summary>Rooms and duct temperatures (<c>05-simulation.md</c> §3–4).</summary>
@@ -112,8 +175,8 @@ namespace HeadLoss.Game.Session
         public bool IsOpen { get; set; }
 
         readonly SolverSettings _settings;
-        /// <summary>One solver per state so each keeps its structure cache across drift re-solves.</summary>
-        readonly NetworkSolver _designSolver, _committedSolver;
+        /// <summary>One solver set per state so each keeps its structure cache across drift re-solves.</summary>
+        readonly SolverSet _designSolver, _committedSolver;
         bool _dirty = true;
         double _sinceSolve;
         double _lastSolveMs;
@@ -129,22 +192,35 @@ namespace HeadLoss.Game.Session
             Record = record;
             Game = game;
             _settings = SolverSettings.FromBalancing(data.Balancing);
-            _designSolver = new NetworkSolver(_settings);
-            _committedSolver = new NetworkSolver(_settings);
-            _offlineSolver = new NetworkSolver(_settings);
+            _designSolver = new SolverSet(_settings);
+            _committedSolver = new SolverSet(_settings);
+            _offlineSolver = new SolverSet(_settings);
             Climate = climate ?? Climate.Fixed(data, data.Balancing.Physics.DefaultAirTemperatureC);
             Rooms = new BuildingClimate(data, layout, Climate);
             Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
+            Water = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
+            HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasTaps(layout);
+            Supply = new WaterSupply(true, ReferenceWaterPressure(data));
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, null, null);
             CommittedEvaluation = DesignEvaluation;
             RefreshPending();
         }
 
+        static bool HasTaps(BuildingLayout layout)
+        {
+            foreach (var o in layout.Outlets) if (BuildingState.OutletFluid(o.Type) == "water") return true;
+            return false;
+        }
+
+        /// <summary>Connection pressure the reference layouts (and fixtures without a city) assume, Pa.</summary>
+        public static double ReferenceWaterPressure(DataRepository data) =>
+            data.Balancing.City.FacilityPressure.TryGetValue("water", out double p) ? p * data.Balancing.Water.ReferenceConnectionFactor : 0;
+
         /// <summary>Opens a hand-made building with a fresh record in a fresh game (tests, tools).</summary>
         public static BuildingSession OpenHandmade(DataRepository data, string id)
         {
-            var layout = new BuildingLayout(data.HandmadeBuilding(id));
+            var layout = BuildingLayout.From(data, data.HandmadeBuilding(id));
             var game = new GameState { Wallet = data.Balancing.Economy.StartingWallet };
             BuildingRecord record = BuildingRecord.CreateFor(layout);
             game.Buildings.Add(record);
@@ -180,10 +256,19 @@ namespace HeadLoss.Game.Session
         }
 
         /// <summary>The committed inline part matching a design one (same tile and part), if built.</summary>
-        public DuctNode? CommittedTwin(DuctNode design)
+        public DuctNode? CommittedTwin(DuctNode design, string fluid = "air")
         {
-            DuctNode? c = Committed.Air.NodeAt(design.Pos);
+            DuctNode? c = Committed.Net(fluid).NodeAt(design.Pos);
             return c != null && c.Kind == DuctNodeKind.Inline && c.PartId == design.PartId ? c : null;
+        }
+
+        /// <summary>True when any ceiling tile holds more capacity units than it has.</summary>
+        public bool CeilingOverfull(BuildingState state)
+        {
+            var usage = new Dictionary<TilePos, int>();
+            foreach (DuctNetworkState net in state.Networks) DuctEditor.AddUsage(net, CapacityUnits, usage);
+            foreach (var kv in usage) if (kv.Value > CeilingCapacity) return true;
+            return false;
         }
 
         // ---------- hand crank ----------
@@ -218,26 +303,47 @@ namespace HeadLoss.Game.Session
 
         // ---------- solving ----------
 
-        /// <summary>Compiles and solves a state with the given solver (pure; safe on a worker thread).</summary>
-        NetworkSnapshot SolveState(BuildingState state, SolveResult? warmFrom, NetworkSolver solver, double crank)
-            => SolveState(state, warmFrom, solver, crank, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK);
+        /// <summary>Compile options for a state now (pure inputs captured on the main thread).</summary>
+        CompileOptions OptionsFor(double crank, double outsideK, IReadOnlyDictionary<int, double>? segmentK, IReadOnlyDictionary<int, double>? nodeK, bool committed) =>
+            new CompileOptions
+            {
+                AirTemperatureK = outsideK,
+                CrankSpeed = crank,
+                SegmentTemperatureK = segmentK,
+                NodeTemperatureK = nodeK,
+                WaterConnected = Supply.Connected,
+                WaterPressurePa = Supply.PressurePa,
+                PowerSpeed = PowerSpeedFor(committed),
+            };
 
-        NetworkSnapshot SolveState(BuildingState state, SolveResult? warmFrom, NetworkSolver solver, double crank, double outsideK,
-            IReadOnlyDictionary<int, double> segmentK, IReadOnlyDictionary<int, double> nodeK)
+        /// <summary>Speed factor on powered devices: 0 while the panel is tripped, cbrt(available/draw) in a brownout.</summary>
+        public double PowerSpeed { get; set; } = 1;
+
+        double PowerSpeedFor(bool committed) => PowerSpeed;
+
+        /// <summary>Compiles and solves a state with the given solvers (pure; safe on a worker thread).</summary>
+        NetworkSnapshot SolveState(BuildingState state, NetworkSnapshot? warmFrom, SolverSet solvers, CompileOptions options)
         {
-            CompiledNetwork compiled = NetworkCompiler.Compile(Layout, state, Data, outsideK, crank, segmentK, nodeK);
-            double[]? warm = warmFrom != null && warmFrom.TopologyKey == compiled.Graph.TopologyKey() ? warmFrom.Flow : null;
-            var sw = Stopwatch.StartNew();
-            SolveResult result = solver.Solve(compiled.Graph, Air, warm);
-            result.SolveMilliseconds = sw.Elapsed.TotalMilliseconds;
-            return new NetworkSnapshot(compiled, result, state);
+            FluidSolve air = SolveFluid(state, "air", warmFrom?.Air, solvers.Air, options, Air);
+            FluidSolve? water = HasWater ? SolveFluid(state, "water", warmFrom?.Water, solvers.Water, options, Water) : null;
+            return new NetworkSnapshot(air, water, state);
         }
 
-        (NetworkSnapshot, NetworkSnapshot?) SolveBoth(BuildingState design, BuildingState? committed, SolveResult? warmD, SolveResult? warmC, double crank,
-            double outsideK, IReadOnlyDictionary<int, double> segmentK, IReadOnlyDictionary<int, double> nodeK)
+        FluidSolve SolveFluid(BuildingState state, string fluid, FluidSolve? warmFrom, NetworkSolver solver, CompileOptions options, IFluidProperties props)
         {
-            NetworkSnapshot d = SolveState(design, warmD, _designSolver, crank, outsideK, segmentK, nodeK);
-            NetworkSnapshot? c = committed != null ? SolveState(committed, warmC, _committedSolver, crank, outsideK, segmentK, nodeK) : null;
+            CompiledNetwork compiled = NetworkCompiler.Compile(Layout, state, Data, fluid, options);
+            bool same = warmFrom != null && warmFrom.Result.TopologyKey == compiled.Graph.TopologyKey();
+            var sw = Stopwatch.StartNew();
+            SolveResult result = solver.Solve(compiled.Graph, props, same ? warmFrom!.Result.Flow : null, same ? warmFrom!.Result.Status : null);
+            result.SolveMilliseconds = sw.Elapsed.TotalMilliseconds;
+            return new FluidSolve(compiled, result);
+        }
+
+        (NetworkSnapshot, NetworkSnapshot?) SolveBoth(BuildingState design, BuildingState? committed, NetworkSnapshot? warmD, NetworkSnapshot? warmC,
+            CompileOptions designOptions, CompileOptions committedOptions)
+        {
+            NetworkSnapshot d = SolveState(design, warmD, _designSolver, designOptions);
+            NetworkSnapshot? c = committed != null ? SolveState(committed, warmC, _committedSolver, committedOptions) : null;
             return (d, c);
         }
 
@@ -275,12 +381,12 @@ namespace HeadLoss.Game.Session
             _solvedCrank = CrankSpeed;
             BuildingState design = State.Clone();
             BuildingState? committed = HasPendingDesign ? Committed.Clone() : null;
-            SolveResult? warmD = Current?.Result, warmC = CommittedSnapshot?.Result;
-            double crank = CrankSpeed, outsideK = AirTemperatureK;
+            NetworkSnapshot? warmD = Current, warmC = CommittedSnapshot;
             // The thermal solve replaces these dictionaries rather than changing them, so a worker can read them.
-            IReadOnlyDictionary<int, double> segK = Rooms.SegmentTemperatureK, nodeK = Rooms.NodeTemperatureK;
-            if (async) _pending = Task.Run(() => SolveBoth(design, committed, warmD, warmC, crank, outsideK, segK, nodeK));
-            else Accept(SolveBoth(design, committed, warmD, warmC, crank, outsideK, segK, nodeK));
+            CompileOptions od = OptionsFor(CrankSpeed, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK, !HasPendingDesign);
+            CompileOptions oc = OptionsFor(CrankSpeed, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK, true);
+            if (async) _pending = Task.Run(() => SolveBoth(design, committed, warmD, warmC, od, oc));
+            else Accept(SolveBoth(design, committed, warmD, warmC, od, oc));
         }
 
         /// <summary>Solves immediately on the calling thread (tests, first frame).</summary>
@@ -298,25 +404,75 @@ namespace HeadLoss.Game.Session
         void Accept((NetworkSnapshot design, NetworkSnapshot? committed) snaps)
         {
             (NetworkSnapshot d, NetworkSnapshot? c) = snaps;
-            _lastSolveMs = d.Result.SolveMilliseconds + (c?.Result.SolveMilliseconds ?? 0);
-            bool ok = d.Result.Converged && (c == null || c.Result.Converged);
+            _lastSolveMs = d.SolveMilliseconds + (c?.SolveMilliseconds ?? 0);
+            bool ok = d.Converged && (c == null || c.Converged);
             Settling = !ok;
             if (!ok && Current != null) return;
             Current = d;
             CommittedSnapshot = c ?? d;
-            DesignEvaluation = BuildingEconomy.Evaluate(Data, Layout, d.Compiled, d.Result);
-            CommittedEvaluation = c == null ? DesignEvaluation : BuildingEconomy.Evaluate(Data, Layout, c.Compiled, c.Result);
+            DesignEvaluation = BuildingEconomy.Evaluate(Data, Layout, d);
+            CommittedEvaluation = c == null ? DesignEvaluation : BuildingEconomy.Evaluate(Data, Layout, c);
             SolveRevision++;
+            Solved?.Invoke();
         }
 
-        /// <summary>Validates a run in progress and solves the network as if it were placed (state untouched).</summary>
-        public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
+        /// <summary>Raised on the main thread after a new solve is accepted.</summary>
+        public event Action? Solved;
+
+        /// <summary>A fresh snapshot of a changed state (previews; the session is untouched).</summary>
+        NetworkSnapshot SolveCopy(BuildingState copy) =>
+            SolveState(copy, null, new SolverSet(_settings), OptionsFor(CrankSpeed, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK, false));
+
+        /// <summary>Capacity units a segment takes in the ceiling (size units, + insulation above its threshold).</summary>
+        public int CapacityUnits(DuctNetworkState net, DuctSegment s) => CapacityUnits(s.MaterialId, s.DiameterMm, s.Insulation);
+
+        /// <summary>Capacity units of a pipe or duct size with optional insulation.</summary>
+        public int CapacityUnits(string materialId, double diameterMm, string insulation)
         {
-            var p = new DrawPreview { Error = DuctEditor.Validate(State.Air, Layout, path, Data.Balancing.Drawing.MaxNodeDegree) };
+            MaterialDef m = Data.Material(materialId);
+            int units = 1;
+            foreach (PipeFamilyDef f in Data.PipeFamilies)
+            {
+                if (f.Kind != m.Kind) continue;
+                foreach (PipeSizeDef size in f.Sizes) if (size.DiameterMm == diameterMm) units = size.CapacityUnits;
+            }
+            InsulationDef? ins = insulation.Length > 0 ? Data.FindInsulation(insulation) : null;
+            if (ins != null && diameterMm > ins.CapacityAboveMm) units += ins.ExtraCapacityUnits;
+            return units;
+        }
+
+        /// <summary>Ceiling capacity per tile in this city (the old-buildings modifier lowers it).</summary>
+        public int CeilingCapacity => CeilingCapacityOverride > 0 ? CeilingCapacityOverride : Data.Balancing.Building.CeilingCapacity;
+        /// <summary>Set by the city (modifier); 0 = the data default.</summary>
+        public int CeilingCapacityOverride { get; set; }
+
+        /// <summary>Every rule a new run must pass: geometry, ceiling space, the material's fluid and unlocks.</summary>
+        public DrawError ValidateRun(string fluid, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
+        {
+            DuctNetworkState net = State.Net(fluid);
+            DrawError e = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree);
+            if (e != DrawError.None) return e;
+            MaterialDef? m = Data.FindMaterial(materialId);
+            if (m == null || !m.Fluids.Contains(fluid)) return DrawError.WrongMaterial;
+            if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
+                return DrawError.NoCeilingSpace;
+            if (!Unlocked(Progression.Tech.SizeTier(Data, materialId, diameterMm)) || !Unlocked(Progression.Tech.ItemTier(Data, materialId))
+                || (smoothElbows && !Unlocked(Progression.Tech.SmoothFittingsTier(Data))))
+                return DrawError.Locked;
+            return DrawError.None;
+        }
+
+        /// <summary>Validates a run in progress and solves the networks as if it were placed (state untouched).</summary>
+        public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
+        {
+            DuctNetworkState net = State.Net(fluid);
+            var p = new DrawPreview { Error = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree) };
+            if (p.Error == DrawError.None && !DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
+                p.Error = DrawError.NoCeilingSpace;
             if (p.Error != DrawError.None) return p;
             BuildingState copy = State.Clone();
-            DuctEditor.PlaceRun(copy.Air, path, diameterMm, materialId, smoothElbows);
-            p.Snapshot = SolveState(copy, null, new NetworkSolver(_settings), CrankSpeed);
+            DuctEditor.PlaceRun(copy.Net(fluid), path, diameterMm, materialId, smoothElbows);
+            p.Snapshot = SolveCopy(copy);
             return p;
         }
 
@@ -328,8 +484,7 @@ namespace HeadLoss.Game.Session
         {
             BuildingState copy = State.Clone();
             change(copy);
-            NetworkSnapshot snap = SolveState(copy, null, new NetworkSolver(_settings), CrankSpeed);
-            return BuildingEconomy.Evaluate(Data, Layout, snap.Compiled, snap.Result);
+            return BuildingEconomy.Evaluate(Data, Layout, SolveCopy(copy));
         }
 
         /// <summary>
@@ -339,11 +494,11 @@ namespace HeadLoss.Game.Session
         public BuildingEvaluation SteadyState(double outsideTemperatureC)
         {
             var none = new Dictionary<int, double>();
-            NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot?.Result, _offlineSolver, 0, Units.CToK(outsideTemperatureC), none, none);
-            return BuildingEconomy.Evaluate(Data, Layout, snap.Compiled, snap.Result);
+            NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true));
+            return BuildingEconomy.Evaluate(Data, Layout, snap);
         }
 
-        readonly NetworkSolver _offlineSolver;
+        readonly SolverSet _offlineSolver;
 
         /// <summary>Volumetric flow delivered by an outlet in the design, m³/s (0 when not connected).</summary>
         public double OutletFlow(string outletId)

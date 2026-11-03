@@ -441,12 +441,15 @@ namespace HeadLoss.Core.Data
                 Tier(w, b.Tier, errors);
                 if (b.Width < 1 || b.Height < 1) { errors.Add($"{w}: size must be ≥ 1×1"); return; }
                 if (b.Rooms.Count == 0) errors.Add($"{w}: no rooms");
+                var ids = new HashSet<string>();
+                foreach (RoomDef r in b.Rooms) if (!ids.Add(r.Id)) errors.Add($"{w}: room id '{r.Id}' used twice");
                 foreach (RoomDef r in b.Rooms)
                 {
                     Id(w + " rooms", r.Id, errors);
                     if (r.X < 0 || r.Y < 0 || r.Width < 1 || r.Height < 1 || r.X + r.Width > b.Width || r.Y + r.Height > b.Height)
                         errors.Add($"{w}: room '{r.Id}' outside the footprint");
                     if (data.FindRoomType(r.Type) == null) errors.Add($"{w}: room '{r.Id}' type '{r.Type}' unknown");
+                    if (r.Floor < b.LowestFloor || r.Floor >= b.LowestFloor + System.Math.Max(1, b.Floors)) errors.Add($"{w}: room '{r.Id}' floor {r.Floor} outside the building");
                     if (r.Occupants < 0 || r.MachinesW < 0) errors.Add($"{w}: room '{r.Id}' loads must be ≥ 0");
                 }
                 var openingIds = new HashSet<string>();
@@ -474,10 +477,10 @@ namespace HeadLoss.Core.Data
                     if (o.X < 0 || o.Y < 0 || o.X >= b.Width || o.Y >= b.Height) errors.Add($"{w}: outlet '{o.Id}' outside the footprint");
                     if (o.Min > 0 && !(o.Min < o.Ideal && (o.Max == 0 || o.Ideal <= o.Max))) errors.Add($"{w}: outlet '{o.Id}' needs min < ideal ≤ max");
                     if (o.Facing.Length > 0 && !Facings.Contains(o.Facing)) errors.Add($"{w}: outlet '{o.Id}' facing '{o.Facing}' unknown");
-                    if (RoomAt(b, o.X, o.Y) < 0) errors.Add($"{w}: outlet '{o.Id}' is not in a room");
+                    if (RoomAt(b, o.X, o.Y, o.Floor) < 0) errors.Add($"{w}: outlet '{o.Id}' is not in a room");
                 }
                 foreach (WindowDef win in b.Windows)
-                    if (!Facings.Contains(win.Side) || RoomAt(b, win.X, win.Y) < 0) errors.Add($"{w}: window at ({win.X}, {win.Y}) {win.Side} is not on a room wall");
+                    if (!Facings.Contains(win.Side) || RoomAt(b, win.X, win.Y, win.Floor) < 0) errors.Add($"{w}: window at ({win.X}, {win.Y}) {win.Side} is not on a room wall");
                 foreach (string code in b.Codes)
                     if (data.FindCode(code) == null) errors.Add($"{w}: code '{code}' unknown");
                 if (b.ReferenceCrankSpeed < 0 || b.ReferenceCrankSpeed > 1) errors.Add($"{w}: referenceCrankSpeed outside 0–1");
@@ -593,12 +596,12 @@ namespace HeadLoss.Core.Data
             }
         }
 
-        static int RoomAt(BuildingLayoutDef b, int x, int y)
+        static int RoomAt(BuildingLayoutDef b, int x, int y, int floor = 0)
         {
             for (int i = 0; i < b.Rooms.Count; i++)
             {
                 RoomDef r = b.Rooms[i];
-                if (x >= r.X && y >= r.Y && x < r.X + r.Width && y < r.Y + r.Height) return i;
+                if (r.Floor == floor && x >= r.X && y >= r.Y && x < r.X + r.Width && y < r.Y + r.Height) return i;
             }
             return -1;
         }
@@ -611,7 +614,7 @@ namespace HeadLoss.Core.Data
                 if (!Facings.Contains(d.Side)) { errors.Add($"{where}: side unknown"); continue; }
                 int nx = d.X + (d.Side == "east" ? 1 : d.Side == "west" ? -1 : 0);
                 int ny = d.Y + (d.Side == "north" ? 1 : d.Side == "south" ? -1 : 0);
-                int ra = RoomAt(b, d.X, d.Y), rb = RoomAt(b, nx, ny);
+                int ra = RoomAt(b, d.X, d.Y, d.Floor), rb = RoomAt(b, nx, ny, d.Floor);
                 if (ra < 0 || rb < 0) errors.Add($"{where}: not between two rooms");
                 else if (ra == rb) errors.Add($"{where}: both sides are the same room");
             }

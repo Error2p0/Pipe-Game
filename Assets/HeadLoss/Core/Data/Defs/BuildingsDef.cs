@@ -43,6 +43,12 @@ namespace HeadLoss.Core.Data.Defs
         public bool Hub;
         /// <summary>Pipes cannot cross the room (server rooms, archives).</summary>
         public bool Protected;
+        /// <summary>A vertical shaft: risers pass between floors here, and pipes may enter it from any side.</summary>
+        public bool Shaft;
+        /// <summary>Blocks pipes on every layer (stairwells).</summary>
+        public bool BlocksPipes;
+        /// <summary>Electrical room (no water pipes above it).</summary>
+        public bool Electrical;
         /// <summary>Relative humidity for the condensation check, 0–1.</summary>
         public double RelativeHumidity;
         public List<RoomOutletRuleDef> Outlets = new List<RoomOutletRuleDef>();
