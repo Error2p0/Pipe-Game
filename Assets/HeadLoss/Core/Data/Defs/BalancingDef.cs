@@ -487,6 +487,8 @@ namespace HeadLoss.Core.Data.Defs
 
     public sealed class DrawingDef
     {
+        /// <summary>Opacity of the pipes on the floors above and below the one on show, 0–1.</summary>
+        public double GhostOpacity;
         public string DefaultMaterial = "";
         public string DefaultDuctFamily = "";
         /// <summary>Duct size selected when the building opens, mm.</summary>

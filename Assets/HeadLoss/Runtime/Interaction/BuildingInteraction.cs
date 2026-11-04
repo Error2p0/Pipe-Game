@@ -452,6 +452,8 @@ namespace HeadLoss.Unity.Interaction
             Rect r = BoxWorld;
             foreach (DuctGeometry.Segment s in _views.View(View.Fluid).Geometry.Segments)
                 if (r.Contains(s.A) || r.Contains(s.B) || r.Contains((s.A + s.B) * 0.5f)) SelectedSegments.Add(s.Id);
+            foreach (DuctGeometry.Riser s in _views.View(View.Fluid).Geometry.Risers)
+                if (r.Contains(s.Centre)) SelectedSegments.Add(s.SegmentId);
             if (SelectedSegments.Count > 0) Selected = new Target { Kind = TargetKind.Segment, Id = 0, Anchor = "", Fluid = View.Fluid };
         }
 
@@ -551,14 +553,15 @@ namespace HeadLoss.Unity.Interaction
                 if (n.Kind != DuctNodeKind.Inline || n.Floor != View.Floor) continue;
                 if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.38f) return new Target { Kind = TargetKind.Inline, Id = n.Id, Anchor = "", Fluid = fluid };
             }
+            // A riser before the node at its end, which sits on the same spot: the riser's readout has the node's fitting buttons too.
+            DuctGeometry geometry = _views.View(fluid).Geometry;
+            foreach (DuctGeometry.Riser r in geometry.Risers)
+                if (Vector2.Distance(world, r.Centre) < 0.35f) return new Target { Kind = TargetKind.Segment, Id = r.SegmentId, Anchor = "", Fluid = fluid };
             foreach (DuctNode n in net.Nodes)
             {
                 if (n.Kind != DuctNodeKind.Free || n.Floor != View.Floor || net.Degree(n.Id) < 1) continue;
                 if (Vector2.Distance(world, DuctGeometry.Centre(n.Pos)) < 0.3f) return new Target { Kind = TargetKind.Node, Id = n.Id, Anchor = "", Fluid = fluid };
             }
-            DuctGeometry geometry = _views.View(fluid).Geometry;
-            foreach (DuctGeometry.Riser r in geometry.Risers)
-                if (Vector2.Distance(world, r.Centre) < 0.35f) return new Target { Kind = TargetKind.Segment, Id = r.SegmentId, Anchor = "", Fluid = fluid };
             int best = 0;
             float bestDist = float.MaxValue;
             foreach (DuctGeometry.Segment s in geometry.Segments)

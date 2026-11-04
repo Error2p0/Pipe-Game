@@ -15,7 +15,7 @@ namespace HeadLoss.Unity.View
         public FluidSolve? Solve;
         /// <summary>Shape on the current floor (rebuilt with the view).</summary>
         public readonly DuctGeometry Geometry = new DuctGeometry();
-        /// <summary>Ghosts on the floors above and below (20% opacity, no interaction).</summary>
+        /// <summary>Ghosts on the floors above and below (faint, no interaction).</summary>
         public readonly DuctGeometry Above = new DuctGeometry(), Below = new DuctGeometry();
         /// <summary>Burst segments (drawn in the danger colour; a label says so too).</summary>
         public readonly HashSet<int> BurstSegments = new HashSet<int>();
@@ -162,16 +162,8 @@ namespace HeadLoss.Unity.View
             foreach (NetworkView v in input.Views)
             {
                 Color ghost = p.Fluid(v.Fluid);
-                ghost.a = 0.2f;
-                foreach (DuctGeometry g in new[] { v.Above, v.Below })
-                {
-                    foreach (DuctGeometry.Segment s in g.Segments) m.Line(s.A, s.B, s.Width, ZGhost, ghost);
-                    foreach (DuctGeometry.Cap c in g.Caps)
-                    {
-                        float h = c.Size * 0.5f;
-                        m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZGhost, ghost);
-                    }
-                }
+                ghost.a = (float)_drawing!.GhostOpacity;
+                foreach (DuctGeometry g in new[] { v.Above, v.Below }) DrawGhost(m, g, ghost);
             }
 
             Color select = p.Text;
@@ -254,6 +246,31 @@ namespace HeadLoss.Unity.View
             }
             m.Upload();
         }
+
+        /// <summary>
+        /// One floor's ghost. Lines stop at the edge of the caps they meet: where two see-through pieces overlap they add up,
+        /// and the darker patches at every joint would read as real pipework.
+        /// </summary>
+        void DrawGhost(MeshBuilder m, DuctGeometry g, Color ghost)
+        {
+            _ghostCaps.Clear();
+            foreach (DuctGeometry.Cap c in g.Caps)
+            {
+                float h = c.Size * 0.5f;
+                _ghostCaps[c.Centre] = h;
+                m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZGhost, ghost);
+            }
+            foreach (DuctGeometry.Segment s in g.Segments)
+            {
+                Vector2 a = s.A, b = s.B, dir = (b - a).normalized;
+                if (_ghostCaps.TryGetValue(s.A, out float ha)) a += dir * ha;
+                if (_ghostCaps.TryGetValue(s.B, out float hb)) b -= dir * hb;
+                if (Vector2.Dot(b - a, dir) > 0) m.Line(a, b, s.Width, ZGhost, ghost);
+            }
+            foreach (DuctGeometry.Arc a in g.Arcs) m.Arc(a.Centre, DuctGeometry.SmoothRadius, a.Width, a.A0, a.A1, 10, ZGhost, ghost);
+        }
+
+        readonly Dictionary<Vector2, float> _ghostCaps = new Dictionary<Vector2, float>();
 
         void DrawNetwork(MeshBuilder m, DuctViewInput input, NetworkView v)
         {

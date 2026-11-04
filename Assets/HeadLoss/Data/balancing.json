@@ -117,6 +117,7 @@
     ]
   },
   "drawing": {
+    "ghostOpacity": 0.1,
     "defaultMaterial": "galvanized-duct",
     "defaultDuctFamily": "round-duct",
     "defaultDuctSizeMm": 125,

@@ -108,6 +108,8 @@ Task list from `14-roadmap.md` §Phase 5:
 An intermediate phase the user added on 2026-11-04, before Phase 6 starts. It is not in `14-roadmap.md`: the user sends each task after the last one is done, and it has no gate of its own.
 
 - [x] 1. Switching off a fan or pump slows it to a stop instead of cutting it, and the values follow (D138). Each device has its own times, and switching on ramps up too (D139).
+- [x] 2. Risers can be selected and deleted (D140).
+- [x] 3. Ghost floors show long-radius fittings and are fainter, so they are not mistaken for the floor on show (D141).
 
 ## Phase 6 · Full content
 

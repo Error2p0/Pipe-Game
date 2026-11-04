@@ -30,7 +30,7 @@ Example (3-floor apartment block):
 
 [impl]
 - Each generated building has 1–3 **shafts** (2×2 tiles, stacked on every floor) plus the stairwell. Risers may only run vertically through shaft tiles. A riser is a vertical segment of length = floor height × floors spanned; its elevation change feeds the solver (`ρ g Δh`).
-- Ghosts: pipes on the floor above and below drawn at 20% opacity, no interaction.
+- Ghosts: pipes on the floor above and below drawn at `drawing.ghostOpacity` (10%, D141), no interaction.
 - Stairwells and shafts connect room-grid air between floors (vertical exchange), so light gas rises up stairwells and heavy gas sinks to basements.
 - Room grid has two vertical layers per cell (`upper`, `lower`) for gas stratification (`05-simulation.md`).
 

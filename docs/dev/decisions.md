@@ -165,6 +165,9 @@ Choices the spec did not make. `NEEDS CONFIRMATION` items are listed in the phas
   - **Pump start surges shrink the same way as stops** (D138).
   - **`tools/equipment/fan_curves.py` is out of date:** it has the new times, but running it would drop `gas-regulator`, `gas-detector` and `passive-vent-opening`, which were added to `equipment.json` by hand in Phase 5. Do not regenerate until it learns about them.
 
+- **D140 · A click on a riser selects the riser.** Its end node sits on the same spot and used to win the click, and Delete does nothing for a node, so a riser could not be deleted. The fitting buttons of the node at a riser's end moved onto the riser's readout. Box selection now takes the risers on the floor on show as well. Deleting a riser removes its whole run between its two end nodes; a run that passes through several floors goes as one.
+- **D141 · Ghosts are fainter and complete. The opacity is NEEDS CONFIRMATION.** `04` said 20%; it is now `drawing.ghostOpacity`, 10%, at the user's request that other floors should be less noticeable. Long-radius elbows were missing from ghosts, which left a gap at each one. Lines now stop at the joints they meet, because overlapping see-through pieces added up to darker patches.
+
 ## Phase 6
 
 - **D132 · Phase 6 goes into the Early Access launch. Confirmed by the user** at the Phase 5 gate (2026-11-04): roadmap items 1–8, in full (item 9 was dropped, D133). This answers item 6 of `00-index.md`. Phase 6 therefore comes before launch.

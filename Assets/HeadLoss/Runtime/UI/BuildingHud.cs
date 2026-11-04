@@ -1298,6 +1298,17 @@ namespace HeadLoss.Unity.UI
             return list;
         }
 
+        /// <summary>Sharp or long-radius, for a node that is an elbow or a tee.</summary>
+        void AddFittingButtons(DuctNetworkState net, DuctNode n, string fluid)
+        {
+            if (!(DuctEditor.IsElbow(net, n) || DuctEditor.IsTee(net, n))) return;
+            int id = n.Id;
+            StyleButton(_ui.Button(_readoutActions, "Sharp", () => _s.Execute(new SetElbowCommand(id, false, fluid))), !n.SmoothFittings);
+            Button smooth = _ui.Button(_readoutActions, DuctEditor.IsTee(net, n) ? "Smooth tee" : "Long-radius", () => _s.Execute(new SetElbowCommand(id, true, fluid)));
+            StyleButton(smooth, n.SmoothFittings);
+            smooth.SetEnabled(_s.Unlocked(Tech.SmoothFittingsTier(_data)));
+        }
+
         void AddRiserButtons()
         {
             if (!(_ix.RiserStart() is TilePos start)) return;
@@ -1379,6 +1390,8 @@ namespace HeadLoss.Unity.UI
                     _ui.Button(_readoutActions, "Delete", _ix.DeleteSelection);
                     AddRiserButtons();
                     TilePos tile = _ix.SelectedTile;
+                    // Clicking a riser's end selects the riser, so the fitting there is set from here.
+                    if (ids.Count == 1 && first != null && DuctEditor.IsRiser(net, first) && net.NodeAt(tile) is DuctNode end) AddFittingButtons(net, end, fluid);
                     if (ids.Count == 1 && DuctEditor.ValidateInline(net, tile) == DrawError.None)
                         foreach (string part in _data.Game.Toolbox.Parts)
                         {
@@ -1394,12 +1407,7 @@ namespace HeadLoss.Unity.UI
                     DuctNode? n = net.FindNode(t.Id);
                     if (n == null) break;
                     AddRiserButtons();
-                    if (!(DuctEditor.IsElbow(net, n) || DuctEditor.IsTee(net, n))) break;
-                    int id = t.Id;
-                    StyleButton(_ui.Button(_readoutActions, "Sharp", () => _s.Execute(new SetElbowCommand(id, false, fluid))), !n.SmoothFittings);
-                    Button smooth = _ui.Button(_readoutActions, DuctEditor.IsTee(net, n) ? "Smooth tee" : "Long-radius", () => _s.Execute(new SetElbowCommand(id, true, fluid)));
-                    StyleButton(smooth, n.SmoothFittings);
-                    smooth.SetEnabled(_s.Unlocked(Tech.SmoothFittingsTier(_data)));
+                    AddFittingButtons(net, n, fluid);
                     break;
                 }
                 case TargetKind.Intake:
