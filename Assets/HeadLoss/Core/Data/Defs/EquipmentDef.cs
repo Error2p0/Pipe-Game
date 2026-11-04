@@ -17,7 +17,7 @@ namespace HeadLoss.Core.Data.Defs
         public bool IsIgnitionSource;
         /// <summary>crank, on-off, variable.</summary>
         public string SpeedControl = "";
-        /// <summary>intake (at an entry opening), inline, or addon (fitted to another device, e.g. a variable-speed drive).</summary>
+        /// <summary>intake (at an entry opening), inline, addon (fitted to another device, e.g. a variable-speed drive), room (any room tile) or wall (an exterior wall).</summary>
         public string Placement = "";
         /// <summary>Add-ons: efficiency multiplier on the device they are fitted to (VSD 0.97: "costs 3% efficiency").</summary>
         public double EfficiencyFactor = 1;
@@ -33,6 +33,10 @@ namespace HeadLoss.Core.Data.Defs
         public double Price;
         /// <summary>Electrical panels: total kW limit.</summary>
         public double PanelLimitKW;
+        /// <summary>Gas regulators: fixed outlet pressure, Pa gauge.</summary>
+        public double SetpointPa;
+        /// <summary>Gas regulators: loss coefficient when fully open, referenced to the connecting pipe.</summary>
+        public double RegulatorK;
         public string Notes = "";
     }
 

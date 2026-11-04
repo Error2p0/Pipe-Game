@@ -98,5 +98,38 @@
         "designFlowLps": 0.1
       }
     }
+  },
+  {
+    "id": "gas-stove-outlet",
+    "displayName": "Gas stove outlet",
+    "fluid": "natural-gas",
+    "measured": "pressure",
+    "unit": "mbar",
+    "codeMaxReason": "Appliance inlet limit",
+    "payFactor": 2.0,
+    "grille": "",
+    "grilleFaceAreaM2": 0,
+    "isIgnitionSource": true,
+    "requirementVariation": 0.05,
+    "tiers": {
+      "3": {
+        "min": 20,
+        "ideal": 23,
+        "max": 28,
+        "designFlowLps": 0.15
+      },
+      "4": {
+        "min": 20,
+        "ideal": 23,
+        "max": 28,
+        "designFlowLps": 0.15
+      },
+      "5": {
+        "min": 20,
+        "ideal": 23,
+        "max": 28,
+        "designFlowLps": 0.15
+      }
+    }
   }
 ]

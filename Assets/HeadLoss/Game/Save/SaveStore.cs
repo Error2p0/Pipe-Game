@@ -182,6 +182,7 @@ namespace HeadLoss.Game.Save
             BuildingState fresh = BuildingState.CreateFor(layout);
             foreach (string fluid in BuildingState.FluidIds) dropped += SanitizeNetwork(s.Net(fluid), fresh.Net(fluid), layout, data);
             dropped += s.Equipment.RemoveAll(e => data.FindEquipment(e.EquipmentId) == null || layout.FindOpening(e.OpeningId) == null);
+            dropped += s.Safety.RemoveAll(d => data.FindEquipment(d.EquipmentId) == null || !layout.IsInside(d.Pos));
             // Pre-placed equipment the layout starts with (the basic panel since Phase 4) is added when missing, for free.
             foreach (EquipmentState e in fresh.Equipment)
                 if (s.EquipmentAt(e.OpeningId) == null) s.Equipment.Add(e.Clone());

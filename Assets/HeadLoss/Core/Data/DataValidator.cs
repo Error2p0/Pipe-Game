@@ -13,7 +13,7 @@ namespace HeadLoss.Core.Data
         static readonly HashSet<string> FamilyKinds = new HashSet<string> { "duct", "pipe", "main", "cable" };
         static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "check", "regulator", "relief", "filter" };
         static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable", "none" };
-        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon" };
+        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon", "room", "wall" };
         static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };
         static readonly HashSet<string> Utilities = new HashSet<string> { "air", "water", "gas", "heating", "power" };
@@ -38,6 +38,7 @@ namespace HeadLoss.Core.Data
             ValidateCity(data, errors);
             ValidateBuildings(data, errors);
             ValidateUpgrades(data, errors);
+            ValidatePrestige(data, errors);
             if (data.Balancing.Progression.UnlockOnline.Count != 4) errors.Add("balancing.json: progression.unlockOnline needs 4 entries (tier 1→2 … 4→5)");
             return errors;
         }
@@ -84,6 +85,11 @@ namespace HeadLoss.Core.Data
                 string? model = data.FindFitting(id)?.Model;
                 bool valve = model == "valve" || model == "check" || model == "regulator" || model == "relief" || id == "fire-damper";
                 if (!fan && !valve) errors.Add($"game.json toolbox: '{id}' is not an inline fan or valve");
+            }
+            foreach (string id in data.Game.Toolbox.Safety)
+            {
+                string? placement = data.FindEquipment(id)?.Placement;
+                if (placement != "room" && placement != "wall") errors.Add($"game.json toolbox: '{id}' is not safety gear");
             }
             foreach (var kv in t.RoomFills) Colour($"game.json theme.roomFills.{kv.Key}", kv.Value, errors);
             if (t.RoomFillAlpha < 0 || t.RoomFillAlpha > 1) errors.Add("game.json theme.roomFillAlpha outside 0–1");
@@ -197,6 +203,11 @@ namespace HeadLoss.Core.Data
                 if (!LinePatterns.Contains(fl.LinePattern)) errors.Add($"fluids.json '{fl.Id}': linePattern '{fl.LinePattern}' unknown");
                 Positive($"fluids.json '{fl.Id}' molarMass", fl.MolarMass, errors);
                 Positive($"fluids.json '{fl.Id}' gamma", fl.Gamma, errors);
+                if (fl.FlammableLower != 0)
+                {
+                    if (!(fl.FlammableLower > 0 && fl.FlammableUpper > fl.FlammableLower && fl.FlammableUpper < 1)) errors.Add($"fluids.json '{fl.Id}': need 0 < flammableLower < flammableUpper < 1");
+                    Positive($"fluids.json '{fl.Id}' lowerHeatingValueMJPerKg", fl.LowerHeatingValueMJPerKg, errors);
+                }
                 if (!string.IsNullOrEmpty(fl.Table) && data.FluidTables.TryGetValue(fl.Id, out FluidTableDef table))
                     ValidateTable(data, fl, table, errors);
             }
@@ -276,6 +287,14 @@ namespace HeadLoss.Core.Data
                     Positive(w + " capacityVelocity", p.CapacityVelocity, errors);
                     Positive(w + " pricePerTile", p.PricePerTile, errors);
                     Positive(w + " priceReferenceDiameterMm", p.PriceReferenceDiameterMm, errors);
+                    foreach (PressureClassDef c in p.PressureClasses)
+                    {
+                        Id(w + " pressureClasses", c.Id, errors);
+                        Tier($"{w} class '{c.Id}'", c.Tier, errors);
+                        Positive($"{w} class '{c.Id}' capacityVelocity", c.CapacityVelocity, errors);
+                        Positive($"{w} class '{c.Id}' priceFactor", c.PriceFactor, errors);
+                        if (!data.Balancing.City.FacilityPressure.ContainsKey(c.FacilityPressureKey)) errors.Add($"{w} class '{c.Id}': facility pressure '{c.FacilityPressureKey}' unknown");
+                    }
                 }
                 for (int i = 0; i < p.Sizes.Count; i++)
                 {
@@ -357,6 +376,12 @@ namespace HeadLoss.Core.Data
                 if (e.Category == "panel")
                 {
                     Positive(w + " panelLimitKW", e.PanelLimitKW, errors);
+                    continue;
+                }
+                if (e.Category == "gas-supply")
+                {
+                    Positive(w + " setpointPa", e.SetpointPa, errors);
+                    Positive(w + " regulatorK", e.RegulatorK, errors);
                     continue;
                 }
                 if (e.Curve.Count == 0)
@@ -590,6 +615,25 @@ namespace HeadLoss.Core.Data
                 Tier($"{w} '{i.Id}'", i.Tier, errors);
                 Positive($"{w} '{i.Id}' u", i.U, errors);
             }
+        }
+
+        static void ValidatePrestige(DataRepository data, List<string> errors)
+        {
+            const string w = "prestige.json";
+            var ids = new HashSet<string>();
+            foreach (PrestigeNodeDef n in data.Prestige.Nodes)
+            {
+                Id(w, n.Id, errors);
+                if (!ids.Add(n.Id)) errors.Add($"{w}: duplicate node '{n.Id}'");
+                if (n.Costs.Count == 0) errors.Add($"{w} '{n.Id}': no levels");
+                foreach (int c in n.Costs) if (c <= 0) errors.Add($"{w} '{n.Id}': costs must be > 0");
+                if (n.RequiresOtherNodes < 0 || n.RequiresOtherNodes >= data.Prestige.Nodes.Count) errors.Add($"{w} '{n.Id}': requiresOtherNodes out of range");
+            }
+            PrestigeBalancingDef b = data.Balancing.Prestige;
+            Fraction("balancing.json prestige.shareOnline", b.ShareOnline, errors);
+            Positive("balancing.json prestige.incomeTargetFirst", b.IncomeTargetFirst, errors);
+            Positive("balancing.json prestige.incomeTargetGrowth", b.IncomeTargetGrowth, errors);
+            Positive("balancing.json prestige.k", b.K, errors);
         }
 
         static int RoomAt(BuildingLayoutDef b, int x, int y, int floor = 0)

@@ -24,6 +24,7 @@ namespace HeadLoss.Core.Data
         public CityDef City { get; private set; } = new CityDef();
         public BuildingsDef Buildings { get; private set; } = new BuildingsDef();
         public UpgradesDef Upgrades { get; private set; } = new UpgradesDef();
+        public PrestigeDef Prestige { get; private set; } = new PrestigeDef();
         public IReadOnlyList<FluidDef> Fluids => _fluids;
         public IReadOnlyList<MaterialDef> Materials => _materials;
         public IReadOnlyList<PipeFamilyDef> PipeFamilies => _pipeFamilies;
@@ -84,6 +85,7 @@ namespace HeadLoss.Core.Data
             repo.City = Parse<CityDef>(source, "city.json");
             repo.Buildings = Parse<BuildingsDef>(source, "buildings.json");
             repo.Upgrades = Parse<UpgradesDef>(source, "upgrades.json");
+            repo.Prestige = Parse<PrestigeDef>(source, "prestige.json");
             foreach (BuildingTypeDef t in repo.Buildings.Types)
                 if (!repo._buildingTypeById.ContainsKey(t.Id)) repo._buildingTypeById[t.Id] = t;
                 else repo._loadIssues.Add($"buildings.json: duplicate building type '{t.Id}'");

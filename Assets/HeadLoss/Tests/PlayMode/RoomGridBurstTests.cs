@@ -51,6 +51,41 @@ namespace HeadLoss.PlayMode.Tests
             AssertClose(a.Vy, b.Vy, "velocity y");
         }
 
+        [Test]
+        public void Burst_MatchesTheReference_WithGasLeakingAndALowVent()
+        {
+            var data = HeadLoss.Core.Data.DataRepository.Load(new HeadLoss.Core.Data.FileDataSource("Assets/HeadLoss/Data"));
+            GeneratedBuilding g = BuildingFactory.Create(data, new BuildingRequest("plot-1", "apartment-block", 11, "south"), DistrictKind.Residential)!;
+            RoomGridLayout l = RoomGridBuilder.Build(data, g.Layout);
+            RoomGridParams p = RoomGridBuilder.Params(data);
+            RoomGridInputs inp = RoomGridInputs.For(l);
+            inp.OutsideTemperature = 8;
+            inp.GasActive = true;
+            int placed = 0;
+            for (int c = 0; c < l.Cells && placed < 6; c += 53)
+            {
+                if (l.Room[c] < 0) continue;
+                if (placed % 3 == 0) inp.GasUpper[c] = 1e-3f;
+                else if (placed % 3 == 1) { inp.SupplyFlow[c] = 0.01f; inp.SupplyTemperature[c] = 12; inp.Jets.Add(new VentJet { Cell = c, DirX = 1, FaceVelocity = 0.4f }); }
+                else { inp.SupplyLower[c] = 0.008f; inp.SupplyTemperature[c] = 8; }
+                placed++;
+            }
+            RoomGridState a = RoomGridState.Initial(l, 20, 420, 0.209f), b = a.Clone();
+            var reference = new RoomGridReference();
+            using var burst = new BurstRoomGridStepper();
+            for (int i = 0; i < 200; i++)
+            {
+                reference.Step(l, a, inp, p, 0.1f);
+                burst.Step(l, b, inp, p, 0.1f);
+            }
+            float any = 0;
+            foreach (float v in a.Gas) any = Math.Max(any, v);
+            Assert.Greater(any, 0.001f, "gas must actually build up for this to test anything");
+            AssertClose(a.Gas, b.Gas, "gas");
+            AssertClose(a.T, b.T, "temperature");
+            AssertClose(a.Co2, b.Co2, "CO₂");
+        }
+
         /// <summary>01-architecture.md budget: room grid step for a whole building of 10 floors under 2 ms with Burst.</summary>
         [Test]
         public void Burst_TenFloorBuilding_StepsUnderTwoMilliseconds()

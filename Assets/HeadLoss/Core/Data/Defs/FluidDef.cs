@@ -21,6 +21,12 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Property table path relative to the data folder, e.g. fluids/air.json. Empty = no table yet.</summary>
         public string Table = "";
         public List<string> Hazards = new List<string>();
+        /// <summary>Lower flammable limit, volume fraction in air (0 = not flammable).</summary>
+        public double FlammableLower;
+        /// <summary>Upper flammable limit, volume fraction in air.</summary>
+        public double FlammableUpper;
+        /// <summary>Lower heating value, MJ/kg.</summary>
+        public double LowerHeatingValueMJPerKg;
         public string Notes = "";
     }
 

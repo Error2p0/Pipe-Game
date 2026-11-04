@@ -32,6 +32,8 @@ namespace HeadLoss.Sim.Rooms
         public float WallU = 0.6f;
         /// <summary>Molar masses for buoyancy and density, kg/mol.</summary>
         public float AirMolarMass = 0.028965f, Co2MolarMass = 0.04401f, O2MolarMass = 0.031999f;
+        /// <summary>Molar mass of the building's gas species (methane by default), kg/mol.</summary>
+        public float GasMolarMass = 0.016043f;
     }
 
     /// <summary>
@@ -103,6 +105,12 @@ namespace HeadLoss.Sim.Rooms
         public float[] SupplyFlow = Array.Empty<float>();
         /// <summary>Temperature of that air, °C (flow-weighted when several sources share a cell).</summary>
         public float[] SupplyTemperature = Array.Empty<float>();
+        /// <summary>Fresh air injected into the lower layer (low passive vents), m³/s, at the same supply temperature.</summary>
+        public float[] SupplyLower = Array.Empty<float>();
+        /// <summary>Gas leaking into the lower / upper layer, m³/s at room pressure.</summary>
+        public float[] GasLower = Array.Empty<float>(), GasUpper = Array.Empty<float>();
+        /// <summary>Gas is leaking or still in the room air: its field is stepped (a building with none skips the work).</summary>
+        public bool GasActive;
         /// <summary>Heat into the lower / upper layer (occupants, machines, sun, ducts), W.</summary>
         public float[] HeatLower = Array.Empty<float>(), HeatUpper = Array.Empty<float>();
         /// <summary>CO₂ breathed into the lower layer, m³/s.</summary>
@@ -120,6 +128,7 @@ namespace HeadLoss.Sim.Rooms
             return new RoomGridInputs
             {
                 SupplyFlow = new float[n], SupplyTemperature = new float[n], HeatLower = new float[n], HeatUpper = new float[n], Co2Lower = new float[n],
+                SupplyLower = new float[n], GasLower = new float[n], GasUpper = new float[n],
             };
         }
 
@@ -137,6 +146,10 @@ namespace HeadLoss.Sim.Rooms
             Array.Clear(HeatLower, 0, HeatLower.Length);
             Array.Clear(HeatUpper, 0, HeatUpper.Length);
             Array.Clear(Co2Lower, 0, Co2Lower.Length);
+            Array.Clear(SupplyLower, 0, SupplyLower.Length);
+            Array.Clear(GasLower, 0, GasLower.Length);
+            Array.Clear(GasUpper, 0, GasUpper.Length);
+            GasActive = false;
             Jets.Clear();
         }
     }
@@ -150,6 +163,8 @@ namespace HeadLoss.Sim.Rooms
         public float[] Co2 = Array.Empty<float>();
         /// <summary>O₂ volume fraction.</summary>
         public float[] O2 = Array.Empty<float>();
+        /// <summary>The building's gas species, volume fraction (natural gas in Phase 5).</summary>
+        public float[] Gas = Array.Empty<float>();
         /// <summary>Velocity potential (warm start), m²/s.</summary>
         public float[] Phi = Array.Empty<float>();
         /// <summary>Cell velocity, m/s (2D, shared by both layers).</summary>
@@ -162,7 +177,7 @@ namespace HeadLoss.Sim.Rooms
             int n = l.Cells;
             var s = new RoomGridState
             {
-                T = new float[2 * n], Co2 = new float[2 * n], O2 = new float[2 * n], Phi = new float[n], Vx = new float[n], Vy = new float[n], NetSource = new float[n],
+                T = new float[2 * n], Co2 = new float[2 * n], O2 = new float[2 * n], Gas = new float[2 * n], Phi = new float[n], Vx = new float[n], Vy = new float[n], NetSource = new float[n],
             };
             for (int i = 0; i < 2 * n; i++)
             {
@@ -175,7 +190,7 @@ namespace HeadLoss.Sim.Rooms
 
         public RoomGridState Clone() => new RoomGridState
         {
-            T = (float[])T.Clone(), Co2 = (float[])Co2.Clone(), O2 = (float[])O2.Clone(), Phi = (float[])Phi.Clone(),
+            T = (float[])T.Clone(), Co2 = (float[])Co2.Clone(), O2 = (float[])O2.Clone(), Gas = (float[])Gas.Clone(), Phi = (float[])Phi.Clone(),
             Vx = (float[])Vx.Clone(), Vy = (float[])Vy.Clone(), NetSource = (float[])NetSource.Clone(),
         };
     }
@@ -197,6 +212,10 @@ namespace HeadLoss.Sim.Rooms
         public float O2;
         /// <summary>Supply air changes per hour.</summary>
         public float AirChangesPerHour;
+        /// <summary>Highest gas volume fraction in any cell layer of the room.</summary>
+        public float GasMax;
+        /// <summary>Gas volume fraction averaged over the room (both layers by height).</summary>
+        public float GasMean;
     }
 
     /// <summary>Shared preparation and read-outs for every stepper.</summary>
@@ -215,7 +234,7 @@ namespace HeadLoss.Sim.Rooms
             float[] supply = l.Supply, facade = l.Facade, p = l.Pressure, gOut = l.Outflow;
             Array.Clear(supply, 0, rooms);
             for (int c = 0; c < n; c++)
-                if (l.Room[c] >= 0) supply[l.Room[c]] += inp.SupplyFlow[c];
+                if (l.Room[c] >= 0) supply[l.Room[c]] += inp.SupplyFlow[c] + inp.SupplyLower[c];
             for (int r = 0; r < rooms; r++) gOut[r] = Math.Max(1e-6f, facade[r] * inp.FacadeConductancePerM2);
             float gd = inp.DoorConductance;
             for (int it = 0; it < 200; it++)
@@ -238,7 +257,7 @@ namespace HeadLoss.Sim.Rooms
             for (int c = 0; c < n; c++)
             {
                 int r = l.Room[c];
-                net[c] = r < 0 ? 0 : inp.SupplyFlow[c] - (facade[r] > 0 ? gOut[r] * p[r] * l.ExteriorArea[c] / facade[r] : 0);
+                net[c] = r < 0 ? 0 : inp.SupplyFlow[c] + inp.SupplyLower[c] - (facade[r] > 0 ? gOut[r] * p[r] * l.ExteriorArea[c] / facade[r] : 0);
             }
         }
 
@@ -246,7 +265,8 @@ namespace HeadLoss.Sim.Rooms
         public static RoomSummary[] Summaries(RoomGridLayout l, RoomGridState s, RoomGridInputs inp, RoomGridParams p)
         {
             int n = l.Cells;
-            var sums = new double[l.RoomCount, 4];
+            var sums = new double[l.RoomCount, 5];
+            var gasMax = new float[l.RoomCount];
             var count = new int[l.RoomCount];
             for (int c = 0; c < n; c++)
             {
@@ -256,7 +276,12 @@ namespace HeadLoss.Sim.Rooms
                 sums[r, 0] += (s.T[c] * wl + s.T[n + c] * wu) / w;
                 sums[r, 1] += (s.Co2[c] * wl + s.Co2[n + c] * wu) / w;
                 sums[r, 2] += (s.O2[c] * wl + s.O2[n + c] * wu) / w;
-                sums[r, 3] += inp.SupplyFlow[c];
+                sums[r, 3] += inp.SupplyFlow[c] + inp.SupplyLower[c];
+                if (inp.GasActive)
+                {
+                    sums[r, 4] += (s.Gas[c] * wl + s.Gas[n + c] * wu) / w;
+                    gasMax[r] = Math.Max(gasMax[r], Math.Max(s.Gas[c], s.Gas[n + c]));
+                }
                 count[r]++;
             }
             var res = new RoomSummary[l.RoomCount];
@@ -269,16 +294,18 @@ namespace HeadLoss.Sim.Rooms
                     Co2Ppm = (float)(sums[r, 1] / count[r]),
                     O2 = (float)(sums[r, 2] / count[r]),
                     AirChangesPerHour = l.RoomVolume[r] > 0 ? (float)(3600 * sums[r, 3] / l.RoomVolume[r]) : 0,
+                    GasMax = gasMax[r],
+                    GasMean = (float)(sums[r, 4] / count[r]),
                 };
             }
             return res;
         }
 
-        /// <summary>Air density of a layer cell from temperature and CO₂ (ideal gas at 1 atm), kg/m³.</summary>
-        public static float Density(RoomGridParams p, float temperatureC, float co2Ppm)
+        /// <summary>Air density of a layer cell from temperature, CO₂ and gas share (ideal gas at 1 atm), kg/m³.</summary>
+        public static float Density(RoomGridParams p, float temperatureC, float co2Ppm, float gas = 0)
         {
             float x = co2Ppm * 1e-6f;
-            float m = p.AirMolarMass * (1 - x) + p.Co2MolarMass * x;
+            float m = p.AirMolarMass * (1 - x - gas) + p.Co2MolarMass * x + p.GasMolarMass * gas;
             return 101325f * m / (8.314462618f * (temperatureC + 273.15f));
         }
     }

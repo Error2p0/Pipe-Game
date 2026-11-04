@@ -125,6 +125,8 @@ namespace HeadLoss.Core.Data.Defs
         public double HeatingFactor = 1;
         /// <summary>Ceiling capacity units per tile (0 = unchanged).</summary>
         public int CeilingCapacity;
+        /// <summary>Exterior wall U-value, W/(m²·K) (0 = unchanged).</summary>
+        public double WallU;
     }
 
     /// <summary>City names are built from a seeded first part and an ending.</summary>

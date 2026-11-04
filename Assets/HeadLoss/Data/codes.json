@@ -63,5 +63,52 @@
     "parameters": {},
     "reason": "Every duct crossing a fire wall needs a fire damper at the crossing.",
     "why": "Fire walls split the building into fire compartments."
+  },
+  {
+    "id": "gas-separation",
+    "displayName": "Gas separation",
+    "kind": "layout",
+    "tiers": [
+      3,
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {
+      "tiles": 2
+    },
+    "reason": "Gas pipes stay at least 2 tiles from the electrical panel and heat sources.",
+    "why": "Ignition risk."
+  },
+  {
+    "id": "gas-room-ventilation",
+    "displayName": "Gas room ventilation",
+    "kind": "operating",
+    "tiers": [
+      3,
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {
+      "kitchenAch": 0.5,
+      "boilerRoomAch": 1.0
+    },
+    "reason": "Rooms with gas appliances need at least 0.5 air changes per hour (boiler rooms 1.0).",
+    "why": "Combustion air and leak dilution."
+  },
+  {
+    "id": "accessible-shutoffs",
+    "displayName": "Accessible shutoffs",
+    "kind": "layout",
+    "tiers": [
+      3,
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {},
+    "reason": "Every gas branch needs a shutoff valve before its first outlet.",
+    "why": "Isolation for repair."
   }
 ]

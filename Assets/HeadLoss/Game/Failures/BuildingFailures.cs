@@ -152,22 +152,175 @@ namespace HeadLoss.Game.Failures
                     State.Stress[e] = v;
                     if (v > sMax) { sMax = v; worst = e; }
                 }
+                // A weeping gas pipe is a small leak (08 §What starts a leak).
+                if (sMax >= F.WeepThreshold && fs.Fluid == BuildingState.GasFluid && !State.Leaks.Exists(l => edges.Contains(l.Edge)))
+                    AddLeak("weep", worst, MidTile(net, s), SegmentArea(s) * _data.Balancing.Gas.BurstLeakAreaFraction * _data.Balancing.Gas.WeepLeakFraction, now);
                 // Weeping (pre-burst): leak sensors alert once per segment with the expected time to a burst.
                 if (sMax >= F.WeepThreshold && State.LeakSensors.Contains(fs.Fluid) && !State.WeepAlerted.Contains(worst))
                 {
                     State.WeepAlerted.Add(worst);
                     double t = TimeToHalfChance(sMax, dS / dt);
-                    Alert?.Invoke($"Weeping joint on a {s.DiameterMm:0} mm {(fs.Fluid == "air" ? "duct" : "pipe")}, burst likely in ~{Units.FormatDuration(t)}");
+                    RaiseAlert($"Weeping joint on a {s.DiameterMm:0} mm {(fs.Fluid == "air" ? "duct" : "pipe")}, burst likely in ~{Units.FormatDuration(t)}");
                 }
                 double p = BurstChance(sMax - dS, sMax);
                 if (p > 0 && Roll() < p) Burst(fs, net, s, worst, now);
             }
         }
 
-        double Roll() => new Rng(Seeds.Derive(Seeds.Derive(_seed, "failure"), State.Counter++)).NextDouble();
+        /// <summary>The next number on the building's failure stream, [0, 1).</summary>
+        public double Roll() => new Rng(Seeds.Derive(Seeds.Derive(_seed, "failure"), State.Counter++)).NextDouble();
+
+        /// <summary>Shows a short calm message.</summary>
+        public void RaiseAlert(string message)
+        {
+            if (!OfflineMode) Alert?.Invoke(message);
+        }
+
+        /// <summary>Internal cross-section of a segment, m².</summary>
+        public double SegmentArea(DuctSegment s)
+        {
+            double d = Units.MmToM(_data.Material(s.MaterialId).InternalDiameterMm(s.DiameterMm));
+            return Math.PI * d * d / 4;
+        }
+
+        /// <summary>The middle tile of a segment (where a leak on it opens).</summary>
+        public static TilePos MidTile(DuctNetworkState net, DuctSegment s)
+        {
+            List<TilePos> tiles = DuctEditor.Tiles(net, s);
+            return tiles[tiles.Count / 2];
+        }
+
+        /// <summary>Starts a gas leak (<c>08-failures.md</c> §What starts a leak). A pipe that was weeping and now bursts takes the larger leak.</summary>
+        public LeakState AddLeak(string cause, string edge, TilePos tile, double areaM2, double now)
+        {
+            if (edge.Length > 0)
+            {
+                LeakState? on = State.Leaks.Find(l => l.Edge == edge);
+                if (on != null)
+                {
+                    if (areaM2 > on.AreaM2) { on.AreaM2 = areaM2; on.Cause = cause; Revision++; }
+                    return on;
+                }
+            }
+            var leak = new LeakState { Key = $"leak-{State.NextLeak++}", Cause = cause, Edge = edge, X = tile.X, Y = tile.Y, Floor = tile.F, AreaM2 = areaM2, At = now };
+            State.Leaks.Add(leak);
+            Revision++;
+            if (OfflineMode)
+            {
+                if (State.MaintenanceContract) RepairLeak(leak.Key, State.PreferEmergency, OfflinePay);
+            }
+            else RaiseAlert("A gas line is leaking · close a shutoff upstream and send a crew");
+            return leak;
+        }
+
+        /// <summary>Standard or emergency repair of a leak: priced by its segment, or the minimum for a fitting.</summary>
+        public double LeakRepairPrice(LeakState leak, BuildingState state, bool emergency)
+        {
+            DuctNetworkState net = state.Gas;
+            DuctSegment? seg = leak.Edge.Length > 0 ? net.Segments.Find(x => Edges(BuildingState.GasFluid, net, x).Contains(leak.Edge)) : null;
+            if (seg != null)
+            {
+                double metres = DuctEditor.Tiles(net, seg).Count - 1;
+                if (DuctEditor.IsRiser(net, seg)) metres *= _data.Balancing.Building.FloorHeight;
+                return RepairPrice(seg, metres, emergency);
+            }
+            double standard = F.RepairMinPrice * _data.Balancing.Economy.TierFactor[_layout.Tier - 1];
+            return emergency ? standard * F.RepairEmergencyFactor : standard;
+        }
+
+        /// <summary>Books a crew for a leak; paid by the caller's <paramref name="pay"/> (the built state prices it).</summary>
+        public bool RepairLeak(string key, bool emergency, Func<double, bool>? pay)
+        {
+            LeakState? leak = State.Leaks.Find(l => l.Key == key);
+            if (leak == null || JobFor(BuildingState.GasFluid, key) != null) return false;
+            double price = LeakRepairPrice(leak, _record.Committed, emergency);
+            if (pay != null && !pay(price)) return false;
+            AddJob(new RepairJob { Fluid = BuildingState.GasFluid, Edge = key, Emergency = emergency, Remaining = RepairSeconds(emergency), Total = RepairSeconds(emergency) });
+            return true;
+        }
+
+        /// <summary>Repair price of damaged equipment: a share of its catalogue price, at least the minimum repair price, × tier when emergency.</summary>
+        public double EquipmentRepairPrice(string key, bool emergency)
+        {
+            double tier = _data.Balancing.Economy.TierFactor[_layout.Tier - 1];
+            double catalogue = 0;
+            if (key.StartsWith("opening:", StringComparison.Ordinal))
+            {
+                EquipmentState? e = _record.Committed.EquipmentAt(key.Substring(8));
+                if (e != null) catalogue = _data.FindEquipment(e.EquipmentId)?.Price ?? 0;
+            }
+            double standard = Math.Max(catalogue * F.EquipmentRepairFraction, F.RepairMinPrice * tier);
+            return emergency ? standard * F.RepairEmergencyFactor : standard;
+        }
+
+        /// <summary>Books a crew for equipment knocked offline by a blast.</summary>
+        public bool RepairEquipment(string key, bool emergency, Func<double, bool>? pay)
+        {
+            if (!State.DamagedEquipment.Contains(key) || JobFor("equipment", key) != null) return false;
+            if (pay != null && !pay(EquipmentRepairPrice(key, emergency))) return false;
+            AddJob(new RepairJob { Fluid = "equipment", Edge = key, Emergency = emergency, Remaining = RepairSeconds(emergency), Total = RepairSeconds(emergency) });
+            return true;
+        }
+
+        void AddJob(RepairJob job)
+        {
+            if (job.Emergency)
+            {
+                int at = State.Repairs.FindIndex(r => !r.Emergency && !r.Started);
+                if (at < 0) State.Repairs.Add(job); else State.Repairs.Insert(at, job);
+            }
+            else State.Repairs.Add(job);
+        }
+
+        /// <summary>Blast damage on this building (<c>08-failures.md</c>): each segment bursts and each device goes offline with probability = damage; a gas building starts a leak with probability = damage.</summary>
+        public void ApplyBlastDamage(double damage, BuildingState committed, double now, string fluidGas = BuildingState.GasFluid)
+        {
+            foreach (string fluid in BuildingState.FluidIds)
+            {
+                DuctNetworkState net = committed.Net(fluid);
+                foreach (DuctSegment s in net.Segments)
+                {
+                    if (Roll() >= damage) continue;
+                    List<string> edges = Edges(fluid, net, s);
+                    if (edges.Count == 0) continue;
+                    if (fluid == fluidGas) AddLeak("damage", edges[0], MidTile(net, s), SegmentArea(s) * _data.Balancing.Gas.BurstLeakAreaFraction, now);
+                    else if (!State.Bursts.Exists(b => b.Fluid == fluid && edges.Contains(b.Edge)))
+                    {
+                        State.Bursts.Add(new BurstState { Fluid = fluid, Edge = edges[0], At = now });
+                        if (State.MaintenanceContract && OfflineMode) StartRepair(fluid, edges[0], State.PreferEmergency, "", 0, net, s, OfflinePay);
+                    }
+                }
+                foreach (DuctNode n in net.Nodes)
+                {
+                    if (n.Kind != DuctNodeKind.Inline || _data.FindEquipment(n.PartId) == null || Roll() >= damage) continue;
+                    string key = DamageKeys.Inline(fluid, n.Pos);
+                    if (!State.DamagedEquipment.Contains(key)) State.DamagedEquipment.Add(key);
+                }
+            }
+            foreach (EquipmentState e in committed.Equipment)
+            {
+                if (Roll() >= damage) continue;
+                string key = DamageKeys.Opening(e.OpeningId);
+                if (!State.DamagedEquipment.Contains(key)) State.DamagedEquipment.Add(key);
+            }
+            // A gas building can start its own leak even when no pipe gave way above; that leak then escalates on its own timer.
+            if (committed.Gas.Segments.Count > 0 && State.Leaks.Count == 0 && Roll() < damage)
+            {
+                DuctSegment s = committed.Gas.Segments[(int)(Roll() * committed.Gas.Segments.Count) % committed.Gas.Segments.Count];
+                List<string> edges = Edges(fluidGas, committed.Gas, s);
+                if (edges.Count > 0) AddLeak("damage", edges[0], MidTile(committed.Gas, s), SegmentArea(s) * _data.Balancing.Gas.BurstLeakAreaFraction, now);
+            }
+            Revision++;
+        }
 
         void Burst(FluidSolve fs, DuctNetworkState net, DuctSegment s, string edge, double now)
         {
+            // A burst on a gas line becomes a gas leak, not a burst (08 §Burst effects on income).
+            if (fs.Fluid == BuildingState.GasFluid)
+            {
+                AddLeak("burst", edge, MidTile(net, s), SegmentArea(s) * _data.Balancing.Gas.BurstLeakAreaFraction, now);
+                return;
+            }
             State.Bursts.Add(new BurstState { Fluid = fs.Fluid, Edge = edge, At = now });
             Revision++;
             if (OfflineMode)
@@ -178,7 +331,7 @@ namespace HeadLoss.Game.Failures
             // The rupture is a sudden change in flow: a surge on the rest of the network.
             if (fs.Compiled.SegmentLink.TryGetValue(s.Id, out int link))
                 AddSurge(fs, net, Math.Abs(fs.Result.Velocity[link]), DistanceToSource(fs, link), WaveSpeed(net, s), F.BurstSeconds);
-            Alert?.Invoke($"A {s.DiameterMm:0} mm {(fs.Fluid == "air" ? "duct" : "pipe")} burst · repair it or close a shutoff upstream");
+            RaiseAlert($"A {s.DiameterMm:0} mm {(fs.Fluid == "air" ? "duct" : "pipe")} burst · repair it or close a shutoff upstream");
         }
 
         /// <summary>Set while the offline catch-up runs: maintenance contracts dispatch crews, no alerts (the report lists it all).</summary>
@@ -263,6 +416,8 @@ namespace HeadLoss.Game.Failures
                 DuctSegment? s = net.Segments.Find(x => Edges(b.Fluid, net, x).Contains(b.Edge));
                 if (s != null) StartRepair(b.Fluid, b.Edge, State.PreferEmergency, "", 0, net, s, OfflinePay);
             }
+            foreach (LeakState l in new List<LeakState>(State.Leaks)) RepairLeak(l.Key, State.PreferEmergency, OfflinePay);
+            foreach (string key in new List<string>(State.DamagedEquipment)) RepairEquipment(key, State.PreferEmergency, OfflinePay);
         }
 
         // ---------- bursts and isolation ----------
@@ -312,7 +467,7 @@ namespace HeadLoss.Game.Failures
         // ---------- water hammer ----------
 
         /// <summary>Wave speed of a segment's material, m/s (0 for ducts: no hammer in air).</summary>
-        double WaveSpeed(DuctNetworkState net, DuctSegment s) => net.FluidId == "air" ? 0 : _data.Material(s.MaterialId).WaveSpeed;
+        double WaveSpeed(DuctNetworkState net, DuctSegment s) => net.FluidId != "water" ? 0 : _data.Material(s.MaterialId).WaveSpeed;
 
         /// <summary>
         /// A Joukowsky surge Δp = ρ a Δv, scaled by (2L/a)/t when the change is slower than the wave's round trip, and by
@@ -368,7 +523,7 @@ namespace HeadLoss.Game.Failures
             if (before == null) return;
             foreach (FluidSolve fs in after.All)
             {
-                if (fs.Fluid == "air") continue;
+                if (fs.Fluid != "water") continue;
                 FluidSolve? old = before.For(fs.Fluid);
                 if (old == null) continue;
                 DuctNetworkState net = after.State.Net(fs.Fluid);
@@ -405,8 +560,11 @@ namespace HeadLoss.Game.Failures
             return emergency ? standard * F.RepairEmergencyFactor : standard;
         }
 
-        /// <summary>Repair time for a crew, s (the rapid-response prestige bonus arrives in Phase 5).</summary>
-        public double RepairSeconds(bool emergency) => emergency ? F.RepairEmergencySeconds : F.RepairStandardSeconds;
+        /// <summary>Multiplier on repair times (the rapid-response prestige bonus), set by the session.</summary>
+        public double RepairTimeFactor { get; set; } = 1;
+
+        /// <summary>Repair time for a crew, s.</summary>
+        public double RepairSeconds(bool emergency) => (emergency ? F.RepairEmergencySeconds : F.RepairStandardSeconds) * RepairTimeFactor;
 
         /// <summary>The repair job for a burst edge, if one is booked.</summary>
         public RepairJob? JobFor(string fluid, string edge) => State.Repairs.Find(r => r.Fluid == fluid && r.Edge == edge);
@@ -428,12 +586,7 @@ namespace HeadLoss.Game.Failures
                 Fluid = fluid, Edge = edge, Emergency = emergency, Remaining = RepairSeconds(emergency), Total = RepairSeconds(emergency),
                 UpgradeMaterial = upgradeMaterial, UpgradeDiameterMm = upgradeDiameterMm,
             };
-            if (emergency)
-            {
-                int at = State.Repairs.FindIndex(r => !r.Emergency && !r.Started);
-                if (at < 0) State.Repairs.Add(job); else State.Repairs.Insert(at, job);
-            }
-            else State.Repairs.Add(job);
+            AddJob(job);
             return true;
         }
 
@@ -450,6 +603,35 @@ namespace HeadLoss.Game.Failures
             job.Remaining -= dt;
             if (job.Remaining > 0) return false;
             State.Repairs.RemoveAt(0);
+            if (job.Fluid == "equipment")
+            {
+                State.DamagedEquipment.Remove(job.Edge);
+                Revision++;
+                RaiseAlert("Crew finished the repair");
+                return true;
+            }
+            if (job.Fluid == BuildingState.GasFluid)
+            {
+                LeakState? leak = State.Leaks.Find(l => l.Key == job.Edge);
+                if (leak != null)
+                {
+                    State.Leaks.Remove(leak);
+                    if (leak.Edge.Length > 0)
+                    {
+                        DuctNetworkState gas = record.Committed.Gas;
+                        foreach (DuctSegment s in gas.Segments)
+                        {
+                            List<string> edges = Edges(BuildingState.GasFluid, gas, s);
+                            if (!edges.Contains(leak.Edge)) continue;
+                            foreach (string e in edges) { State.Stress.Remove(e); State.WeepAlerted.Remove(e); }
+                            break;
+                        }
+                    }
+                }
+                Revision++;
+                RaiseAlert("Gas leak repaired");
+                return true;
+            }
             State.Bursts.RemoveAll(b => b.Fluid == job.Fluid && b.Edge == job.Edge);
             foreach (BuildingState st in new[] { record.Committed, record.Design })
             {
@@ -470,7 +652,7 @@ namespace HeadLoss.Game.Failures
                 DuctEditor.Normalize(net);
             }
             Revision++;
-            if (!OfflineMode) Alert?.Invoke(job.Emergency ? "Emergency crew finished the repair" : "Repair finished");
+            RaiseAlert(job.Emergency ? "Emergency crew finished the repair" : "Repair finished");
             return true;
         }
 
@@ -490,7 +672,15 @@ namespace HeadLoss.Game.Failures
                 }
             // A burst whose pipe was redrawn or replaced is gone with it.
             State.Bursts.RemoveAll(b => !newSpecs.TryGetValue(b.Edge, out string spec) || !oldSpecs.TryGetValue(b.Edge, out string was) || was != spec);
-            State.Repairs.RemoveAll(r => !State.Bursts.Exists(b => b.Fluid == r.Fluid && b.Edge == r.Edge));
+            // So is a leak on a replaced pipe, or at a fitting that is no longer there.
+            State.Leaks.RemoveAll(l => l.Edge.Length > 0
+                ? !newSpecs.TryGetValue(l.Edge, out string spec) || !oldSpecs.TryGetValue(l.Edge, out string was) || was != spec
+                : after.Gas.NodeAt(l.Pos) == null);
+            State.Repairs.RemoveAll(r => r.Fluid == "equipment"
+                ? !State.DamagedEquipment.Contains(r.Edge)
+                : r.Fluid == BuildingState.GasFluid
+                    ? !State.Leaks.Exists(l => l.Key == r.Edge)
+                    : !State.Bursts.Exists(b => b.Fluid == r.Fluid && b.Edge == r.Edge));
             Revision++;
         }
 

@@ -50,7 +50,8 @@ namespace HeadLoss.Game
             UtilityState u = Game.City!.Utilities;
             CityResult = CityNetwork.Solve(Data, City, u,
                 plot => FindSession(plot) is BuildingSession s ? s.WaterDemand() : 0,
-                plot => FindSession(plot) is BuildingSession s ? s.RequestedPowerW / 1000 : 0);
+                plot => FindSession(plot) is BuildingSession s ? s.RequestedPowerW / 1000 : 0,
+                plot => FindSession(plot) is BuildingSession s ? s.GasDemand() : 0);
             CityViolations.Clear();
             FinesPerCycle = Utilities.Fines(Data, City, u, CityViolations);
             foreach (BuildingSession s in _sessions)
@@ -60,6 +61,13 @@ namespace HeadLoss.Game
                 if (supply.Connected != s.Supply.Connected || System.Math.Abs(supply.PressurePa - s.Supply.PressurePa) > 1)
                 {
                     s.Supply = supply;
+                    s.MarkDirty();
+                }
+                WaterSupply gas = CityResult.Gas.TryGetValue(s.Record.BuildingId, out WaterConnection g) && g.Connected
+                    ? new WaterSupply(true, g.PressurePa) : WaterSupply.None;
+                if (gas.Connected != s.GasSupply.Connected || System.Math.Abs(gas.PressurePa - s.GasSupply.PressurePa) > 1)
+                {
+                    s.GasSupply = gas;
                     s.MarkDirty();
                 }
                 s.Power = CityResult.Power.TryGetValue(s.Record.BuildingId, out PowerConnection pc) ? pc : default;
@@ -88,12 +96,13 @@ namespace HeadLoss.Game
         }
 
         /// <summary>
-        /// Phase 4 rebuilt tier 2+ buildings (floors, water): a save from an older generator gets back what it spent on
-        /// them and they start fresh (D83). Tier 1 layouts are unchanged and keep their edits.
+        /// Phase 4 rebuilt tier 2+ buildings (floors, water) and Phase 5 tier 3 ones (gas): a save from an older generator gets
+        /// back what it spent on them and they start fresh (D83). Other layouts are unchanged and keep their edits.
         /// </summary>
         void RegenerateOlder(GameState game)
         {
-            if (game.GeneratorVersion >= 3 || City == null)
+            int rebuildFrom = game.GeneratorVersion < 3 ? 2 : 3;
+            if (game.GeneratorVersion >= Save.SaveSerializer.CurrentGeneratorVersion || City == null)
             {
                 game.GeneratorVersion = Save.SaveSerializer.CurrentGeneratorVersion;
                 return;
@@ -102,10 +111,10 @@ namespace HeadLoss.Game
             {
                 BuildingRecord r = game.Buildings[i];
                 Plot? plot = City.FindPlot(r.BuildingId);
-                if (plot == null || plot.Tier < 2) continue;
+                if (plot == null || plot.Tier < rebuildFrom) continue;
                 BuildingLayout? layout = FindLayout(r.BuildingId);
                 if (r.SpentTotal > 0) game.Wallet += r.SpentTotal;
-                _notes.Add($"{r.BuildingId}: rebuilt with floors and water; {r.SpentTotal:0.##} refunded");
+                _notes.Add($"{r.BuildingId}: rebuilt with its new networks; {r.SpentTotal:0.##} refunded");
                 if (layout == null)
                 {
                     game.Buildings.RemoveAt(i--);
@@ -122,7 +131,8 @@ namespace HeadLoss.Game
         // ---------- city actions (03 §Routing in the city view; 07 §City equipment, §Meta upgrades) ----------
 
         /// <summary>Lays a main or cable along a path, paid at once. Returns the quote (Valid false = nothing laid).</summary>
-        public RouteQuote LayMain(string utility, double diameterMm, double capacityKW, IReadOnlyList<(int x, int y)> path, bool drilled)
+        /// <param name="pressureClass">Gas: the main's pressure class (lp, mp, hp).</param>
+        public RouteQuote LayMain(string utility, double diameterMm, double capacityKW, IReadOnlyList<(int x, int y)> path, bool drilled, string pressureClass = "")
         {
             var bad = new RouteQuote();
             if (City == null || Game.City == null) { bad.Error = "No city"; return bad; }
@@ -131,8 +141,9 @@ namespace HeadLoss.Game
             int tier = 99;
             foreach (PipeSizeDef sz in family.Sizes)
                 if ((family.Kind == "cable" ? sz.CapacityKW == capacityKW : sz.DiameterMm == diameterMm)) tier = sz.Tier;
+            if (family.ClassById(pressureClass) is PressureClassDef pc) tier = System.Math.Max(tier, pc.Tier);
             if (!Progression.Tech.Unlocked(Game, tier)) { bad.Error = $"Unlocks at tier {tier}"; return bad; }
-            RouteQuote q = Utilities.Quote(Data, City, Game.City.Utilities, utility, diameterMm, capacityKW, path, drilled);
+            RouteQuote q = Utilities.Quote(Data, City, Game.City.Utilities, utility, diameterMm, capacityKW, path, drilled, 1, pressureClass);
             if (!q.Valid) return q;
             if (!Game.CanAfford(q.Cost))
             {
@@ -141,7 +152,7 @@ namespace HeadLoss.Game
                 return q;
             }
             Game.Wallet -= q.Cost;
-            Utilities.Lay(Game.City.Utilities, utility, family.Id, diameterMm, capacityKW, path, drilled, q);
+            Utilities.Lay(Game.City.Utilities, utility, family.Id, diameterMm, capacityKW, path, drilled, q, pressureClass);
             CityDirty = true;
             return q;
         }
@@ -174,6 +185,186 @@ namespace HeadLoss.Game
             CityNetworkResult r = CityNetwork.Solve(Data, City, trial, PlotWaterDemand, _ => 0);
             return r.Water.TryGetValue(quote.Destination, out WaterConnection w) ? w : (WaterConnection?)null;
         }
+
+        /// <summary>What a building would draw from the gas mains: its inflow, or the design flow of all its stoves when that is more, m³/s.</summary>
+        public double PlotGasDemand(string plotId)
+        {
+            double built = FindSession(plotId)?.GasDemand() ?? 0;
+            BuildingLayout? layout = CityBuildings?.Get(plotId)?.Layout;
+            if (layout == null) return built;
+            double design = 0;
+            foreach (OutletPlacementDef o in layout.Outlets)
+                if (BuildingState.OutletFluid(o.Type) == BuildingState.GasFluid) design += Networks.NetworkCompiler.DesignFlow(Data, layout, o);
+            return System.Math.Max(built, design);
+        }
+
+        /// <summary>The route tool's live preview for a gas main: the connection it would give its destination.</summary>
+        public WaterConnection? PreviewGas(double diameterMm, string pressureClass, IReadOnlyList<(int x, int y)> path, bool drilled, RouteQuote quote)
+        {
+            if (City == null || Game.City == null || !quote.Valid || quote.Destination.Length == 0) return null;
+            UtilityState u = Game.City.Utilities;
+            PipeFamilyDef? family = Utilities.FamilyFor(Data, "gas");
+            if (family == null) return null;
+            var trial = new UtilityState { Corridors = u.Corridors, NextId = u.NextId };
+            trial.Mains.AddRange(u.Mains);
+            Utilities.Lay(trial, "gas", family.Id, diameterMm, 0, path, drilled, quote, pressureClass);
+            CityNetworkResult r = CityNetwork.Solve(Data, City, trial, _ => 0, _ => 0, PlotGasDemand);
+            return r.Gas.TryGetValue(quote.Destination, out WaterConnection w) ? w : (WaterConnection?)null;
+        }
+
+        // ---------- explosions and ruins (08 §Explosions) ----------
+
+        /// <summary>Raised when a building explodes (the ring, the thump, the notice).</summary>
+        public event System.Action<ExplosionReport>? Exploded;
+
+        /// <summary>True when a plot's building is a ruin.</summary>
+        public bool IsRuin(string plotId) => Game.City != null && Game.City.Ruins.Contains(plotId);
+
+        /// <summary>
+        /// A building explodes: it becomes a ruin, its fine is charged, and every building within the blast radius takes damage
+        /// that falls off with distance: heavy damage ruins it, light damage knocks parts offline and may start a leak that
+        /// then escalates on its own timer (a chain reaction plays out over minutes, never instantly).
+        /// </summary>
+        /// <param name="energyJoules">Blast energy, J.</param>
+        public ExplosionReport Explode(BuildingSession s, double energyJoules)
+        {
+            FailureDef f = Data.Balancing.Failure;
+            FinesDef fines = Data.Balancing.Fines;
+            double insurance = Game.City?.Utilities.Insurance == true ? Utilities.InsuranceFineFactor(Data) : 1;
+            string id = s.Record.BuildingId;
+            var report = new ExplosionReport
+            {
+                PlotId = id, EnergyJoules = energyJoules,
+                RadiusMetres = Failures.Blast.RadiusMetres(energyJoules, f.BlastRadiusK),
+                Fine = insurance * System.Math.Max(fines.ExplosionGrossHours * Core.Units.SecondsPerHour * s.CommittedEvaluation.PotentialGross, fines.ExplosionMinimum * TierFactor(s.Layout.Tier)),
+            };
+            Game.Statistics.Explosions++;
+            double now = Game.PlayTimeSeconds;
+            Plot? centre = City?.FindPlot(id);
+            if (centre != null)
+            {
+                foreach (Plot other in City!.Plots)
+                {
+                    if (other == centre || IsRuin(other.Id)) continue;
+                    double damage = Failures.Blast.Damage(DistanceToEdge(centre, other), report.RadiusMetres);
+                    if (damage < f.LightDamage) continue;
+                    BuildingSession? ns = FindSession(other.Id);
+                    bool heavy = damage >= f.HeavyDamage;
+                    // An empty plot has nothing to knock offline, and nothing to fine: only a heavy blast marks it.
+                    if (ns == null && !heavy) continue;
+                    double gross = ns?.CommittedEvaluation.PotentialGross ?? 0;
+                    double fine = insurance * System.Math.Max(fines.NeighbourGrossHours * Core.Units.SecondsPerHour * gross * damage, fines.NeighbourMinimum * TierFactor(other.Tier));
+                    report.Fine += fine;
+                    report.Neighbours.Add(new NeighbourDamage { PlotId = other.Id, Damage = damage, Ruined = heavy, Fine = fine });
+                    if (heavy) MakeRuin(other.Id);
+                    else ns!.Failures.ApplyBlastDamage(damage, ns.Committed, now);
+                }
+            }
+            MakeRuin(id);
+            Game.ApplyIncome(-report.Fine);
+            Game.LifetimeIncome -= report.Fine;
+            CityDirty = true;
+            Exploded?.Invoke(report);
+            return report;
+        }
+
+        double TierFactor(int tier) => Data.Balancing.Economy.TierFactor[tier - 1];
+
+        /// <summary>From a plot's centre to another plot's nearest edge, m.</summary>
+        double DistanceToEdge(Plot from, Plot to)
+        {
+            double dx = System.Math.Max(0, System.Math.Max(to.X - from.CentreX, from.CentreX - (to.X + to.Width)));
+            double dy = System.Math.Max(0, System.Math.Max(to.Y - from.CentreY, from.CentreY - (to.Y + to.Height)));
+            return System.Math.Sqrt(dx * dx + dy * dy) * City!.TileMetres;
+        }
+
+        void MakeRuin(string plotId)
+        {
+            if (Game.City != null && !Game.City.Ruins.Contains(plotId)) Game.City.Ruins.Add(plotId);
+            BuildingSession? s = FindSession(plotId);
+            if (s == null) return;
+            if (Building == s) Leave();
+            _sessions.Remove(s);
+            BuildingRecord? r = Game.FindBuilding(plotId);
+            if (r != null) Game.Buildings.Remove(r);
+            SessionRemoved?.Invoke(s);
+        }
+
+        /// <summary>Raised when a session goes away because its building is a ruin.</summary>
+        public event System.Action<BuildingSession>? SessionRemoved;
+
+        /// <summary>Rebuilding a ruin, $: a very high factor of the plot's reference build cost (<c>13-balancing.md</c>).</summary>
+        public double ReconstructionPrice(string plotId) =>
+            Data.Balancing.Prestige.ReconstructionCostFactor * (CityBuildings?.Get(plotId)?.Reference.Cost ?? 0);
+
+        /// <summary>True when ruins can be rebuilt: the late prestige upgrade is owned.</summary>
+        public bool CanReconstruct => Progression.PrestigeEffects.Level(Game, Progression.PrestigeEffects.ReconstructionPermits) > 0;
+
+        /// <summary>Rebuilds a ruin from its seed with no player edits, for the Reconstruction price. False when not allowed or not affordable.</summary>
+        public bool Reconstruct(string plotId)
+        {
+            if (!CanReconstruct || !IsRuin(plotId)) return false;
+            double price = ReconstructionPrice(plotId);
+            if (!Game.CanAfford(price)) return false;
+            Game.Wallet -= price;
+            Game.City!.Ruins.Remove(plotId);
+            CityDirty = true;
+            return true;
+        }
+
+        // ---------- prestige (03 §Prestige) ----------
+
+        /// <summary>
+        /// Milestone progress. Plots counted are those whose tier has buildings in this version; ruins count and are never
+        /// online (D108).
+        /// </summary>
+        public Progression.Milestone Milestone()
+        {
+            var m = new Progression.Milestone
+            {
+                ShareNeeded = Data.Balancing.Prestige.ShareOnline,
+                Income = Game.LifetimeIncome,
+                IncomeTarget = Progression.Milestone.TargetFor(Data, Game.City?.Index ?? 1),
+                ReputationReward = Progression.Milestone.Reward(Data, Game.LifetimeIncome),
+            };
+            if (City == null) return m;
+            foreach (Plot p in City.Plots)
+            {
+                if (!Data.BuildingTier(p.Tier).Available) continue;
+                m.Plots++;
+                if (IsRuin(p.Id)) { m.Ruins++; continue; }
+                if (FindSession(p.Id)?.CommittedEvaluation.Online == true) m.Online++;
+            }
+            return m;
+        }
+
+        /// <summary>
+        /// Founds a new city: wallet, unlocks, buildings, ruins and mains reset; Reputation (plus the reward), the prestige tree
+        /// and statistics stay. Returns the new game state to run, or null when the milestone is not met.
+        /// </summary>
+        /// <param name="seed">The new city's seed (random unless the player enters one; chosen by the caller).</param>
+        public GameState? FoundNewCity(ulong seed)
+        {
+            Progression.Milestone m = Milestone();
+            if (!m.Met || !Data.Balancing.Demo.Prestige && Demo) return null;
+            StatisticsState stats = Game.Statistics;
+            stats.CitiesFounded++;
+            stats.IncomeAllCities += Game.LifetimeIncome;
+            var next = new GameState
+            {
+                Wallet = Data.Balancing.Economy.StartingWallet,
+                Reputation = Game.Reputation + m.ReputationReward,
+                Prestige = new Dictionary<string, int>(Game.Prestige),
+                Statistics = stats,
+                PlayTimeSeconds = Game.PlayTimeSeconds,
+                City = new CityState { Seed = seed, Index = (Game.City?.Index ?? 1) + 1 },
+            };
+            next.City.StarterItems = Progression.PrestigeEffects.StarterItems(next);
+            return next;
+        }
+
+        /// <summary>A demo build: tiers above the demo's cap stay locked and new cities may be off (set by the Unity layer).</summary>
+        public bool Demo { get; set; }
 
         /// <summary>Removes a main or cable (and branches that only it fed), refunding a share of what they cost.</summary>
         public bool RemoveMain(int mainId)
@@ -248,15 +439,20 @@ namespace HeadLoss.Game
         }
 
         /// <summary>True when the building exists and can be opened in this version.</summary>
-        public bool CanOpen(string buildingId) => FindLayout(buildingId) != null;
+        public bool CanOpen(string buildingId) => FindLayout(buildingId) != null && !IsRuin(buildingId);
 
         BuildingSession CreateSession(BuildingRecord r)
         {
             GeneratedBuilding? g = CityBuildings != null ? CityBuildings.Get(r.BuildingId) : null;
             BuildingLayout layout = g?.Layout ?? FindLayout(r.BuildingId)!;
             var s = new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate);
-            // In a city, water comes only through a routed main (the first city solve sets it).
-            if (City != null) s.Supply = WaterSupply.None;
+            // In a city, water and gas come only through routed mains (the first city solve sets them).
+            if (City != null)
+            {
+                s.Supply = WaterSupply.None;
+                s.GasSupply = WaterSupply.None;
+            }
+            s.GasSafety.Exploded += energy => Explode(s, energy);
             CityDirty = true;
             return s;
         }
@@ -308,6 +504,30 @@ namespace HeadLoss.Game
         }
     }
 
+    /// <summary>What an explosion did (<c>08-failures.md</c> §Explosions).</summary>
+    public sealed class ExplosionReport
+    {
+        public string PlotId = "";
+        /// <summary>Blast energy, J.</summary>
+        public double EnergyJoules;
+        /// <summary>Blast radius, m.</summary>
+        public double RadiusMetres;
+        /// <summary>Everything charged: the explosion fine and each damaged neighbour's, $.</summary>
+        public double Fine;
+        public readonly List<NeighbourDamage> Neighbours = new List<NeighbourDamage>();
+    }
+
+    /// <summary>One neighbour caught in a blast.</summary>
+    public sealed class NeighbourDamage
+    {
+        public string PlotId = "";
+        /// <summary>Damage, 0–1.</summary>
+        public double Damage;
+        /// <summary>Heavy damage: it is a ruin now.</summary>
+        public bool Ruined;
+        public double Fine;
+    }
+
     /// <summary>
     /// Advances the game rules. The Unity layer calls <see cref="Tick"/> from Update. Sessions solve on change;
     /// the economy runs at <c>economy.tickHz</c> so the wallet moves smoothly (<c>05-simulation.md</c> §5).
@@ -318,6 +538,7 @@ namespace HeadLoss.Game
         double _economyAccumulator;
         double _unlockAccumulator;
         double _citySolve;
+        readonly List<BuildingSession> _ticking = new List<BuildingSession>();
 
         public GameLoop(GameContext context) => Context = context;
 
@@ -330,7 +551,10 @@ namespace HeadLoss.Game
                 _citySolve = 0;
                 Context.SolveCity();
             }
-            foreach (BuildingSession s in Context.Sessions) s.Tick(dtSeconds);
+            // A session can go away inside its tick (an explosion ruins it and maybe its neighbours).
+            _ticking.Clear();
+            _ticking.AddRange(Context.Sessions);
+            foreach (BuildingSession s in _ticking) if (Context.FindSession(s.Record.BuildingId) == s) s.Tick(dtSeconds);
             Context.Game.PlayTimeSeconds += dtSeconds;
             double step = 1.0 / Context.Data.Balancing.Economy.TickHz;
             _economyAccumulator += dtSeconds;

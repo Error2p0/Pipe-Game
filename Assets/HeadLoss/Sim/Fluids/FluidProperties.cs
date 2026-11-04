@@ -71,12 +71,14 @@ namespace HeadLoss.Sim.Fluids
         readonly double[] _tK;
         readonly double[] _logP;
         readonly double[,] _rho, _mu, _cp, _k;
-        readonly bool _idealGas;
+        readonly bool _idealGas, _tableDensity;
         readonly double _molarMass, _gamma, _gasConstant, _speedOfSound20C;
 
-        public TableFluid(FluidDef fluid, FluidTableDef table, double gasConstant)
+        /// <param name="useTableDensity">Gases: take density from the table (real gas) instead of the ideal gas law, for MP and HP mains (D21).</param>
+        public TableFluid(FluidDef fluid, FluidTableDef table, double gasConstant, bool useTableDensity = false)
         {
             _idealGas = fluid.IdealGas;
+            _tableDensity = useTableDensity;
             _molarMass = table.MolarMass;
             _gamma = table.Gamma;
             _gasConstant = gasConstant;
@@ -109,7 +111,7 @@ namespace HeadLoss.Sim.Fluids
         public bool IsCompressible => _idealGas;
 
         public double Density(double pressureAbsPa, double temperatureK) =>
-            _idealGas ? IdealGas.Density(pressureAbsPa, _molarMass, temperatureK, _gasConstant) : Lookup(_rho, pressureAbsPa, temperatureK);
+            _tableDensity ? TableDensity(pressureAbsPa, temperatureK) : _idealGas ? IdealGas.Density(pressureAbsPa, _molarMass, temperatureK, _gasConstant) : Lookup(_rho, pressureAbsPa, temperatureK);
 
         /// <summary>Density from the table itself (also for ideal gases; used to check the ideal gas law).</summary>
         public double TableDensity(double pressureAbsPa, double temperatureK) =>

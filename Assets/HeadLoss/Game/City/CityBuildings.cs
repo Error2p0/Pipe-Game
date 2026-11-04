@@ -62,6 +62,21 @@ namespace HeadLoss.Game.City
             City = city;
         }
 
+        /// <summary>Ceiling capacity units per tile set by a city modifier (0 = the data default).</summary>
+        public int CeilingCapacity
+        {
+            get
+            {
+                int capacity = 0;
+                foreach (string id in City.Modifiers)
+                {
+                    CityModifierDef? m = Data.City.Modifiers.Find(x => x.Id == id);
+                    if (m != null && m.CeilingCapacity > 0) capacity = m.CeilingCapacity;
+                }
+                return capacity;
+            }
+        }
+
         /// <summary>True when the plot's tier is generated in this version.</summary>
         public bool Available(Plot p) => Data.BuildingTier(p.Tier).Available;
 
@@ -70,7 +85,7 @@ namespace HeadLoss.Game.City
         {
             lock (_lock) if (_cache.TryGetValue(plotId, out GeneratedBuilding? g)) return g;
             Plot? p = City.FindPlot(plotId);
-            GeneratedBuilding? made = p != null && Available(p) ? BuildingFactory.Create(Data, p, City.Districts[p.District].Kind) : null;
+            GeneratedBuilding? made = p != null && Available(p) ? BuildingFactory.Create(Data, p, City.Districts[p.District].Kind, CeilingCapacity) : null;
             lock (_lock) _cache[plotId] = made;
             return made;
         }

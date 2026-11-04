@@ -27,6 +27,10 @@ namespace HeadLoss.Core.Data.Defs
         public List<string> ReferenceWaterEquipment = new List<string>();
         /// <summary>Pipe materials the reference water layout may use, cheapest first (a pipe moves up when its rating is exceeded).</summary>
         public List<string> ReferenceWaterMaterials = new List<string>();
+        /// <summary>Gas source equipment the solvability check uses.</summary>
+        public List<string> ReferenceGasEquipment = new List<string>();
+        /// <summary>Pipe materials the reference gas layout may use, cheapest first.</summary>
+        public List<string> ReferenceGasMaterials = new List<string>();
         /// <summary>Shafts (2×2, stacked on every floor) in multi-floor buildings, inclusive range.</summary>
         public int ShaftsMin;
         public int ShaftsMax;

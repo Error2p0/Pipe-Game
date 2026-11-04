@@ -48,6 +48,27 @@
     ]
   },
   {
+    "id": "gas-main",
+    "displayName": "Gas main",
+    "kind": "main",
+    "utility": "gas",
+    "capacityVelocity": 10.0,
+    "roughnessMm": 0.05,
+    "pricePerTile": 60,
+    "priceReferenceDiameterMm": 100,
+    "sizes": [
+      {"diameterMm": 63, "capacityUnits": 0, "tier": 3},
+      {"diameterMm": 90, "capacityUnits": 0, "tier": 3},
+      {"diameterMm": 125, "capacityUnits": 0, "tier": 3},
+      {"diameterMm": 180, "capacityUnits": 0, "tier": 4}
+    ],
+    "pressureClasses": [
+      {"id": "lp", "displayName": "LP (75 mbar)", "facilityPressureKey": "gas-lp", "capacityVelocity": 10.0, "priceFactor": 1.0, "tier": 3},
+      {"id": "mp", "displayName": "MP (2 bar)", "facilityPressureKey": "gas-mp", "capacityVelocity": 20.0, "priceFactor": 1.5, "tier": 3},
+      {"id": "hp", "displayName": "HP (7 bar)", "facilityPressureKey": "gas-hp", "capacityVelocity": 20.0, "priceFactor": 2.5, "tier": 5}
+    ]
+  },
+  {
     "id": "power-cable",
     "displayName": "Power cable",
     "kind": "cable",

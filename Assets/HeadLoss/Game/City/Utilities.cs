@@ -21,6 +21,8 @@ namespace HeadLoss.Game.City
         public List<int[]> Tiles = new List<int[]>();
         /// <summary>Laid by directional drilling: no recurring fines for what it passes under, no crossing cost.</summary>
         public bool Drilled;
+        /// <summary>Gas mains: pressure class id (lp, mp, hp); "" for other utilities.</summary>
+        public string PressureClass = "";
         /// <summary>Plot it connects to ("" = none: a trunk others branch from).</summary>
         public string Destination = "";
         /// <summary>What it cost to lay, $ (refunds are a share of it).</summary>
@@ -88,22 +90,24 @@ namespace HeadLoss.Game.City
             return null;
         }
 
-        /// <summary>Capacity of a water main, m³/s (internal area × the family's capacity velocity).</summary>
-        public static double CapacityM3s(PipeFamilyDef family, double diameterMm)
+        /// <summary>Capacity of a main at line conditions, m³/s (internal area × the family's or pressure class's capacity velocity).</summary>
+        public static double CapacityM3s(PipeFamilyDef family, double diameterMm, string pressureClass = "")
         {
             double d = diameterMm / 1000;
-            return Math.PI * d * d / 4 * family.CapacityVelocity;
+            double velocity = family.ClassById(pressureClass)?.CapacityVelocity ?? family.CapacityVelocity;
+            return Math.PI * d * d / 4 * velocity;
         }
 
         /// <summary>Price of one tile of a main or cable, $.</summary>
-        public static double PricePerTile(DataRepository data, PipeFamilyDef family, double diameterMm, double capacityKW)
+        public static double PricePerTile(DataRepository data, PipeFamilyDef family, double diameterMm, double capacityKW, string pressureClass = "")
         {
             if (family.Kind == "cable")
             {
                 foreach (PipeSizeDef s in family.Sizes) if (s.CapacityKW == capacityKW) return s.PricePerTile;
                 return family.Sizes[0].PricePerTile;
             }
-            return family.PricePerTile * Math.Pow(diameterMm / family.PriceReferenceDiameterMm, data.Balancing.Prices.DiameterExponent);
+            double factor = family.ClassById(pressureClass)?.PriceFactor ?? 1;
+            return factor * family.PricePerTile * Math.Pow(diameterMm / family.PriceReferenceDiameterMm, data.Balancing.Prices.DiameterExponent);
         }
 
         static bool IsCorridor(UtilityState u, int x, int y) => u.Corridors.Exists(c => c[0] == x && c[1] == y);
@@ -127,11 +131,12 @@ namespace HeadLoss.Game.City
         }
 
         /// <summary>The main of a utility whose path passes a tile (0 = none).</summary>
-        public static int MainAt(UtilityState u, string utility, int x, int y)
+        /// <param name="pressureClass">Gas: only mains of this class ("" = any).</param>
+        public static int MainAt(UtilityState u, string utility, int x, int y, string pressureClass = "")
         {
             foreach (MainState m in u.Mains)
             {
-                if (m.Utility != utility) continue;
+                if (m.Utility != utility || (pressureClass.Length > 0 && m.PressureClass != pressureClass)) continue;
                 foreach (int[] t in m.Tiles) if (t[0] == x && t[1] == y) return m.Id;
             }
             return 0;
@@ -143,7 +148,7 @@ namespace HeadLoss.Game.City
         /// plot (to connect it) or anywhere else (a trunk to branch from later).
         /// </summary>
         public static RouteQuote Quote(DataRepository data, CityLayout city, UtilityState u, string utility, double diameterMm, double capacityKW,
-            IReadOnlyList<(int x, int y)> path, bool drilled, int tier = 1)
+            IReadOnlyList<(int x, int y)> path, bool drilled, int tier = 1, string pressureClass = "")
         {
             var q = new RouteQuote();
             PipeFamilyDef? family = FamilyFor(data, utility);
@@ -157,7 +162,7 @@ namespace HeadLoss.Game.City
             var seen = new HashSet<(int, int)>();
             foreach (var t in path) if (!seen.Add(t)) { q.Error = "The route crosses itself"; return q; }
             (int sx, int sy) = path[0];
-            q.JoinsMain = MainAt(u, utility, sx, sy);
+            q.JoinsMain = MainAt(u, utility, sx, sy, pressureClass);
             if (!IsFacilityOf(city, sx, sy, utility) && q.JoinsMain == 0)
             {
                 q.Error = utility == "power" ? "Start at a substation or an existing cable" : "Start at the facility or an existing main";
@@ -167,7 +172,7 @@ namespace HeadLoss.Game.City
             Plot? dest = city.PlotAt(ex, ey);
             if (dest != null) q.Destination = dest.Id;
             CityUtilitiesDef cu = data.Balancing.City;
-            double tileCost = PricePerTile(data, family, diameterMm, capacityKW);
+            double tileCost = PricePerTile(data, family, diameterMm, capacityKW, pressureClass);
             bool depot = false;
             foreach (FacilityPlacement f in city.Facilities)
                 if (f.TypeId == "industrial-gas-depot" && sx >= f.X && sy >= f.Y && sx < f.X + f.Width && sy < f.Y + f.Height) depot = true;
@@ -246,11 +251,11 @@ namespace HeadLoss.Game.City
 
         /// <summary>Lays a quoted route. The caller has checked and charged the cost.</summary>
         public static MainState Lay(UtilityState u, string utility, string family, double diameterMm, double capacityKW, IReadOnlyList<(int x, int y)> path,
-            bool drilled, RouteQuote quote)
+            bool drilled, RouteQuote quote, string pressureClass = "")
         {
             var m = new MainState
             {
-                Id = u.NextId++, Utility = utility, Family = family, DiameterMm = diameterMm, CapacityKW = capacityKW, Drilled = drilled,
+                Id = u.NextId++, Utility = utility, Family = family, DiameterMm = diameterMm, CapacityKW = capacityKW, Drilled = drilled, PressureClass = pressureClass,
                 Destination = quote.Destination, Paid = quote.Cost,
             };
             foreach (var t in path) m.Tiles.Add(new[] { t.x, t.y });
@@ -273,7 +278,7 @@ namespace HeadLoss.Game.City
                 others.Mains.Clear();
                 foreach (MainState o in u.Mains) if (o != m) others.Mains.Add(o);
                 // Re-check against the other lines (capacity is not re-checked: the main is already laid).
-                RouteQuote q = Quote(data, city, others, m.Utility, m.DiameterMm, m.CapacityKW, path, m.Drilled);
+                RouteQuote q = Quote(data, city, others, m.Utility, m.DiameterMm, m.CapacityKW, path, m.Drilled, 1, m.PressureClass);
                 if (!q.Valid) continue;
                 total += q.FinesPerCycle;
                 into?.AddRange(q.Violations);
@@ -305,8 +310,8 @@ namespace HeadLoss.Game.City
                     (int sx, int sy) = b.Start;
                     bool fed = false;
                     foreach (MainState o in u.Mains)
-                        if (o != b && o.Utility == b.Utility && o.Tiles.Exists(t => t[0] == sx && t[1] == sy)) fed = true;
-                    if (fed || removed.Exists(r => r.Utility == b.Utility && r.Tiles.Exists(t => t[0] == sx && t[1] == sy)) == false) continue;
+                        if (o != b && o.Utility == b.Utility && o.PressureClass == b.PressureClass && o.Tiles.Exists(t => t[0] == sx && t[1] == sy)) fed = true;
+                    if (fed || removed.Exists(r => r.Utility == b.Utility && r.PressureClass == b.PressureClass && r.Tiles.Exists(t => t[0] == sx && t[1] == sy)) == false) continue;
                     u.Mains.Remove(b);
                     removed.Add(b);
                     again = true;

@@ -1,0 +1,10 @@
+{
+  "nodes": [
+    {"id": "electricity-contracts", "displayName": "Electricity contracts", "description": "10% cheaper electricity per level.", "costs": [3, 3, 3, 3, 3], "requiresOtherNodes": 0},
+    {"id": "starter-kit", "displayName": "Starter kit", "description": "Start each city with a small axial fan in hand. Level 2 adds an inline duct fan, unlocked and in hand.", "costs": [5, 10], "requiresOtherNodes": 0},
+    {"id": "pay-rates", "displayName": "Pay rates", "description": "10% higher base pay per level.", "costs": [4, 4, 4, 4, 4, 4, 4, 4, 4, 4], "requiresOtherNodes": 0},
+    {"id": "materials", "displayName": "Better materials", "description": "Start each city with copper unlocked. Level 2 adds steel.", "costs": [6, 12], "requiresOtherNodes": 0},
+    {"id": "rapid-response", "displayName": "Rapid response", "description": "Repairs and leak detection 20% faster per level.", "costs": [5, 5, 5], "requiresOtherNodes": 0},
+    {"id": "reconstruction-permits", "displayName": "Reconstruction permits", "description": "Ruined plots can be rebuilt, at a very high cost.", "costs": [25], "requiresOtherNodes": 3}
+  ]
+}

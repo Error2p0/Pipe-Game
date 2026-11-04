@@ -26,9 +26,9 @@ namespace HeadLoss.Game.Save
     /// <summary>JSON for saves: public fields only (properties are derived), camelCase, invariant.</summary>
     public static class SaveSerializer
     {
-        public const int CurrentSaveVersion = 3;
-        /// <summary>Generator version written into saves (2: the Phase 3 city and building generators; 3: Phase 4 floors and water).</summary>
-        public const int CurrentGeneratorVersion = 3;
+        public const int CurrentSaveVersion = 4;
+        /// <summary>Generator version written into saves (2: the Phase 3 city and building generators; 3: Phase 4 floors and water; 4: Phase 5 gas in tier 3).</summary>
+        public const int CurrentGeneratorVersion = 4;
 
         sealed class FieldsOnlyResolver : CamelCasePropertyNamesContractResolver
         {
@@ -83,7 +83,19 @@ namespace HeadLoss.Game.Save
         {
             [1] = V1ToV2,
             [2] = V2ToV3,
+            [3] = V3ToV4,
         };
+
+        /// <summary>
+        /// Phase 4 → Phase 5: gas, leaks, ruins and prestige are new fields with empty defaults, so nothing moves. Lifetime
+        /// income becomes the current city's, which it already was (a save has only ever had one city).
+        /// </summary>
+        static void V3ToV4(JObject o)
+        {
+            JObject game = (JObject?)o["gameState"] ?? new JObject();
+            game["generatorVersion"] = game.Value<int?>("generatorVersion") ?? 3;
+            o["gameState"] = game;
+        }
 
         /// <summary>
         /// Phase 3 → Phase 4: the game state learns which generator made its buildings, so loading can refund and reset

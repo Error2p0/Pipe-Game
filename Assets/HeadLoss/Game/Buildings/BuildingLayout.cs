@@ -259,6 +259,9 @@ namespace HeadLoss.Game.Buildings
         /// <summary>Tile of an entry opening.</summary>
         public static TilePos PosOf(EntryOpeningDef o) => new TilePos(o.X, o.Y, o.Floor);
 
+        /// <summary>True when the tile has an outside wall on the given side (exterior openings go there).</summary>
+        public bool HasOutsideWall(TilePos t, string side) => IsInside(t) && !IsInside(Neighbour(t, side));
+
         /// <summary>The panel's tile (at the power connection), if the layout has one.</summary>
         public TilePos? PanelTile
         {

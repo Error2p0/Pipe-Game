@@ -24,6 +24,8 @@ namespace HeadLoss.Core.Data.Defs
     {
         /// <summary>Inline parts (fitting or equipment ids) placed on a duct.</summary>
         public List<string> Parts = new List<string>();
+        /// <summary>Safety gear placed on room tiles and walls (equipment ids).</summary>
+        public List<string> Safety = new List<string>();
     }
 
     /// <summary>UI palette (hex colours) from <c>11-ui-visuals-audio.md</c>.</summary>

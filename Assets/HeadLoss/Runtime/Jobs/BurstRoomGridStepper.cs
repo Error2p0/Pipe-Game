@@ -21,7 +21,7 @@ namespace HeadLoss.Unity.Jobs
         int _inputsRevision = -1;
         NativeArray<int> _room;
         NativeArray<byte> _openE, _openN, _door, _stair;
-        NativeArray<float> _ext, _t, _co2, _o2, _phi, _vx, _vy, _net, _supply, _supplyT, _heatL, _heatU, _co2L, _a, _b;
+        NativeArray<float> _ext, _t, _co2, _o2, _gas, _phi, _vx, _vy, _net, _supply, _supplyT, _supplyL, _gasL, _gasU, _heatL, _heatU, _co2L, _a, _b;
         NativeArray<VentJet> _jets;
 
         void Allocate(RoomGridLayout l)
@@ -38,6 +38,7 @@ namespace HeadLoss.Unity.Jobs
             _t = new NativeArray<float>(2 * n, Allocator.Persistent);
             _co2 = new NativeArray<float>(2 * n, Allocator.Persistent);
             _o2 = new NativeArray<float>(2 * n, Allocator.Persistent);
+            _gas = new NativeArray<float>(2 * n, Allocator.Persistent);
             _a = new NativeArray<float>(2 * n, Allocator.Persistent);
             _b = new NativeArray<float>(2 * n, Allocator.Persistent);
             _phi = new NativeArray<float>(n, Allocator.Persistent);
@@ -46,6 +47,9 @@ namespace HeadLoss.Unity.Jobs
             _net = new NativeArray<float>(n, Allocator.Persistent);
             _supply = new NativeArray<float>(n, Allocator.Persistent);
             _supplyT = new NativeArray<float>(n, Allocator.Persistent);
+            _supplyL = new NativeArray<float>(n, Allocator.Persistent);
+            _gasL = new NativeArray<float>(n, Allocator.Persistent);
+            _gasU = new NativeArray<float>(n, Allocator.Persistent);
             _heatL = new NativeArray<float>(n, Allocator.Persistent);
             _heatU = new NativeArray<float>(n, Allocator.Persistent);
             _co2L = new NativeArray<float>(n, Allocator.Persistent);
@@ -66,6 +70,7 @@ namespace HeadLoss.Unity.Jobs
             _t.CopyFrom(s.T);
             _co2.CopyFrom(s.Co2);
             _o2.CopyFrom(s.O2);
+            if (inp.GasActive) _gas.CopyFrom(s.Gas);
             // The potential only warm-starts the next solve: it stays native while the same state is stepped.
             if (_state != s) _phi.CopyFrom(s.Phi);
             _state = s;
@@ -76,6 +81,9 @@ namespace HeadLoss.Unity.Jobs
                 _net.CopyFrom(s.NetSource);
                 _supply.CopyFrom(inp.SupplyFlow);
                 _supplyT.CopyFrom(inp.SupplyTemperature);
+                _supplyL.CopyFrom(inp.SupplyLower);
+                _gasL.CopyFrom(inp.GasLower);
+                _gasU.CopyFrom(inp.GasUpper);
                 _heatL.CopyFrom(inp.HeatLower);
                 _heatU.CopyFrom(inp.HeatUpper);
                 _co2L.CopyFrom(inp.Co2Lower);
@@ -94,11 +102,11 @@ namespace HeadLoss.Unity.Jobs
                 Cell = p.CellSize, Lower = p.LowerHeight, Upper = p.UpperHeight, Diff = p.Diffusivity, Jet = p.JetLength,
                 Strat = p.Stratification, Mix = p.LayerMixing, FloorK = p.FloorExchange, Mass = p.ThermalMass,
                 Sor = p.SorIterations, Omega = p.SorOmega, RhoCp = p.RhoCp, WallU = p.WallU,
-                MAir = p.AirMolarMass, MCo2 = p.Co2MolarMass,
+                MAir = p.AirMolarMass, MCo2 = p.Co2MolarMass, MGas = p.GasMolarMass, GasActive = inp.GasActive,
                 OutsideT = inp.OutsideTemperature, OutCo2 = inp.OutdoorCo2Ppm, OutO2 = inp.OutdoorO2,
                 Room = _room, OpenE = _openE, OpenN = _openN, Door = _door, Stair = _stair, Ext = _ext,
-                T = _t, Co2 = _co2, O2 = _o2, Phi = _phi, Vx = _vx, Vy = _vy, Net = _net,
-                Supply = _supply, SupplyT = _supplyT, HeatL = _heatL, HeatU = _heatU, Co2L = _co2L,
+                T = _t, Co2 = _co2, O2 = _o2, Gas = _gas, Phi = _phi, Vx = _vx, Vy = _vy, Net = _net,
+                Supply = _supply, SupplyT = _supplyT, SupplyL = _supplyL, GasL = _gasL, GasU = _gasU, HeatL = _heatL, HeatU = _heatU, Co2L = _co2L,
                 Jets = _jets, JetCount = inp.Jets.Count, A = _a, B = _b,
             };
             // Floors are independent within a step; the stairwell exchange between them runs after.
@@ -106,12 +114,13 @@ namespace HeadLoss.Unity.Jobs
             h = new FloorJob
             {
                 NX = l.NX, NY = l.NY, Floors = l.Floors, Dt = dt, Lower = p.LowerHeight, Upper = p.UpperHeight, FloorK = p.FloorExchange,
-                Stair = _stair, T = _t, Co2 = _co2, O2 = _o2,
+                Stair = _stair, T = _t, Co2 = _co2, O2 = _o2, Gas = _gas, GasActive = inp.GasActive,
             }.Schedule(h);
             h.Complete();
             _t.CopyTo(s.T);
             _co2.CopyTo(s.Co2);
             _o2.CopyTo(s.O2);
+            if (inp.GasActive) _gas.CopyTo(s.Gas);
             _vx.CopyTo(s.Vx);
             _vy.CopyTo(s.Vy);
         }
@@ -129,7 +138,7 @@ namespace HeadLoss.Unity.Jobs
             _inputs = null;
             if (!_room.IsCreated) return;
             _room.Dispose(); _openE.Dispose(); _openN.Dispose(); _door.Dispose(); _stair.Dispose(); _ext.Dispose();
-            _t.Dispose(); _co2.Dispose(); _o2.Dispose(); _a.Dispose(); _b.Dispose(); _phi.Dispose(); _vx.Dispose(); _vy.Dispose();
+            _t.Dispose(); _co2.Dispose(); _o2.Dispose(); _gas.Dispose(); _supplyL.Dispose(); _gasL.Dispose(); _gasU.Dispose(); _a.Dispose(); _b.Dispose(); _phi.Dispose(); _vx.Dispose(); _vy.Dispose();
             _net.Dispose(); _supply.Dispose(); _supplyT.Dispose(); _heatL.Dispose(); _heatU.Dispose(); _co2L.Dispose(); _jets.Dispose();
             _layout = null;
         }
@@ -139,12 +148,13 @@ namespace HeadLoss.Unity.Jobs
         struct StepJob : IJobParallelFor
         {
             public int NX, NY, Floors, Sor, JetCount;
-            public float Dt, Cell, Lower, Upper, Diff, Jet, Strat, Mix, FloorK, Mass, Omega, RhoCp, WallU, MAir, MCo2, OutsideT, OutCo2, OutO2;
+            public float Dt, Cell, Lower, Upper, Diff, Jet, Strat, Mix, FloorK, Mass, Omega, RhoCp, WallU, MAir, MCo2, MGas, OutsideT, OutCo2, OutO2;
+            public bool GasActive;
             [ReadOnly] public NativeArray<int> Room;
             [ReadOnly] public NativeArray<byte> OpenE, OpenN, Door, Stair;
-            [ReadOnly] public NativeArray<float> Ext, Net, Supply, SupplyT, HeatL, HeatU, Co2L;
+            [ReadOnly] public NativeArray<float> Ext, Net, Supply, SupplyT, SupplyL, GasL, GasU, HeatL, HeatU, Co2L;
             [ReadOnly] public NativeArray<VentJet> Jets;
-            [NativeDisableParallelForRestriction] public NativeArray<float> T, Co2, O2, Phi, Vx, Vy, A, B;
+            [NativeDisableParallelForRestriction] public NativeArray<float> T, Co2, O2, Gas, Phi, Vx, Vy, A, B;
             int _floor, _c0, _c1;
 
             int N => NX * NY * Floors;
@@ -161,6 +171,7 @@ namespace HeadLoss.Unity.Jobs
                 Advect(T);
                 Advect(Co2);
                 Advect(O2);
+                if (GasActive) Advect(Gas);
                 float limit = Cell * Cell / (4 * Diff);
                 int sub = math.max(1, (int)math.ceil(Dt / limit));
                 float coef = Diff * (Dt / sub) / (Cell * Cell);
@@ -169,6 +180,7 @@ namespace HeadLoss.Unity.Jobs
                     DiffuseOnce(T, coef);
                     DiffuseOnce(Co2, coef);
                     DiffuseOnce(O2, coef);
+                    if (GasActive) DiffuseOnce(Gas, coef);
                 }
                 Heat();
                 Stratify();
@@ -188,6 +200,21 @@ namespace HeadLoss.Unity.Jobs
                         Co2[n + c] += f * (OutCo2 - Co2[n + c]);
                         O2[n + c] += f * (OutO2 - O2[n + c]);
                         T[n + c] += ft * (SupplyT[c] - T[n + c]);
+                        if (GasActive) Gas[n + c] *= 1 - f;
+                    }
+                    float ql = SupplyL[c];
+                    if (ql > 0)
+                    {
+                        float f = math.min(1f, ql * Dt / vl), ft = math.min(1f, ql * Dt / (vl * Mass));
+                        Co2[c] += f * (OutCo2 - Co2[c]);
+                        O2[c] += f * (OutO2 - O2[c]);
+                        T[c] += ft * (SupplyT[c] - T[c]);
+                        if (GasActive) Gas[c] *= 1 - f;
+                    }
+                    if (GasActive)
+                    {
+                        Gas[c] = math.min(1f, Gas[c] + GasL[c] * Dt / vl);
+                        Gas[n + c] = math.min(1f, Gas[n + c] + GasU[c] * Dt / vu);
                     }
                     float co2 = Co2L[c];
                     if (co2 > 0) Co2[c] += co2 * Dt / vl * 1e6f;
@@ -354,6 +381,8 @@ namespace HeadLoss.Unity.Jobs
                 int n = N;
                 float vl = Lower, vu = Upper, wv = vl * vu / (vl + vu);
                 float settle = Strat * math.abs(MCo2 - MAir) / MAir;
+                float buoyancy = math.min(0.5f, Strat * math.abs(MGas - MAir) / MAir * Dt);
+                bool light = MGas < MAir;
                 for (int c = _c0; c < _c1; c++)
                 {
                     if (Room[c] < 0) continue;
@@ -363,12 +392,28 @@ namespace HeadLoss.Unity.Jobs
                     Exchange(T, c, n, f, vl, vu, wv);
                     Exchange(Co2, c, n, f, vl, vu, wv);
                     Exchange(O2, c, n, f, vl, vu, wv);
+                    if (GasActive) Exchange(Gas, c, n, f, vl, vu, wv);
                     float excess = Co2[n + c] - OutCo2;
                     if (excess > 0)
                     {
                         float m = math.min(0.5f, settle * Dt) * excess * vu;
                         Co2[n + c] -= m / vu;
                         Co2[c] += m / vl;
+                    }
+                    if (GasActive)
+                    {
+                        if (light)
+                        {
+                            float m = buoyancy * Gas[c] * vl;
+                            Gas[c] -= m / vl;
+                            Gas[n + c] = math.min(1f, Gas[n + c] + m / vu);
+                        }
+                        else
+                        {
+                            float m = buoyancy * Gas[n + c] * vu;
+                            Gas[n + c] -= m / vu;
+                            Gas[c] = math.min(1f, Gas[c] + m / vl);
+                        }
                     }
                 }
             }
@@ -388,7 +433,8 @@ namespace HeadLoss.Unity.Jobs
             public int NX, NY, Floors;
             public float Dt, Lower, Upper, FloorK;
             [ReadOnly] public NativeArray<byte> Stair;
-            public NativeArray<float> T, Co2, O2;
+            public NativeArray<float> T, Co2, O2, Gas;
+            public bool GasActive;
 
             public void Execute()
             {
@@ -402,6 +448,7 @@ namespace HeadLoss.Unity.Jobs
                     Swap(T, up, low, f, vl, vu, wv);
                     Swap(Co2, up, low, f, vl, vu, wv);
                     Swap(O2, up, low, f, vl, vu, wv);
+                    if (GasActive) Swap(Gas, up, low, f, vl, vu, wv);
                 }
             }
 

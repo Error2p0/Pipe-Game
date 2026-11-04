@@ -19,6 +19,10 @@ namespace HeadLoss.Core.Data.Defs
         public string Grille = "";
         /// <summary>Grille face area, m² (the grille K is referenced to it).</summary>
         public double GrilleFaceAreaM2;
+        /// <summary>The outlet has a flame or a spark (gas stoves): gas in range nearby can ignite.</summary>
+        public bool IsIgnitionSource;
+        /// <summary>Seeded requirement variation for this outlet type, ± fraction (0 = the general one).</summary>
+        public double RequirementVariation;
         /// <summary>Requirements per tier (keys "1" to "5"); a missing tier means not available.</summary>
         public Dictionary<string, OutletRequirementDef> Tiers = new Dictionary<string, OutletRequirementDef>();
     }

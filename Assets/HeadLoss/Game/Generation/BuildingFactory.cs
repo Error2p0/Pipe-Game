@@ -31,10 +31,11 @@ namespace HeadLoss.Game.Generation
     public static class BuildingFactory
     {
         /// <summary>Generates a plot's building. Null when its tier is not built in this version.</summary>
-        public static GeneratedBuilding? Create(DataRepository data, Plot plot, DistrictKind district) =>
-            Create(data, new BuildingRequest(plot.Id, plot.BuildingType, plot.BuildingSeed, plot.StreetSide), district);
+        public static GeneratedBuilding? Create(DataRepository data, Plot plot, DistrictKind district, int ceilingCapacity = 0) =>
+            Create(data, new BuildingRequest(plot.Id, plot.BuildingType, plot.BuildingSeed, plot.StreetSide), district, ceilingCapacity);
 
-        public static GeneratedBuilding? Create(DataRepository data, BuildingRequest req, DistrictKind district)
+        /// <param name="ceilingCapacity">Ceiling capacity units per tile in this city (0 = the data default; the old-buildings modifier lowers it).</param>
+        public static GeneratedBuilding? Create(DataRepository data, BuildingRequest req, DistrictKind district, int ceilingCapacity = 0)
         {
             BuildingTypeDef type = data.BuildingType(req.BuildingType);
             if (!data.BuildingTier(type.Tier).Available) return null;
@@ -44,6 +45,7 @@ namespace HeadLoss.Game.Generation
             {
                 BuildingLayoutDef? def = BuildingGenerator.Generate(data, req, attempt);
                 if (def == null) continue;
+                def.CeilingCapacity = ceilingCapacity;
                 var layout = BuildingLayout.From(data, def);
                 ReferenceResult r = AutoRouter.Build(data, layout);
                 last = new GeneratedBuilding
@@ -62,7 +64,7 @@ namespace HeadLoss.Game.Generation
                 string lower = CityGenerator.RollType(data, type.Tier - 1, district, new Rng(Seeds.Derive(req.Seed, "tier-lower")));
                 if (lower.Length > 0)
                 {
-                    GeneratedBuilding? g = Create(data, new BuildingRequest(req.Id, lower, Seeds.Derive(req.Seed, "tier-lower"), req.StreetSide), district);
+                    GeneratedBuilding? g = Create(data, new BuildingRequest(req.Id, lower, Seeds.Derive(req.Seed, "tier-lower"), req.StreetSide), district, ceilingCapacity);
                     if (g != null)
                     {
                         g.TierLowered = true;

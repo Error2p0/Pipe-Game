@@ -2,14 +2,14 @@
   "tiers": [
     {"tier": 1, "footprintMin": [8, 6], "footprintMax": [10, 8], "floorsMin": 1, "floorsMax": 1, "fluids": ["air"], "referenceEquipment": ["small-axial-fan"], "available": true, "unavailableNote": "", "shaftsMin": 0, "shaftsMax": 0},
     {"tier": 2, "footprintMin": [10, 8], "footprintMax": [14, 10], "floorsMin": 1, "floorsMax": 2, "fluids": ["air", "water"], "referenceEquipment": ["inline-duct-fan"], "available": true, "unavailableNote": "", "referenceWaterEquipment": ["small-booster-pump"], "referenceWaterMaterials": ["pvc", "copper"], "shaftsMin": 1, "shaftsMax": 1},
-    {"tier": 3, "footprintMin": [14, 10], "footprintMax": [20, 14], "floorsMin": 2, "floorsMax": 4, "fluids": ["air", "water", "natural-gas"], "referenceEquipment": ["centrifugal-blower"], "available": true, "unavailableNote": "", "referenceWaterEquipment": ["multistage-pump"], "referenceWaterMaterials": ["pvc", "copper", "steel"], "shaftsMin": 1, "shaftsMax": 2},
+    {"tier": 3, "footprintMin": [14, 10], "footprintMax": [20, 14], "floorsMin": 2, "floorsMax": 4, "fluids": ["air", "water", "natural-gas"], "referenceEquipment": ["centrifugal-blower"], "available": true, "unavailableNote": "", "referenceWaterEquipment": ["multistage-pump"], "referenceWaterMaterials": ["pvc", "copper", "steel"], "referenceGasEquipment": ["gas-regulator"], "referenceGasMaterials": ["copper", "steel"], "shaftsMin": 1, "shaftsMax": 2},
     {"tier": 4, "footprintMin": [20, 14], "footprintMax": [32, 22], "floorsMin": 1, "floorsMax": 6, "fluids": ["air", "water", "natural-gas", "heating-water"], "referenceEquipment": ["ec-fan", "industrial-ahu"], "available": false, "unavailableNote": "Warehouses and offices arrive with gas, heating and cooling", "shaftsMin": 1, "shaftsMax": 3},
     {"tier": 5, "footprintMin": [24, 18], "footprintMax": [40, 28], "floorsMin": 2, "floorsMax": 10, "fluids": ["air", "water", "natural-gas", "oxygen", "nitrogen"], "referenceEquipment": ["industrial-ahu"], "available": false, "unavailableNote": "Industrial and special-gas buildings arrive in a later update", "shaftsMin": 1, "shaftsMax": 3}
   ],
   "roomTypes": [
     {"id": "bedroom", "displayName": "Bedroom", "occupants": 2, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.45, "outlets": [{"type": "air-supply-vent", "min": 1, "areaPerOutlet": 18, "fromTier": 1}]},
     {"id": "living", "displayName": "Living room", "occupants": 2, "occupantsPerM2": 0, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [{"type": "air-supply-vent", "min": 1, "areaPerOutlet": 18, "fromTier": 1}]},
-    {"id": "kitchen", "displayName": "Kitchen", "occupants": 1, "occupantsPerM2": 0, "machinesW": 300, "hub": false, "protected": false, "relativeHumidity": 0.6, "outlets": [{"type": "air-supply-vent", "min": 1, "areaPerOutlet": 0, "fromTier": 1}, {"type": "cold-water-tap", "min": 1, "areaPerOutlet": 0, "fromTier": 2}]},
+    {"id": "kitchen", "displayName": "Kitchen", "occupants": 1, "occupantsPerM2": 0, "machinesW": 300, "hub": false, "protected": false, "relativeHumidity": 0.6, "outlets": [{"type": "air-supply-vent", "min": 1, "areaPerOutlet": 0, "fromTier": 1}, {"type": "cold-water-tap", "min": 1, "areaPerOutlet": 0, "fromTier": 2}, {"type": "gas-stove-outlet", "min": 1, "areaPerOutlet": 30, "fromTier": 3}]},
     {"id": "bathroom", "displayName": "Bathroom", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": false, "protected": false, "relativeHumidity": 0.7, "outlets": [{"type": "air-supply-vent", "min": 1, "areaPerOutlet": 0, "fromTier": 1}, {"type": "cold-water-tap", "min": 1, "areaPerOutlet": 5, "fromTier": 2}]},
     {"id": "dining", "displayName": "Dining room", "occupants": 0, "occupantsPerM2": 0.3, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": [{"type": "air-supply-vent", "min": 1, "areaPerOutlet": 14, "fromTier": 1}]},
     {"id": "hall", "displayName": "Hall", "occupants": 0, "occupantsPerM2": 0, "machinesW": 0, "hub": true, "protected": false, "relativeHumidity": 0.45, "outlets": []},
@@ -123,7 +123,8 @@
     "openingNudges": 5,
     "phaseFluids": [
       "air",
-      "water"
+      "water",
+      "natural-gas"
     ],
     "coreBandWidth": 2,
     "stairwellLength": 3,

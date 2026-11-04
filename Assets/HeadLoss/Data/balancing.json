@@ -96,6 +96,24 @@
     "densityAnchorWater": [
       995,
       1001
+    ],
+    "velocityAnchorMaxGas": 5.0,
+    "pressureAnchorMaxGasMbar": 30,
+    "pressureStepGasMbar": 5,
+    "flowAnchorMaxGasM3h": 5,
+    "flowStepGasM3h": 5,
+    "densityAnchorGas": [
+      0.6,
+      0.8
+    ],
+    "concentrationAnchorFractionOfLfl": 1.0,
+    "co2AnchorPpm": [
+      400,
+      2000
+    ],
+    "o2DeficitAnchor": [
+      0,
+      0.015
     ]
   },
   "drawing": {
@@ -221,7 +239,8 @@
     "shortApproachPenalty": 12,
     "balancingPasses": 80,
     "balanceTarget": 0.4,
-    "coreDrillPenalty": 4
+    "coreDrillPenalty": 4,
+    "gasVelocity": 3.0
   },
   "difficulty": {
     "demandReferenceM3h": 120,
@@ -254,7 +273,10 @@
     "occupantSensibleW": 70,
     "occupantCo2Lps": 0.005,
     "outdoorCo2Ppm": 420,
-    "outdoorO2": 0.209
+    "outdoorO2": 0.209,
+    "windFactorMin": 0.5,
+    "windFactorMax": 1.5,
+    "windPeriodHours": 9
   },
   "roomGrid": {
     "cellSize": 0.5,
@@ -299,7 +321,14 @@
     "valveCloseSeconds": 1,
     "pumpChangeSeconds": 0.5,
     "burstSeconds": 0.05,
-    "checkValveSeconds": 0.1
+    "checkValveSeconds": 0.1,
+    "fittingLeakPerHour": 0.0005,
+    "explosionTimerSeconds": 600,
+    "yieldFactor": 0.1,
+    "blastRadiusK": 0.07,
+    "heavyDamage": 0.6,
+    "lightDamage": 0.1,
+    "equipmentRepairFraction": 0.25
   },
   "power": {
     "basicConnectionKW": 6,
@@ -336,5 +365,46 @@
     "couplingIterations": 3,
     "couplingTolerance": 0.01,
     "removeRefundFraction": 0.5
+  },
+  "gas": {
+    "supplyTemperatureC": 12,
+    "referenceConnectionFactor": 0.9,
+    "alarmDetectorFraction": 0.2,
+    "alarmAnywhereFraction": 0.5,
+    "clearFraction": 0.1,
+    "detectionSeconds": 30,
+    "ignitionRadiusMetres": 1,
+    "leakDischargeCoefficient": 0.6,
+    "burstLeakAreaFraction": 0.25,
+    "weepLeakFraction": 0.05,
+    "fittingLeakAreaFraction": 0.02,
+    "passiveVentFlowM3h": 30,
+    "sparkFreeTier": 3,
+    "sparkFreeFactor": 1.5,
+    "sparkFreeMinPrice": 50
+  },
+  "fines": {
+    "explosionGrossHours": 2,
+    "explosionMinimum": 5000,
+    "neighbourGrossHours": 0.5,
+    "neighbourMinimum": 500
+  },
+  "inspection": {
+    "gasCertHours": 48,
+    "gasCertRenewalPrice": 100,
+    "gasCertCheckSeconds": 600,
+    "gasCertExpiredFactor": 0.5,
+    "gasCertReminderHours": 2
+  },
+  "prestige": {
+    "shareOnline": 0.6,
+    "incomeTargetFirst": 30000000.0,
+    "incomeTargetGrowth": 10,
+    "k": 3,
+    "reconstructionCostFactor": 20
+  },
+  "demo": {
+    "maxTier": 2,
+    "prestige": false
   }
 }

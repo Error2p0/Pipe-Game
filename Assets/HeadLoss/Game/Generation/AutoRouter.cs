@@ -62,8 +62,10 @@ namespace HeadLoss.Game.Generation
         public static ReferenceResult Build(DataRepository data, BuildingLayout layout, List<string>? trace)
         {
             ReferenceResult air = BuildAir(data, layout, trace);
-            if (!air.Solvable || layout.OpeningFor("water") == null) return air;
-            return BuildWater(data, layout, air, trace);
+            if (!air.Solvable) return air;
+            ReferenceResult water = layout.OpeningFor("water") == null ? air : BuildWater(data, layout, air, trace);
+            if (!water.Solvable || layout.OpeningFor("gas") == null) return water;
+            return BuildGas(data, layout, water, trace);
         }
 
         static ReferenceResult BuildAir(DataRepository data, BuildingLayout layout, List<string>? trace)
@@ -168,7 +170,7 @@ namespace HeadLoss.Game.Generation
             BuildingState state = baseState?.Clone() ?? BuildingState.CreateFor(layout);
             if (baseState == null) state.Equipment.Clear();
             bool water = fluid != "air";
-            string material = water ? WaterMaterials(data, layout.Tier)[0] : data.Balancing.Drawing.DefaultMaterial;
+            string material = fluid == BuildingState.GasFluid ? GasMaterials(data, layout.Tier)[0] : water ? WaterMaterials(data, layout.Tier)[0] : data.Balancing.Drawing.DefaultMaterial;
             AutoRouterDef ar0 = data.Balancing.AutoRouter;
             double placeholder = SizesFor(data, layout.Tier, material)[0];
             int maxDegree = data.Balancing.Drawing.MaxNodeDegree;
@@ -245,7 +247,8 @@ namespace HeadLoss.Game.Generation
                 DuctEditor.PlaceRun(net, best, placeholder, material, false);
                 remaining.Remove(bestOutlet);
                 // From tier 2 no later branch may tee in right beside a vent: its own straight stretch keeps room for a damper.
-                if (!water && layout.Tier >= 2 && best.Count >= 3) reserved.Add(best[best.Count - 2]);
+                // Gas branches keep theirs for a shutoff valve (accessible shutoffs).
+                if ((!water || fluid == BuildingState.GasFluid) && layout.Tier >= 2 && best.Count >= 3) reserved.Add(best[best.Count - 2]);
             }
             Prune(net);
             return state;
@@ -260,8 +263,14 @@ namespace HeadLoss.Game.Generation
             var usage = new Dictionary<TilePos, int>();
             foreach (DuctNetworkState n in state.Networks)
                 if (n.FluidId != fluid) DuctEditor.AddUsage(n, (net, s) => CapUnits(data, s), usage);
-            int capacity = data.Balancing.Building.CeilingCapacity;
+            int capacity = layout.Def.CeilingCapacity > 0 ? layout.Def.CeilingCapacity : data.Balancing.Building.CeilingCapacity;
             TilePos? panel = layout.PanelTile;
+            if (fluid == BuildingState.GasFluid)
+            {
+                int clear = (int)(data.FindCode("gas-separation")?.Parameters.GetValueOrDefault("tiles", 2) ?? 2);
+                return t => (usage.TryGetValue(t, out int u) && u + 1 > capacity)
+                    || (panel.HasValue && t.F == panel.Value.F && Math.Max(Math.Abs(t.X - panel.Value.X), Math.Abs(t.Y - panel.Value.Y)) <= clear);
+            }
             bool water = fluid != "air";
             return t => (usage.TryGetValue(t, out int u) && u + 1 > capacity)
                 || (water && (layout.IsElectricalRoom(t) || (panel.HasValue && panel.Value == t)));
@@ -285,6 +294,13 @@ namespace HeadLoss.Game.Generation
         {
             List<string> list = data.BuildingTier(tier).ReferenceWaterMaterials;
             return list.Count > 0 ? list : new List<string> { "pvc" };
+        }
+
+        /// <summary>Gas pipe materials the tier's reference may use, cheapest first.</summary>
+        static List<string> GasMaterials(DataRepository data, int tier)
+        {
+            List<string> list = data.BuildingTier(tier).ReferenceGasMaterials;
+            return list.Count > 0 ? list : new List<string> { "copper" };
         }
 
         /// <summary>Fire dampers on every duct segment that crosses a fire wall, on the tile beside the crossing.</summary>
@@ -890,17 +906,152 @@ namespace HeadLoss.Game.Generation
             return last ?? result;
         }
 
-        /// <summary>Smallest pipe of a tier whose internal velocity stays within the water limit at a flow, mm.</summary>
-        static double WaterSize(DataRepository data, int tier, string material, double flow)
+        /// <summary>Smallest pipe of a tier whose internal velocity stays within the limit at a flow, mm.</summary>
+        static double WaterSize(DataRepository data, int tier, string material, double flow, double velocityLimit = 0)
         {
             List<double> sizes = SizesFor(data, tier, material);
             MaterialDef m = data.Material(material);
+            double limit = velocityLimit > 0 ? velocityLimit : data.Balancing.AutoRouter.WaterVelocity;
             foreach (double mm in sizes)
             {
                 double d = HeadLoss.Core.Units.MmToM(m.InternalDiameterMm(mm));
-                if (flow / (Math.PI * d * d / 4) <= data.Balancing.AutoRouter.WaterVelocity) return mm;
+                if (flow / (Math.PI * d * d / 4) <= limit) return mm;
             }
             return sizes[sizes.Count - 1];
+        }
+
+        // ---------- gas ----------
+
+        /// <summary>
+        /// The gas reference on top of the air and water ones: a tree from the connection to every stove (risers through
+        /// shafts, clear of the panel), the smallest pipes within the gas velocity limit, the tier's regulator, a shutoff valve
+        /// on every branch that needs one, and a passive vent in any gas room short of its air changes.
+        /// </summary>
+        static ReferenceResult BuildGas(DataRepository data, BuildingLayout layout, ReferenceResult prior, List<string>? trace)
+        {
+            EntryOpeningDef connection = layout.OpeningFor("gas")!;
+            var result = new ReferenceResult { State = prior.State, Evaluation = prior.Evaluation, Cost = prior.Cost, EquipmentId = prior.EquipmentId,
+                WaterEquipmentId = prior.WaterEquipmentId, CrankSpeed = prior.CrankSpeed, Dampers = prior.Dampers, MaxPathMetres = prior.MaxPathMetres };
+            double strict = double.PositiveInfinity;
+            string reason = "";
+            BuildingState? routed = null;
+            foreach ((double penalty, bool drill) in new[] { (strict, false), (strict, true) })
+            {
+                routed = RouteTree(data, layout, connection, BuildingState.GasFluid, prior.State, penalty, drill, out reason);
+                if (routed != null) break;
+            }
+            if (routed == null)
+            {
+                result.Reason = "gas: " + reason;
+                return result;
+            }
+            DuctNetworkState net = routed.Gas;
+            string material = GasMaterials(data, layout.Tier)[0];
+            Tree tree = Tree.Of(net, layout, data);
+            foreach (DuctSegment s in net.Segments)
+            {
+                s.MaterialId = material;
+                s.DiameterMm = WaterSize(data, layout.Tier, material, tree.Flow.TryGetValue(s.Id, out double q) ? q : 0, data.Balancing.AutoRouter.GasVelocity);
+            }
+            DuctEditor.Normalize(net);
+            if (layout.Tier >= data.Fitting("elbow-90-long-radius").Tier)
+                foreach (DuctNode node in net.Nodes)
+                    if (DuctEditor.IsElbow(net, node)) node.SmoothFittings = true;
+            foreach (string id in data.BuildingTier(layout.Tier).ReferenceGasEquipment)
+                routed.Equipment.Add(new EquipmentState { EquipmentId = id, OpeningId = connection.Id, On = true });
+            PlaceGasShutoffs(data, layout, routed);
+            (BuildingEvaluation ev, NetworkSnapshot snap) = SolveAll(data, layout, routed, 0);
+            // Stoves short of their minimum: the fastest pipe on their path grows.
+            for (int pass = 0; pass < data.Balancing.AutoRouter.BalancingPasses; pass++)
+            {
+                OutletStatus? low = null;
+                foreach (OutletStatus o in ev.Outlets)
+                    if (o.Def.Fluid == BuildingState.GasFluid && o.Zone == OutletZone.BelowMinimum && (low == null || o.Delivery < low.Delivery)) low = o;
+                if (low == null || !UpsizePath(data, layout, net, low.OutletId, snap.Gas!)) break;
+                (ev, snap) = SolveAll(data, layout, routed, 0);
+            }
+            PlaceKitchenVents(data, layout, routed, snap);
+            (ev, snap) = SolveAll(data, layout, routed, 0);
+            ev.ApplyViolations(Codes.CodeChecker.Check(data, layout, routed, snap));
+            result.State = routed;
+            result.Evaluation = ev;
+            result.Cost = Pricing.Value(data, layout, routed);
+            result.Solvable = ev.Online && ev.AboveCodeMax == 0 && ev.BlockingViolations == 0 && WorstRatingRatio(data, routed.Water, snap.Water!, out _) <= 1;
+            if (!result.Solvable)
+                result.Reason = ev.BelowMinimum > 0 ? $"{ev.BelowMinimum} outlets below minimum" : ev.AboveCodeMax > 0 ? $"{ev.AboveCodeMax} outlets above code max" : ev.BlockingViolations > 0 ? ev.Violations[0].Reason : "pipe above rating";
+            trace?.Add($"gas: {result.Reason}");
+            return result;
+        }
+
+        /// <summary>A shutoff valve on the straight part of every gas branch the accessible-shutoffs code flags.</summary>
+        static void PlaceGasShutoffs(DataRepository data, BuildingLayout layout, BuildingState s)
+        {
+            DuctNetworkState net = s.Gas;
+            for (int guard = 0; guard < 64; guard++)
+            {
+                bool placed = false;
+                foreach (Codes.Violation v in Codes.CodeChecker.Check(data, layout, s))
+                {
+                    if (v.CodeId != "accessible-shutoffs") continue;
+                    foreach (TilePos t in v.Tiles)
+                    {
+                        if (DuctEditor.ValidateInline(net, t) != DrawError.None) continue;
+                        (int dx, int dy) = DuctEditor.DefaultInlineDirection(net, t);
+                        DuctEditor.PlaceInline(net, t, "shutoff-valve", dx, dy);
+                        placed = true;
+                        break;
+                    }
+                    if (placed) break;
+                }
+                if (!placed) return;
+            }
+        }
+
+        /// <summary>A passive vent on an outside wall of each gas room short of its air changes.</summary>
+        static void PlaceKitchenVents(DataRepository data, BuildingLayout layout, BuildingState s, NetworkSnapshot snap)
+        {
+            foreach (Codes.Violation v in Codes.CodeChecker.Check(data, layout, s, snap))
+            {
+                if (v.CodeId != "gas-room-ventilation" || v.Tiles.Count == 0) continue;
+                RoomDef? room = layout.RoomOf(v.Tiles[0]);
+                if (room == null) continue;
+                bool done = false;
+                for (int x = room.X; x < room.X + room.Width && !done; x++)
+                    for (int y = room.Y; y < room.Y + room.Height && !done; y++)
+                        foreach (string side in new[] { "north", "south", "east", "west" })
+                        {
+                            var t = new TilePos(x, y, room.Floor);
+                            if (!layout.HasOutsideWall(t, side)) continue;
+                            s.Safety.Add(new SafetyDevice { EquipmentId = Failures.GasSafetyIds.PassiveVent, X = x, Y = y, Floor = room.Floor, Facing = side, High = true });
+                            done = true;
+                            break;
+                        }
+            }
+        }
+
+        /// <summary>Grows the fastest pipe on the path to an outlet by one size.</summary>
+        static bool UpsizePath(DataRepository data, BuildingLayout layout, DuctNetworkState net, string outletId, FluidSolve w)
+        {
+            Tree tree = Tree.Of(net, layout, data);
+            DuctNode? node = net.Nodes.Find(n => n.Kind == DuctNodeKind.Outlet && n.AnchorId == outletId);
+            DuctSegment? fastest = null;
+            double vMax = -1;
+            for (int hop = 0; node != null && hop < 256; hop++)
+            {
+                DuctSegment? seg = null;
+                foreach (DuctSegment x in net.Segments)
+                    if (tree.Upstream.TryGetValue(x.Id, out int up) && x.Other(up) == node.Id) seg = x;
+                if (seg == null) break;
+                List<double> sizes = SizesFor(data, layout.Tier, seg.MaterialId);
+                double v = w.Compiled.SegmentLink.TryGetValue(seg.Id, out int link) ? Math.Abs(w.Result.Velocity[link]) : 0;
+                if (seg.DiameterMm < sizes[sizes.Count - 1] && v > vMax) { vMax = v; fastest = seg; }
+                node = net.FindNode(tree.Upstream[seg.Id]);
+            }
+            if (fastest == null) return false;
+            List<double> all = SizesFor(data, layout.Tier, fastest.MaterialId);
+            fastest.DiameterMm = all[all.IndexOf(fastest.DiameterMm) + 1];
+            DuctEditor.Normalize(net);
+            return true;
         }
 
         /// <summary>Solves both networks at the reference conditions (air at the default temperature, water at the reference connection pressure).</summary>
@@ -913,14 +1064,24 @@ namespace HeadLoss.Game.Generation
                 CrankSpeed = crank,
                 WaterConnected = true,
                 WaterPressurePa = BuildingSession.ReferenceWaterPressure(data),
+                GasConnected = true,
+                GasPressurePa = BuildingSession.ReferenceGasPressure(data),
             };
             var airProps = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
             var waterProps = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
             CompiledNetwork ca = NetworkCompiler.Compile(layout, s, data, "air", options);
             CompiledNetwork cw = NetworkCompiler.Compile(layout, s, data, "water", options);
+            FluidSolve? gas = null;
+            if (layout.OpeningFor("gas") != null)
+            {
+                var gasProps = new TableFluid(data.Fluid(BuildingState.GasFluid), data.FluidTables[BuildingState.GasFluid], data.Balancing.Physics.GasConstant);
+                CompiledNetwork cg = NetworkCompiler.Compile(layout, s, data, BuildingState.GasFluid, options);
+                gas = new FluidSolve(cg, new NetworkSolver(settings).Solve(cg.Graph, gasProps));
+            }
             var snap = new NetworkSnapshot(new FluidSolve(ca, new NetworkSolver(settings).Solve(ca.Graph, airProps)),
-                new FluidSolve(cw, new NetworkSolver(settings).Solve(cw.Graph, waterProps)), s);
-            return (BuildingEconomy.Evaluate(data, layout, snap), snap);
+                new FluidSolve(cw, new NetworkSolver(settings).Solve(cw.Graph, waterProps)), s, gas);
+            // Gas outlets count only once the gas network is routed.
+            return (BuildingEconomy.Evaluate(data, layout, snap.All, null, s.Gas.Segments.Count == 0 ? BuildingState.GasFluid : null), snap);
         }
 
         /// <summary>Highest pressure along each water segment over its rating (x = p_max / p_rated), and the worst one.</summary>

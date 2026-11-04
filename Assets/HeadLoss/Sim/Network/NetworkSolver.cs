@@ -318,7 +318,7 @@ namespace HeadLoss.Sim.Network
                 if (!NetworkGraph.IsControl(l.Kind)) continue;
                 double pFrom = res.NodePressure[l.From], pTo = res.NodePressure[l.To];
                 bool fromLive = res.NodeActive[l.From], toLive = res.NodeActive[l.To];
-                double elevation = rho[k] * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
+                double elevation = (rho[k] - graph.AmbientDensity) * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
                 double flow = res.Flow[k];
                 LinkStatus s = status[k];
                 LinkStatus next = s;
@@ -368,7 +368,7 @@ namespace HeadLoss.Sim.Network
         {
             for (int k = 0; k < graph.Links.Count; k++)
                 if (res.LinkActive[k] && graph.Links[k].Kind == LinkKind.Fan) return true;
-            double rho = res.Density.Length > 0 ? res.Density[0] : 0;
+            double rho = (res.Density.Length > 0 ? res.Density[0] : 0) - graph.AmbientDensity;
             bool first = true;
             double head = 0;
             for (int i = 0; i < graph.Nodes.Count; i++)
@@ -387,7 +387,7 @@ namespace HeadLoss.Sim.Network
         /// <summary>Zero flow; every active node sits at the common piezometric head.</summary>
         void SolveStatic(NetworkGraph graph, SolveResult res, int[] unknown)
         {
-            double rho = res.Density.Length > 0 ? res.Density[0] : 0;
+            double rho = (res.Density.Length > 0 ? res.Density[0] : 0) - graph.AmbientDensity;
             double head = 0;
             for (int i = 0; i < graph.Nodes.Count; i++)
             {
@@ -522,7 +522,7 @@ namespace HeadLoss.Sim.Network
         double Evaluate(NetworkGraph graph, int k, double flow, double density, double viscosity, out double derivative, out PipeLossResult loss)
         {
             NetworkLink l = graph.Links[k];
-            double elevation = density * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
+            double elevation = (density - graph.AmbientDensity) * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
             loss = default;
             switch (l.Kind)
             {
@@ -597,7 +597,7 @@ namespace HeadLoss.Sim.Network
                 double rho = res.Density[k];
                 double mu = viscosity[k];
                 Evaluate(graph, k, q, rho, mu, out _, out PipeLossResult loss);
-                res.DpElevation[k] = rho * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
+                res.DpElevation[k] = (rho - graph.AmbientDensity) * _s.Gravity * (graph.Nodes[l.To].Elevation - graph.Nodes[l.From].Elevation);
                 res.MassFlow[k] = rho * q;
                 res.Velocity[k] = q / l.Area;
                 if (l.Kind == LinkKind.Fan)

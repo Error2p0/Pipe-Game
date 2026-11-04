@@ -41,6 +41,8 @@ namespace HeadLoss.Core.Data.Defs
         public List<string> Codes = new List<string>();
         /// <summary>Hand-crank speed the reference must meet every minimum at (0 = no crank reference).</summary>
         public double ReferenceCrankSpeed;
+        /// <summary>Ceiling capacity units per tile in this building (0 = the data default; the old-buildings modifier lowers it).</summary>
+        public int CeilingCapacity;
     }
 
     /// <summary>A tile (columns).</summary>

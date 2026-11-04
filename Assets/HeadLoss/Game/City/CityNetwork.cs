@@ -46,6 +46,8 @@ namespace HeadLoss.Game.City
     public sealed class CityNetworkResult
     {
         public readonly Dictionary<string, WaterConnection> Water = new Dictionary<string, WaterConnection>();
+        /// <summary>Gas connections: pressure at the plot, and the share of its demand the mains carry.</summary>
+        public readonly Dictionary<string, WaterConnection> Gas = new Dictionary<string, WaterConnection>();
         public readonly Dictionary<string, PowerConnection> Power = new Dictionary<string, PowerConnection>();
         /// <summary>Requested load ÷ capacity per main or cable id (above 1 = overloaded).</summary>
         public readonly Dictionary<int, double> Utilisation = new Dictionary<int, double>();
@@ -65,10 +67,12 @@ namespace HeadLoss.Game.City
     {
         /// <param name="waterDemand">A plot's water inflow, m³/s.</param>
         /// <param name="powerDemand">A plot's requested electrical draw, kW.</param>
-        public static CityNetworkResult Solve(DataRepository data, CityLayout city, UtilityState u, Func<string, double> waterDemand, Func<string, double> powerDemand)
+        /// <param name="gasDemand">A plot's gas inflow, m³/s at its own (low) pressure; null = none.</param>
+        public static CityNetworkResult Solve(DataRepository data, CityLayout city, UtilityState u, Func<string, double> waterDemand, Func<string, double> powerDemand, Func<string, double>? gasDemand = null)
         {
             var r = new CityNetworkResult();
             SolveWater(data, city, u, waterDemand, r);
+            SolveGas(data, city, u, gasDemand ?? (_ => 0), r);
             SolvePower(data, city, u, powerDemand, r);
             return r;
         }
@@ -85,10 +89,11 @@ namespace HeadLoss.Game.City
         }
 
         /// <summary>Nodes at every main's ends and where another main of the utility starts or ends on it; links between them.</summary>
-        static Graph Build(CityLayout city, UtilityState u, string utility, Func<MainState, double> capacity, Func<MainState, double> diameter, double roughness)
+        /// <param name="pressureClass">Gas: only the mains of this class ("" = all of the utility).</param>
+        static Graph Build(CityLayout city, UtilityState u, string utility, Func<MainState, double> capacity, Func<MainState, double> diameter, double roughness, string pressureClass = "")
         {
             var g = new Graph();
-            var mains = u.Mains.FindAll(m => m.Utility == utility && m.Tiles.Count >= 2);
+            var mains = u.Mains.FindAll(m => m.Utility == utility && m.Tiles.Count >= 2 && (pressureClass.Length == 0 || m.PressureClass == pressureClass));
             var splits = new HashSet<(int, int)>();
             foreach (MainState m in mains) { splits.Add(m.Start); splits.Add(m.End); }
             int NodeAt((int, int) t)
@@ -134,10 +139,40 @@ namespace HeadLoss.Game.City
             PipeFamilyDef? family = Utilities.FamilyFor(data, "water");
             if (family == null) return;
             Graph g = Build(city, u, "water", m => Utilities.CapacityM3s(family, m.DiameterMm), m => m.DiameterMm / 1000, family.RoughnessMm / 1000);
-            if (g.G.Links.Count == 0) return;
             double source = data.Balancing.City.FacilityPressure.TryGetValue("water", out double p) ? p : 0;
+            var fluid = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
+            SolvePiped(data, city, "water", g, source, demand, fluid, r.Water, r);
+        }
+
+        /// <summary>
+        /// Gas: one graph per pressure class, each from the receiving station at its class's pressure. A building's demand is
+        /// its flow at its own low pressure; mass is conserved, so at line conditions it is smaller by the density ratio
+        /// (MP and HP lines use the table's real-gas density, D21).
+        /// </summary>
+        static void SolveGas(DataRepository data, CityLayout city, UtilityState u, Func<string, double> demand, CityNetworkResult r)
+        {
+            PipeFamilyDef? family = Utilities.FamilyFor(data, "gas");
+            if (family == null) return;
+            FluidDef def = data.Fluid(Buildings.BuildingState.GasFluid);
+            FluidTableDef table = data.FluidTables[def.Id];
+            double atm = data.Balancing.Physics.AtmosphericPressurePa;
+            double t = Core.Units.CToK(data.Balancing.Gas.SupplyTemperatureC);
+            foreach (PressureClassDef c in family.PressureClasses)
+            {
+                Graph g = Build(city, u, "gas", m => Utilities.CapacityM3s(family, m.DiameterMm, m.PressureClass), m => m.DiameterMm / 1000, family.RoughnessMm / 1000, c.Id);
+                double source = data.Balancing.City.FacilityPressure.TryGetValue(c.FacilityPressureKey, out double p) ? p : 0;
+                var fluid = new TableFluid(def, table, data.Balancing.Physics.GasConstant, c.Id != "lp");
+                double ratio = fluid.Density(atm + data.Balancing.City.FacilityPressure["gas-lp"] / 3, t) / fluid.Density(atm + source, t);
+                SolvePiped(data, city, "gas", g, source, plot => demand(plot) * ratio, fluid, r.Gas, r);
+            }
+        }
+
+        static void SolvePiped(DataRepository data, CityLayout city, string utility, Graph g, double source, Func<string, double> demand, IFluidProperties fluid,
+            Dictionary<string, WaterConnection> into, CityNetworkResult r)
+        {
+            if (g.G.Links.Count == 0) return;
             foreach (var kv in g.Node)
-                if (OnFacility(city, kv.Key, "water", out _))
+                if (OnFacility(city, kv.Key, utility, out _))
                 {
                     g.G.Nodes[kv.Value].Kind = NodeKind.FixedPressure;
                     g.G.Nodes[kv.Value].FixedPressure = source;
@@ -151,7 +186,6 @@ namespace HeadLoss.Game.City
                 share[kv.Key] = 1;
                 g.G.Nodes[kv.Value].Kind = NodeKind.Demand;
             }
-            var fluid = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
             var solver = new NetworkSolver(SolverSettings.FromBalancing(data.Balancing));
             SolveResult? res = null;
             Dictionary<int, int>? parent = null;
@@ -190,7 +224,7 @@ namespace HeadLoss.Game.City
                 double pressure = live ? res.NodePressure[kv.Value] : 0;
                 // A starved connection: the same piping pushes only the share through, so the pressure the building sees
                 // falls with the square of the share (D90).
-                r.Water[kv.Key] = new WaterConnection(live, Math.Max(0, pressure * s * s), s);
+                into[kv.Key] = new WaterConnection(live, Math.Max(0, pressure * s * s), s);
             }
         }
 

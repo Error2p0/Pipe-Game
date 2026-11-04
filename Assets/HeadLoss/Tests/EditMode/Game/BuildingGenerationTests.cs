@@ -81,9 +81,11 @@ namespace HeadLoss.Game.Tests
                     Assert.AreEqual(rooms, seen.Count, $"{type} seed {seed}: every room on floor {f} reachable through doors");
                 }
 
-                // Openings: the air intake and the power connection, and a water connection when there are taps.
+                // Openings: the air intake and the power connection, a water connection when there are taps, a gas one with stoves.
                 bool taps = def.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == "water");
-                Assert.AreEqual(taps ? 3 : 2, def.EntryOpenings.Count);
+                bool stoves = def.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == BuildingState.GasFluid);
+                Assert.AreEqual(2 + (taps ? 1 : 0) + (stoves ? 1 : 0), def.EntryOpenings.Count);
+                Assert.AreEqual(t.Tier >= 3, stoves, "gas stoves from tier 3");
                 Assert.AreEqual(1, def.EntryOpenings.FindAll(o => o.Utility == "air").Count);
                 Assert.AreEqual(1, def.EntryOpenings.FindAll(o => o.Utility == "power").Count);
                 Assert.AreEqual(taps ? 1 : 0, def.EntryOpenings.FindAll(o => o.Utility == "water").Count);

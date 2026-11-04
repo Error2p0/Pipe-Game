@@ -43,6 +43,7 @@ namespace HeadLoss.Game.Generation
         /// <c>generation.openingNudges</c> keep the rooms and move the intake, later ones regenerate the rooms.
         /// Returns null when the type cannot be laid out (no program).
         /// </summary>
+        /// <remarks>City modifiers (ceiling capacity) are applied by <see cref="BuildingFactory"/>.</remarks>
         public static BuildingLayoutDef? Generate(DataRepository data, BuildingRequest req, int attempt = 0)
         {
             BuildingTypeDef type = data.BuildingType(req.BuildingType);

@@ -221,7 +221,7 @@ namespace HeadLoss.Game.Commands
         protected override bool Apply(BuildingSession s)
         {
             foreach (string? id in new[] { _material, _sealing, _insulation })
-                if (id != null && !s.Unlocked(Tech.ItemTier(s.Data, id))) return false;
+                if (id != null && !s.ItemUnlocked(id)) return false;
             if (_material != null && s.Data.FindMaterial(_material)?.Fluids.Contains(_fluid) != true) return false;
             if (_sealing != null && (_fluid != "air" || _sealing.Length > 0 && s.Data.FindSealing(_sealing) == null)) return false;
             if (_insulation != null && _insulation.Length > 0 && s.Data.FindInsulation(_insulation) == null) return false;
@@ -310,7 +310,7 @@ namespace HeadLoss.Game.Commands
                 return true;
             }
             EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
-            if (def == null || def.Placement != "intake" || !s.Unlocked(def.Tier)) return false;
+            if (def == null || def.Placement != "intake" || !s.ItemUnlocked(_equipmentId)) return false;
             if (!EquipmentFits.Opening(s.Data, s.Layout.FindOpening(_openingId)!, def)) return false;
             LastError = EquipmentFits.FloorSpace(s, _openingId, def, out _);
             if (LastError != DrawError.None) return false;
@@ -346,7 +346,7 @@ namespace HeadLoss.Game.Commands
         {
             LastError = DuctEditor.ValidateInline(s.State.Net(_fluid), _tile);
             if (LastError == DrawError.None && !EquipmentFits.InlinePart(s.Data, _partId, _fluid)) LastError = DrawError.WrongNetwork;
-            if (LastError == DrawError.None && !s.Unlocked(Tech.ItemTier(s.Data, _partId))) LastError = DrawError.Locked;
+            if (LastError == DrawError.None && !s.ItemUnlocked(_partId)) LastError = DrawError.Locked;
             if (LastError != DrawError.None) return false;
             (int dx, int dy) = DuctEditor.DefaultInlineDirection(s.State.Net(_fluid), _tile);
             if (_reverse) (dx, dy) = (-dx, -dy);
@@ -445,6 +445,127 @@ namespace HeadLoss.Game.Commands
             if (d2 == null || (_fit && !s.Unlocked(d2.Tier))) return false;
             n.Vsd = _fit;
             n.Speed = 1;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Makes an electrical item spark-free, or back (<c>07-equipment.md</c> §Safety gear): at an opening or inline. Bought with
+    /// the Commit for the difference; the item stops being an ignition source.
+    /// </summary>
+    public sealed class SetSparkFreeCommand : DesignCommand
+    {
+        readonly string _openingId;
+        readonly TilePos _tile;
+        readonly string _fluid;
+        readonly bool _on;
+
+        public SetSparkFreeCommand(string openingId, bool on)
+        {
+            _openingId = openingId;
+            _fluid = "air";
+            _on = on;
+        }
+
+        public SetSparkFreeCommand(TilePos inlineTile, string fluid, bool on)
+        {
+            _openingId = "";
+            _tile = inlineTile;
+            _fluid = fluid;
+            _on = on;
+        }
+
+        public override string Description => _on ? "Spark-free variant" : "Standard variant";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            if (_on && !s.Unlocked(s.Data.Balancing.Gas.SparkFreeTier)) return false;
+            if (_openingId.Length > 0)
+            {
+                EquipmentState? e = s.State.EquipmentAt(_openingId);
+                if (e == null || e.SparkFree == _on || s.Data.FindEquipment(e.EquipmentId)?.IsIgnitionSource != true) return false;
+                e.SparkFree = _on;
+                return true;
+            }
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
+            if (n == null || n.Kind != DuctNodeKind.Inline || n.SparkFree == _on || s.Data.FindEquipment(n.PartId)?.IsIgnitionSource != true) return false;
+            n.SparkFree = _on;
+            return true;
+        }
+    }
+
+    /// <summary>Places a gas detector on a room tile, or a passive vent on an exterior wall (<c>07-equipment.md</c> §Safety gear).</summary>
+    public sealed class PlaceSafetyCommand : DesignCommand
+    {
+        readonly string _equipmentId;
+        readonly TilePos _tile;
+        readonly bool _high;
+
+        /// <param name="high">Passive vents: high in the wall, else low.</param>
+        public PlaceSafetyCommand(string equipmentId, TilePos tile, bool high = true)
+        {
+            _equipmentId = equipmentId;
+            _tile = tile;
+            _high = high;
+        }
+
+        public override string Description => "Place " + _equipmentId;
+        public DrawError LastError { get; private set; }
+
+        protected override bool Apply(BuildingSession s)
+        {
+            LastError = DrawError.None;
+            EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
+            if (def == null || (def.Placement != "room" && def.Placement != "wall")) { LastError = DrawError.WrongNetwork; return false; }
+            if (!s.ItemUnlocked(_equipmentId)) { LastError = DrawError.Locked; return false; }
+            if (!s.Layout.IsInside(_tile)) { LastError = DrawError.OutsideBuilding; return false; }
+            if (s.State.Safety.Exists(d => d.Pos == _tile && d.EquipmentId == _equipmentId)) { LastError = DrawError.Duplicate; return false; }
+            string facing = "";
+            if (def.Placement == "wall")
+            {
+                foreach (string side in new[] { "north", "south", "east", "west" })
+                    if (s.Layout.HasOutsideWall(_tile, side)) { facing = side; break; }
+                if (facing.Length == 0) { LastError = DrawError.NotOnOutsideWall; return false; }
+            }
+            s.State.Safety.Add(new SafetyDevice { EquipmentId = _equipmentId, X = _tile.X, Y = _tile.Y, Floor = _tile.F, Facing = facing, High = _high });
+            return true;
+        }
+    }
+
+    public sealed class RemoveSafetyCommand : DesignCommand
+    {
+        readonly string _equipmentId;
+        readonly TilePos _tile;
+
+        public RemoveSafetyCommand(string equipmentId, TilePos tile)
+        {
+            _equipmentId = equipmentId;
+            _tile = tile;
+        }
+
+        public override string Description => "Remove " + _equipmentId;
+        protected override bool Apply(BuildingSession s) => s.State.Safety.RemoveAll(d => d.Pos == _tile && d.EquipmentId == _equipmentId) > 0;
+    }
+
+    /// <summary>Moves a passive vent high or low in its wall.</summary>
+    public sealed class SetVentHeightCommand : DesignCommand
+    {
+        readonly TilePos _tile;
+        readonly bool _high;
+
+        public SetVentHeightCommand(TilePos tile, bool high)
+        {
+            _tile = tile;
+            _high = high;
+        }
+
+        public override string Description => _high ? "Vent high in the wall" : "Vent low in the wall";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            SafetyDevice? d = s.State.Safety.Find(x => x.Pos == _tile && x.EquipmentId == Failures.GasSafetyIds.PassiveVent);
+            if (d == null || d.High == _high) return false;
+            d.High = _high;
             return true;
         }
     }

@@ -69,11 +69,15 @@ namespace HeadLoss.Core
         /// <param name="pa">Pa.</param>
         public static string FormatBar(double pa) => Number(pa / PaPerBar, 2) + " bar";
 
-        /// <summary>A pressure in the unit of a fluid: Pa for air, bar for liquids.</summary>
-        public static string FormatPressure(double pa, string fluid) => fluid == "air" ? FormatPa(pa) : FormatBar(pa);
+        /// <summary>Pressure in mbar (gas).</summary>
+        /// <param name="pa">Pa.</param>
+        public static string FormatMbar(double pa) => Number(pa / PaPerMbar, 1) + " mbar";
 
-        /// <summary>A flow in the unit of a fluid: m³/h for air, L/s for liquids.</summary>
-        public static string FormatFlow(double m3s, string fluid) => fluid == "air" ? FormatAirFlow(m3s) : FormatWaterFlow(m3s);
+        /// <summary>A pressure in the unit of a fluid: Pa for air, mbar for gas, bar for liquids.</summary>
+        public static string FormatPressure(double pa, string fluid) => fluid == "air" ? FormatPa(pa) : fluid == "natural-gas" ? FormatMbar(pa) : FormatBar(pa);
+
+        /// <summary>A flow in the unit of a fluid: m³/h for air and gas, L/s for liquids.</summary>
+        public static string FormatFlow(double m3s, string fluid) => fluid == "air" || fluid == "natural-gas" ? FormatAirFlow(m3s) : FormatWaterFlow(m3s);
 
         /// <summary>A calm duration: "45 s", "12 min", "3.5 h", "2 days".</summary>
         /// <param name="seconds">s.</param>

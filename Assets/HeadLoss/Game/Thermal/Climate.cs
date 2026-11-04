@@ -27,13 +27,18 @@ namespace HeadLoss.Game.Thermal
             foreach (string id in modifiers)
             {
                 CityModifierDef? m = data.City.Modifiers.Find(x => x.Id == id);
-                if (m != null) _shift += m.OutsideTemperatureShift;
+                if (m == null) continue;
+                _shift += m.OutsideTemperatureShift;
+                if (m.WallU > 0) WallUOverride = m.WallU;
             }
         }
 
         /// <summary>A climate with a fixed temperature (test fixtures).</summary>
         public static Climate Fixed(DataRepository data, double temperatureC) =>
             new Climate(data, Array.Empty<string>()) { FixedTemperatureC = temperatureC };
+
+        /// <summary>Exterior wall U-value set by a city modifier, W/(m²·K) (0 = the data default).</summary>
+        public double WallUOverride { get; }
 
         /// <summary>Outside air temperature now, °C.</summary>
         public double OutsideTemperatureC => FixedTemperatureC ?? OutsideTemperatureAt(LocalHour);
@@ -44,6 +49,17 @@ namespace HeadLoss.Game.Thermal
         /// <summary>Outside air temperature at a local hour, °C.</summary>
         public double OutsideTemperatureAt(double hour) =>
             _def.MeanTemperatureC + _shift + _def.DailyAmplitudeK * Math.Cos(2 * Math.PI * (hour - _def.WarmestHour) / 24);
+
+        /// <summary>Wind factor on passive vents now (a slow sine between the data's limits; 1 with a fixed temperature).</summary>
+        public double WindFactor
+        {
+            get
+            {
+                if (FixedTemperatureC.HasValue || _def.WindPeriodHours <= 0) return 1;
+                double mid = (_def.WindFactorMin + _def.WindFactorMax) / 2, half = (_def.WindFactorMax - _def.WindFactorMin) / 2;
+                return mid + half * Math.Sin(2 * Math.PI * LocalHour / _def.WindPeriodHours);
+            }
+        }
 
         /// <summary>Daylight factor 0–1 (half sine between sunrise and sunset, 0 at night).</summary>
         public double Daylight(double hour)

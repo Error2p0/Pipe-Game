@@ -100,6 +100,11 @@ namespace HeadLoss.Sim.Network
     {
         public readonly List<NetworkNode> Nodes = new List<NetworkNode>();
         public readonly List<NetworkLink> Links = new List<NetworkLink>();
+        /// <summary>
+        /// Density of the surrounding air for gas networks, kg/m³ (0 for liquids): gauge pressure is referenced to the
+        /// local atmosphere, so a gas link's elevation term is (ρ − ρ_ambient)·g·Δz and light gas gains pressure going up (D7).
+        /// </summary>
+        public double AmbientDensity;
 
         public int AddNode(NodeKind kind, double elevation = 0, double fixedPressure = 0, double demand = 0, string label = "")
         {

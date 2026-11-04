@@ -17,6 +17,7 @@ namespace HeadLoss.Game.Buildings
         {
             "air" => "air-mover",
             "water" => "water-mover",
+            "gas" => "gas-supply",
             "power" => "panel",
             _ => "",
         };

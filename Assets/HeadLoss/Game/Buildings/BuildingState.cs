@@ -42,6 +42,8 @@ namespace HeadLoss.Game.Buildings
         public bool Vsd;
         /// <summary>Inline fans with a VSD: speed fraction (0.2–1).</summary>
         public double Speed = 1;
+        /// <summary>Inline electrical parts: the spark-free variant (not an ignition source).</summary>
+        public bool SparkFree;
 
         public TilePos Pos => new TilePos(X, Y, Floor);
         public DuctNode Clone() => (DuctNode)MemberwiseClone();
@@ -113,8 +115,27 @@ namespace HeadLoss.Game.Buildings
         public double Speed = 1;
         /// <summary>A variable-speed drive is fitted (on/off fans only).</summary>
         public bool Vsd;
+        /// <summary>The spark-free variant: not an ignition source (<c>07-equipment.md</c> §Safety gear).</summary>
+        public bool SparkFree;
 
         public EquipmentState Clone() => (EquipmentState)MemberwiseClone();
+    }
+
+    /// <summary>Safety gear placed in a room or on an exterior wall: gas detectors and passive vents.</summary>
+    public sealed class SafetyDevice
+    {
+        /// <summary>Equipment id (gas-detector, passive-vent-opening).</summary>
+        public string EquipmentId = "";
+        public int X;
+        public int Y;
+        public int Floor;
+        /// <summary>Passive vents: the outside wall it opens through (north, south, east, west).</summary>
+        public string Facing = "";
+        /// <summary>Passive vents: high in the wall (feeds the upper layer) or low (the lower layer).</summary>
+        public bool High = true;
+
+        public TilePos Pos => new TilePos(X, Y, Floor);
+        public SafetyDevice Clone() => (SafetyDevice)MemberwiseClone();
     }
 
     /// <summary>
@@ -127,10 +148,26 @@ namespace HeadLoss.Game.Buildings
         public DuctNetworkState Air = new DuctNetworkState();
         /// <summary>Cold water network (tier 2+).</summary>
         public DuctNetworkState Water = new DuctNetworkState { FluidId = "water" };
+        /// <summary>Natural gas network (tier 3+).</summary>
+        public DuctNetworkState Gas = new DuctNetworkState { FluidId = GasFluid };
         public List<EquipmentState> Equipment = new List<EquipmentState>();
+        /// <summary>Gas detectors and passive vents.</summary>
+        public List<SafetyDevice> Safety = new List<SafetyDevice>();
+
+        /// <summary>Fluid id of the gas network.</summary>
+        public const string GasFluid = "natural-gas";
 
         /// <summary>Fluid ids of the building networks, in solve order.</summary>
-        public static readonly string[] FluidIds = { "air", "water" };
+        public static readonly string[] FluidIds = { "air", "water", GasFluid };
+
+        /// <summary>The network fluid of an entry opening's utility ("" when it has no network: power, heating).</summary>
+        public static string UtilityFluid(string utility) => utility switch
+        {
+            "air" => "air",
+            "water" => "water",
+            "gas" => GasFluid,
+            _ => "",
+        };
 
         public EquipmentState? EquipmentAt(string openingId) => Equipment.Find(e => e.OpeningId == openingId);
 
@@ -139,6 +176,7 @@ namespace HeadLoss.Game.Buildings
         {
             "air" => Air,
             "water" => Water,
+            GasFluid => Gas,
             _ => throw new System.ArgumentException($"No building network for '{fluidId}'"),
         };
 
@@ -149,13 +187,15 @@ namespace HeadLoss.Game.Buildings
             {
                 yield return Air;
                 yield return Water;
+                yield return Gas;
             }
         }
 
         public BuildingState Clone()
         {
-            var c = new BuildingState { BuildingId = BuildingId, Air = Air.Clone(), Water = Water.Clone() };
+            var c = new BuildingState { BuildingId = BuildingId, Air = Air.Clone(), Water = Water.Clone(), Gas = Gas.Clone() };
             foreach (EquipmentState e in Equipment) c.Equipment.Add(e.Clone());
+            foreach (SafetyDevice d in Safety) c.Safety.Add(d.Clone());
             return c;
         }
 
@@ -181,16 +221,18 @@ namespace HeadLoss.Game.Buildings
                     if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
                     string f = n.Floor == 0 ? "" : $"f{n.Floor},";
                     string set = n.Setting == 0 ? "" : $",{n.Setting}";
-                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}");
+                    string spark = n.SparkFree ? ",spark" : "";
+                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}{spark}");
                 }
             }
-            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}");
+            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}");
+            foreach (SafetyDevice d in Safety) parts.Add($"d{d.EquipmentId},{d.X},{d.Y},{d.Floor},{d.Facing},{d.High}");
             parts.Sort(System.StringComparer.Ordinal);
             return string.Join(";", parts);
         }
 
-        /// <summary>The network fluid of an outlet type (taps are water; everything else is air for now).</summary>
-        public static string OutletFluid(string outletType) => outletType.Contains("water-tap") ? "water" : "air";
+        /// <summary>The network fluid of an outlet type (taps are water, gas stoves and burners natural gas, the rest air for now).</summary>
+        public static string OutletFluid(string outletType) => outletType.Contains("water-tap") ? "water" : outletType.StartsWith("gas-", System.StringComparison.Ordinal) ? GasFluid : "air";
 
         /// <summary>A fresh state for a layout: anchor nodes at openings and outlets, initial equipment.</summary>
         public static BuildingState CreateFor(BuildingLayout layout)
@@ -198,8 +240,9 @@ namespace HeadLoss.Game.Buildings
             var s = new BuildingState { BuildingId = layout.Id };
             foreach (var o in layout.EntryOpenings)
             {
-                if (o.Utility != "air" && o.Utility != "water") continue;
-                DuctNetworkState net = s.Net(o.Utility);
+                string fluid = UtilityFluid(o.Utility);
+                if (fluid.Length == 0) continue;
+                DuctNetworkState net = s.Net(fluid);
                 net.Nodes.Add(new DuctNode { Id = net.NextNodeId++, X = o.X, Y = o.Y, Floor = o.Floor, Kind = DuctNodeKind.Intake, AnchorId = o.Id });
             }
             foreach (var o in layout.Outlets)

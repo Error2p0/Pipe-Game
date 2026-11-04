@@ -21,6 +21,10 @@ namespace HeadLoss.Game.Progression
 
         public static bool Unlocked(GameState g, int tier) => tier <= UnlockedTier(g);
 
+        /// <summary>True when an item may be used: its tier is unlocked here, or a prestige bonus grants it.</summary>
+        public static bool ItemUnlocked(DataRepository data, GameState g, string itemId) =>
+            Unlocked(g, ItemTier(data, itemId)) || PrestigeEffects.GrantsItem(g, itemId);
+
         /// <summary>Buildings of a tier online right now (or by <paramref name="online"/> when given).</summary>
         public static int OnlineCount(IReadOnlyList<BuildingSession> sessions, int tier, Func<BuildingSession, bool>? online = null)
         {
@@ -49,6 +53,7 @@ namespace HeadLoss.Game.Progression
                 int need = Needed(ctx.Data, tier);
                 // The next tier waits for its buildings to exist in this version (D104).
                 if (!ctx.Data.BuildingTier(tier + 1).Available) break;
+                if (ctx.Demo && tier + 1 > ctx.Data.Balancing.Demo.MaxTier) break;
                 if (need <= 0 || OnlineCount(ctx.Sessions, tier, online) < need) break;
                 ctx.Game.City.UnlockedTier = tier + 1;
                 unlocked = tier + 1;
@@ -61,6 +66,7 @@ namespace HeadLoss.Game.Progression
         {
             if (Unlocked(ctx.Game, tier)) return "Unlocked";
             if (!data.BuildingTier(tier).Available) return "Arrives with tier-" + tier + " buildings in a later version";
+            if (ctx.Demo && tier > data.Balancing.Demo.MaxTier) return "Available in the full game";
             int below = tier - 1;
             int need = Needed(data, below);
             int have = OnlineCount(ctx.Sessions, below);

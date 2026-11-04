@@ -32,6 +32,7 @@ namespace HeadLoss.Game.Thermal
                 SorIterations = g.SorIterations,
                 SorOmega = (float)g.SorOmega,
                 WallU = (float)c.WallU,
+                GasMolarMass = (float)data.Fluid(BuildingState.GasFluid).MolarMass,
             };
         }
 
@@ -118,6 +119,13 @@ namespace HeadLoss.Game.Thermal
         public Dictionary<int, double> NodeTemperatureK { get; private set; } = new Dictionary<int, double>();
         /// <summary>Increments after every room grid step (the heatmap refreshes on it).</summary>
         public int Revision { get; private set; }
+        /// <summary>Gas entering the air now (set by the gas safety tick).</summary>
+        public IReadOnlyList<Failures.GasInjection> GasLeaks = Array.Empty<Failures.GasInjection>();
+        /// <summary>Passive vents letting fresh air in (what the rooms follow: the design while open, else what is built).</summary>
+        public IReadOnlyList<SafetyDevice> PassiveVents = Array.Empty<SafetyDevice>();
+        /// <summary>The air holds gas (below this share it is treated as none and the field stops being stepped).</summary>
+        public bool GasPresent { get; private set; }
+        const float GasTrace = 1e-7f;
 
         readonly DataRepository _data;
         readonly BuildingLayout _layout;
@@ -132,6 +140,7 @@ namespace HeadLoss.Game.Thermal
             _perTile = RoomGridBuilder.PerTile(data);
             Grid = RoomGridBuilder.Build(data, layout);
             Params = RoomGridBuilder.Params(data);
+            if (climate.WallUOverride > 0) Params.WallU = (float)climate.WallUOverride;
             ClimateDef c = data.Balancing.Climate;
             State = RoomGridState.Initial(Grid, (float)data.Balancing.Physics.DefaultAirTemperatureC, (float)c.OutdoorCo2Ppm, (float)c.OutdoorO2);
             Inputs = RoomGridInputs.For(Grid);
@@ -168,7 +177,26 @@ namespace HeadLoss.Game.Thermal
             float dt = (float)(seconds / steps);
             for (int i = 0; i < steps; i++) Stepper.Step(Grid, State, Inputs, Params, dt);
             Rooms = RoomGridMath.Summaries(Grid, State, Inputs, Params);
+            if (Inputs.GasActive) UpdateGasPresent();
             Revision++;
+        }
+
+        void UpdateGasPresent()
+        {
+            float max = 0;
+            foreach (float v in State.Gas) if (v > max) max = v;
+            GasPresent = max >= GasTrace;
+            if (!GasPresent) Array.Clear(State.Gas, 0, State.Gas.Length);
+        }
+
+        /// <summary>Sets the gas share of a room's upper layer to at least a value (the offline well-mixed estimate carried into the grid).</summary>
+        public void SeedRoomGas(int room, double share)
+        {
+            if (share <= 0) return;
+            int n = Grid.Cells;
+            for (int c = 0; c < n; c++)
+                if (Grid.Room[c] == room && State.Gas[n + c] < share) State.Gas[n + c] = (float)share;
+            GasPresent = true;
         }
 
         IEnumerable<int> CellsOf(TilePos t)
@@ -192,6 +220,20 @@ namespace HeadLoss.Game.Thermal
             }
         }
 
+        void AddLowSupply(TilePos t, double flow, double temperatureC)
+        {
+            if (flow <= 0 || !_layout.InFootprint(t)) return;
+            float share = (float)(flow / (_perTile * _perTile));
+            foreach (int c in CellsOf(t))
+            {
+                float before = Inputs.SupplyLower[c];
+                Inputs.SupplyLower[c] = before + share;
+                // One supply temperature per cell: flow-weighted with what the upper layer gets.
+                float other = Inputs.SupplyFlow[c];
+                Inputs.SupplyTemperature[c] = (Inputs.SupplyTemperature[c] * (before + other) + (float)temperatureC * share) / (before + other + share);
+            }
+        }
+
         void FillInputs(CompiledNetwork? network, SolveResult? result)
         {
             ClimateDef cd = _data.Balancing.Climate;
@@ -199,6 +241,25 @@ namespace HeadLoss.Game.Thermal
             Inputs.OutsideTemperature = (float)Climate.OutsideTemperatureC;
             Inputs.OutdoorCo2Ppm = (float)cd.OutdoorCo2Ppm;
             Inputs.OutdoorO2 = (float)cd.OutdoorO2;
+
+            // Gas leaks and passive vents do not need an air solve.
+            bool leaking = false;
+            foreach (Failures.GasInjection g in GasLeaks)
+            {
+                if (g.Flow <= 0 || !_layout.InFootprint(g.Tile)) continue;
+                leaking = true;
+                float share = (float)(g.Flow / (_perTile * _perTile));
+                float[] into = g.Upper ? Inputs.GasUpper : Inputs.GasLower;
+                foreach (int c in CellsOf(g.Tile)) into[c] += share;
+            }
+            Inputs.GasActive = leaking || GasPresent;
+            if (leaking) GasPresent = true;
+            foreach (SafetyDevice v in PassiveVents)
+            {
+                double flow = Units.M3hToM3s(_data.Balancing.Gas.PassiveVentFlowM3h) * Climate.WindFactor;
+                if (v.High) AddSupply(v.Pos, flow, Climate.OutsideTemperatureC);
+                else AddLowSupply(v.Pos, flow, Climate.OutsideTemperatureC);
+            }
 
             // People and machines over their room's lower layer; the sun through each window.
             var cellsPerRoom = new int[_layout.Rooms.Count];

@@ -69,6 +69,14 @@ namespace HeadLoss.Game.Economy
             return 0;
         }
 
+        /// <summary>What making an item spark-free adds to its price: (factor − 1) × price, at least the minimum, $.</summary>
+        /// <param name="price">The item's catalogue price, $.</param>
+        public static double SparkFreePrice(DataRepository data, double price)
+        {
+            GasDef g = data.Balancing.Gas;
+            return Math.Max(price * (g.SparkFreeFactor - 1), g.SparkFreeMinPrice);
+        }
+
         /// <summary>Fitting price, × D / D_ref for sizes above the reference, $.</summary>
         /// <param name="diameterMm">Size of the fitting, mm.</param>
         /// <param name="duct">Duct (true) or pipe reference diameter.</param>
@@ -224,6 +232,7 @@ namespace HeadLoss.Game.Economy
                             specs.Add(fan.Id);
                             price += fan.Price;
                             if (n.Vsd) bill.Addons[$"{fluid}:{n.X},{n.Y},{n.Floor}:vsd"] = new Item("vsd", DrivePrice(data, fan.Category));
+                            if (n.SparkFree) bill.Addons[$"{fluid}:{n.X},{n.Y},{n.Floor}:spark"] = new Item("spark", SparkFreePrice(data, fan.Price));
                         }
                         else Add(n.PartId, dMax);
                     }
@@ -246,6 +255,12 @@ namespace HeadLoss.Game.Economy
                     EquipmentDef def = data.EquipmentItem(e.EquipmentId);
                     bill.Equipment[e.OpeningId] = new Item(e.EquipmentId, preplaced ? 0 : def.Price);
                     if (e.Vsd) bill.Addons[e.OpeningId + ":vsd"] = new Item("vsd", DrivePrice(data, def.Category));
+                    if (e.SparkFree) bill.Addons[e.OpeningId + ":spark"] = new Item("spark", SparkFreePrice(data, def.Price));
+                }
+                foreach (SafetyDevice d in s.Safety)
+                {
+                    EquipmentDef? def = data.FindEquipment(d.EquipmentId);
+                    if (def != null) bill.Equipment[$"safety:{d.EquipmentId}:{d.X},{d.Y},{d.Floor}"] = new Item(d.EquipmentId + (d.High ? "/high" : "/low"), def.Price);
                 }
             }
 

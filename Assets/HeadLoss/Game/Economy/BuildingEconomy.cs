@@ -53,6 +53,10 @@ namespace HeadLoss.Game.Economy
         public bool Burst;
         /// <summary>The gross before the burst cut, $/s.</summary>
         public double GrossBeforeBurst;
+        /// <summary>The building is evacuated (gas alarm): it pays nothing (<c>02-economy.md</c>: evacuationFactor).</summary>
+        public bool Evacuated;
+        /// <summary>The gas safety certificate has expired: pay × the certificate penalty.</summary>
+        public bool CertificateExpired;
 
         /// <summary>Layout code violations (each blocking one keeps the building offline).</summary>
         public readonly List<Codes.Violation> Violations = new List<Codes.Violation>();
@@ -79,6 +83,23 @@ namespace HeadLoss.Game.Economy
             GrossBeforeBurst = Gross;
             Gross *= factor;
             foreach (OutletStatus o in Outlets) o.Pay *= factor;
+        }
+
+        /// <summary>Applies a factor on all pay (prestige pay rates, the certificate penalty).</summary>
+        public void ApplyPayFactor(double factor)
+        {
+            Gross *= factor;
+            PotentialGross *= factor;
+            foreach (OutletStatus o in Outlets) o.Pay *= factor;
+        }
+
+        /// <summary>The evacuation factor (<c>02-economy.md</c> §Income formula): the building pays nothing while evacuated and does not count as online.</summary>
+        public void ApplyEvacuation()
+        {
+            Evacuated = true;
+            Online = false;
+            Gross = 0;
+            foreach (OutletStatus o in Outlets) o.Pay = 0;
         }
 
         /// <summary>A tripped panel stops all equipment and takes the building offline (<c>04-buildings.md</c> §Electrical panel).</summary>
@@ -129,14 +150,15 @@ namespace HeadLoss.Game.Economy
 
         /// <summary>Evaluates solves. Null (not solved yet) leaves every outlet unconnected.</summary>
         /// <param name="onlyFluid">Evaluate only this fluid's outlets (the auto-router's per-network passes); null = all.</param>
-        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, IReadOnlyList<FluidSolve>? solves, string? onlyFluid = null)
+        /// <param name="skipFluid">Leave this fluid's outlets out (the auto-router before that network is routed); null = none.</param>
+        public static BuildingEvaluation Evaluate(DataRepository data, BuildingLayout layout, IReadOnlyList<FluidSolve>? solves, string? onlyFluid = null, string? skipFluid = null)
         {
             EconomyDef e = data.Balancing.Economy;
             var ev = new BuildingEvaluation();
             foreach (OutletPlacementDef placement in layout.Outlets)
             {
                 OutletDef def = data.Outlet(placement.Type);
-                if (onlyFluid != null && def.Fluid != onlyFluid) continue;
+                if ((onlyFluid != null && def.Fluid != onlyFluid) || def.Fluid == skipFluid) continue;
                 var st = new OutletStatus
                 {
                     OutletId = placement.Id,

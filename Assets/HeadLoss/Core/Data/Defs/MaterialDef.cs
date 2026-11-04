@@ -70,6 +70,25 @@ namespace HeadLoss.Core.Data.Defs
         public double PricePerTile;
         public double PriceReferenceDiameterMm;
         public List<PipeSizeDef> Sizes = new List<PipeSizeDef>();
+        /// <summary>Gas mains: pressure classes (empty for other families).</summary>
+        public List<PressureClassDef> PressureClasses = new List<PressureClassDef>();
+
+        /// <summary>A pressure class by id, or null.</summary>
+        public PressureClassDef? ClassById(string id) => PressureClasses.Find(c => c.Id == id);
+    }
+
+    /// <summary>A gas main pressure class (<c>07-equipment.md</c> §Sizes).</summary>
+    public sealed class PressureClassDef
+    {
+        public string Id = "";
+        public string DisplayName = "";
+        /// <summary>Key in <c>city.facilityPressure</c>.</summary>
+        public string FacilityPressureKey = "";
+        /// <summary>Capacity = internal area × this velocity at line conditions, m/s.</summary>
+        public double CapacityVelocity;
+        /// <summary>Price factor on the family's price per tile.</summary>
+        public double PriceFactor = 1;
+        public int Tier = 1;
     }
 
     public sealed class PipeSizeDef

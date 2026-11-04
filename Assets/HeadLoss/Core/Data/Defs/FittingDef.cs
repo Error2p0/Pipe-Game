@@ -26,6 +26,8 @@ namespace HeadLoss.Core.Data.Defs
         public bool Smooth;
         /// <summary>Minimum opening fraction for valves.</summary>
         public double MinOpening;
+        /// <summary>Closes by itself at a gas alarm and on power loss.</summary>
+        public bool AutoShutoff;
         /// <summary>Filter pressure drop at rated flow, Pa (proportional to Q²).</summary>
         public double RatedPressureDropPa;
         /// <summary>Regulators and relief valves: default setpoint, Pa (gauge).</summary>

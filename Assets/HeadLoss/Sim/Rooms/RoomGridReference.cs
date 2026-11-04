@@ -30,10 +30,11 @@ namespace HeadLoss.Sim.Rooms
             Advect(l, s.T, s, p, dt);
             Advect(l, s.Co2, s, p, dt);
             Advect(l, s.O2, s, p, dt);
-            Diffuse(l, s, p, dt);
+            if (inp.GasActive) Advect(l, s.Gas, s, p, dt);
+            Diffuse(l, s, inp, p, dt);
             Heat(l, s, inp, p, dt);
             Stratify(l, s, inp, p, dt);
-            Floors(l, s, p, dt);
+            Floors(l, s, inp, p, dt);
         }
 
         static void Sources(RoomGridLayout l, RoomGridState s, RoomGridInputs inp, RoomGridParams p, float dt)
@@ -50,6 +51,21 @@ namespace HeadLoss.Sim.Rooms
                     s.Co2[n + c] += f * (inp.OutdoorCo2Ppm - s.Co2[n + c]);
                     s.O2[n + c] += f * (inp.OutdoorO2 - s.O2[n + c]);
                     s.T[n + c] += ft * (inp.SupplyTemperature[c] - s.T[n + c]);
+                    if (inp.GasActive) s.Gas[n + c] *= 1 - f;
+                }
+                float ql = inp.SupplyLower[c];
+                if (ql > 0)
+                {
+                    float f = Math.Min(1f, ql * dt / vl), ft = Math.Min(1f, ql * dt / (vl * p.ThermalMass));
+                    s.Co2[c] += f * (inp.OutdoorCo2Ppm - s.Co2[c]);
+                    s.O2[c] += f * (inp.OutdoorO2 - s.O2[c]);
+                    s.T[c] += ft * (inp.SupplyTemperature[c] - s.T[c]);
+                    if (inp.GasActive) s.Gas[c] *= 1 - f;
+                }
+                if (inp.GasActive)
+                {
+                    s.Gas[c] = Math.Min(1f, s.Gas[c] + inp.GasLower[c] * dt / vl);
+                    s.Gas[n + c] = Math.Min(1f, s.Gas[n + c] + inp.GasUpper[c] * dt / vu);
                 }
                 float co2 = inp.Co2Lower[c];
                 if (co2 > 0) s.Co2[c] += co2 * dt / vl * 1e6f;
@@ -172,7 +188,7 @@ namespace HeadLoss.Sim.Rooms
         }
 
         /// <summary>Explicit diffusion through open faces, sub-stepped so dt ≤ dx² / (4 D_t).</summary>
-        void Diffuse(RoomGridLayout l, RoomGridState s, RoomGridParams p, float dt)
+        void Diffuse(RoomGridLayout l, RoomGridState s, RoomGridInputs inp, RoomGridParams p, float dt)
         {
             float limit = p.CellSize * p.CellSize / (4 * p.Diffusivity);
             int sub = Math.Max(1, (int)Math.Ceiling(dt / limit));
@@ -182,6 +198,7 @@ namespace HeadLoss.Sim.Rooms
                 DiffuseOnce(l, s.T, coef);
                 DiffuseOnce(l, s.Co2, coef);
                 DiffuseOnce(l, s.O2, coef);
+                if (inp.GasActive) DiffuseOnce(l, s.Gas, coef);
             }
         }
 
@@ -233,6 +250,8 @@ namespace HeadLoss.Sim.Rooms
             int n = l.Cells;
             float vl = p.LowerHeight, vu = p.UpperHeight, wv = vl * vu / (vl + vu);
             float settle = p.Stratification * Math.Abs(p.Co2MolarMass - p.AirMolarMass) / p.AirMolarMass;
+            float buoyancy = Math.Min(0.5f, p.Stratification * Math.Abs(p.GasMolarMass - p.AirMolarMass) / p.AirMolarMass * dt);
+            bool light = p.GasMolarMass < p.AirMolarMass;
             for (int c = 0; c < n; c++)
             {
                 if (l.Room[c] < 0) continue;
@@ -242,12 +261,29 @@ namespace HeadLoss.Sim.Rooms
                 Exchange(s.T, c, n, f, vl, vu, wv);
                 Exchange(s.Co2, c, n, f, vl, vu, wv);
                 Exchange(s.O2, c, n, f, vl, vu, wv);
+                if (inp.GasActive) Exchange(s.Gas, c, n, f, vl, vu, wv);
                 float excess = s.Co2[n + c] - inp.OutdoorCo2Ppm;
                 if (excess > 0)
                 {
                     float m = Math.Min(0.5f, settle * dt) * excess * vu;
                     s.Co2[n + c] -= m / vu;
                     s.Co2[c] += m / vl;
+                }
+                if (inp.GasActive)
+                {
+                    // Light gas rises out of the lower layer, heavy gas sinks out of the upper one.
+                    if (light)
+                    {
+                        float m = buoyancy * s.Gas[c] * vl;
+                        s.Gas[c] -= m / vl;
+                        s.Gas[n + c] = Math.Min(1f, s.Gas[n + c] + m / vu);
+                    }
+                    else
+                    {
+                        float m = buoyancy * s.Gas[n + c] * vu;
+                        s.Gas[n + c] -= m / vu;
+                        s.Gas[c] = Math.Min(1f, s.Gas[c] + m / vl);
+                    }
                 }
             }
         }
@@ -259,8 +295,15 @@ namespace HeadLoss.Sim.Rooms
             x[n + c] += m / vu;
         }
 
+        static void Swap(float[] x, int up, int low, float f, float vu, float vl, float wv)
+        {
+            float m = f * (x[up] - x[low]) * wv;
+            x[up] -= m / vu;
+            x[low] += m / vl;
+        }
+
         /// <summary>Stairwell cells exchange the upper layer of floor f with the lower layer of floor f + 1 at k_v.</summary>
-        static void Floors(RoomGridLayout l, RoomGridState s, RoomGridParams p, float dt)
+        static void Floors(RoomGridLayout l, RoomGridState s, RoomGridInputs inp, RoomGridParams p, float dt)
         {
             int n = l.Cells, perFloor = l.NX * l.NY;
             float vl = p.LowerHeight, vu = p.UpperHeight, wv = vl * vu / (vl + vu);
@@ -269,12 +312,10 @@ namespace HeadLoss.Sim.Rooms
             {
                 if (!l.Stair[c] || !l.Stair[c + perFloor]) continue;
                 int up = n + c, low = c + perFloor;
-                foreach (float[] x in new[] { s.T, s.Co2, s.O2 })
-                {
-                    float m = f * (x[up] - x[low]) * wv;
-                    x[up] -= m / vu;
-                    x[low] += m / vl;
-                }
+                Swap(s.T, up, low, f, vu, vl, wv);
+                Swap(s.Co2, up, low, f, vu, vl, wv);
+                Swap(s.O2, up, low, f, vu, vl, wv);
+                if (inp.GasActive) Swap(s.Gas, up, low, f, vu, vl, wv);
             }
         }
     }

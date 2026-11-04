@@ -31,6 +31,8 @@ namespace HeadLoss.Game.Buildings
         WrongNetwork,
         /// <summary>Equipment does not fit the floor space at its opening.</summary>
         NoFloorSpace,
+        /// <summary>A passive vent needs an outside wall.</summary>
+        NotOnOutsideWall,
     }
 
     /// <summary>What occupies a tile of the duct layer.</summary>
@@ -77,6 +79,7 @@ namespace HeadLoss.Game.Buildings
             DrawError.WrongMaterial => "That material does not carry this fluid",
             DrawError.WrongNetwork => "That part does not fit this network",
             DrawError.NoFloorSpace => "Not enough floor space here",
+            DrawError.NotOnOutsideWall => "Passive vents go on an outside wall",
             _ => e.ToString(),
         };
 

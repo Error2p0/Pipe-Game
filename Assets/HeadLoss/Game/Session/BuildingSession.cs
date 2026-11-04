@@ -37,13 +37,16 @@ namespace HeadLoss.Game.Session
         public readonly FluidSolve Air;
         /// <summary>The water network (null when the building has none).</summary>
         public readonly FluidSolve? Water;
+        /// <summary>The gas network (null when the building has none).</summary>
+        public readonly FluidSolve? Gas;
         /// <summary>The state the snapshot was solved from (a private copy).</summary>
         public BuildingState State;
 
-        public NetworkSnapshot(FluidSolve air, FluidSolve? water, BuildingState state)
+        public NetworkSnapshot(FluidSolve air, FluidSolve? water, BuildingState state, FluidSolve? gas = null)
         {
             Air = air;
             Water = water;
+            Gas = gas;
             State = state;
         }
 
@@ -52,13 +55,21 @@ namespace HeadLoss.Game.Session
         public SolveResult Result => Air.Result;
 
         /// <summary>The solve of a fluid's network, or null.</summary>
-        public FluidSolve? For(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : null;
+        public FluidSolve? For(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : fluid == BuildingState.GasFluid ? Gas : null;
 
         /// <summary>Every solved network.</summary>
-        public IReadOnlyList<FluidSolve> All => Water != null ? new[] { Air, Water } : new[] { Air };
+        public IReadOnlyList<FluidSolve> All
+        {
+            get
+            {
+                if (Water != null && Gas != null) return new[] { Air, Water, Gas };
+                if (Water != null) return new[] { Air, Water };
+                return Gas != null ? new[] { Air, Gas } : new[] { Air };
+            }
+        }
 
-        public bool Converged => Air.Result.Converged && (Water == null || Water.Result.Converged);
-        public double SolveMilliseconds => Air.Result.SolveMilliseconds + (Water?.Result.SolveMilliseconds ?? 0);
+        public bool Converged => Air.Result.Converged && (Water == null || Water.Result.Converged) && (Gas == null || Gas.Result.Converged);
+        public double SolveMilliseconds => Air.Result.SolveMilliseconds + (Water?.Result.SolveMilliseconds ?? 0) + (Gas?.Result.SolveMilliseconds ?? 0);
     }
 
     /// <summary>The building's city water connection (<c>03-city.md</c> §City network solve).</summary>
@@ -80,13 +91,14 @@ namespace HeadLoss.Game.Session
     /// <summary>A pair of solvers (one per fluid) so each keeps its structure cache across drift re-solves.</summary>
     sealed class SolverSet
     {
-        public readonly NetworkSolver Air, Water;
+        public readonly NetworkSolver Air, Water, Gas;
         public SolverSet(SolverSettings s)
         {
             Air = new NetworkSolver(s);
             Water = new NetworkSolver(s);
+            Gas = new NetworkSolver(s);
         }
-        public NetworkSolver For(string fluid) => fluid == "air" ? Air : Water;
+        public NetworkSolver For(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : Gas;
     }
 
     /// <summary>Result of previewing a run while it is being drawn ("simulate before you buy").</summary>
@@ -163,10 +175,15 @@ namespace HeadLoss.Game.Session
         public double AirTemperatureK => Units.CToK(Climate.OutsideTemperatureC);
         public IFluidProperties Air { get; }
         public IFluidProperties Water { get; }
+        public IFluidProperties GasProperties { get; }
         /// <summary>The city water connection (set by the city solve; fixtures without a city get the reference pressure).</summary>
         public WaterSupply Supply { get; set; }
+        /// <summary>The city gas connection (set by the city solve; fixtures without a city get the reference pressure).</summary>
+        public WaterSupply GasSupply { get; set; }
         /// <summary>The layout has a water network (taps or a water connection).</summary>
         public bool HasWater { get; }
+        /// <summary>The layout has a gas network (gas outlets or a gas connection).</summary>
+        public bool HasGas { get; }
         /// <summary>Outside conditions (shared by the city's buildings).</summary>
         public Climate Climate { get; }
         /// <summary>Rooms and duct temperatures (<c>05-simulation.md</c> §3–4).</summary>
@@ -199,9 +216,17 @@ namespace HeadLoss.Game.Session
             Rooms = new BuildingClimate(data, layout, Climate);
             Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
             Water = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
-            HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasTaps(layout);
+            GasProperties = new TableFluid(data.Fluid(BuildingState.GasFluid), data.FluidTables[BuildingState.GasFluid], data.Balancing.Physics.GasConstant);
+            HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasOutlets(layout, "water");
+            HasGas = layout.OpeningFor("gas") != null || HasOutlets(layout, BuildingState.GasFluid);
             Supply = new WaterSupply(true, ReferenceWaterPressure(data));
-            Failures = new Failures.BuildingFailures(data, layout, record, Seeds.Derive(0x0FA1_0000UL, layout.Id));
+            GasSupply = new WaterSupply(true, ReferenceGasPressure(data));
+            Failures = new Failures.BuildingFailures(data, layout, record, Seeds.Derive(0x0FA1_0000UL, layout.Id))
+            {
+                RepairTimeFactor = Progression.PrestigeEffects.RepairTimeFactor(data, game),
+            };
+            GasSafety = new Failures.GasSafety(this);
+            CeilingCapacityOverride = layout.Def.CeilingCapacity;
             if (record.PanelTripped) PowerSpeed = 0;
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
@@ -209,11 +234,18 @@ namespace HeadLoss.Game.Session
             RefreshPending();
         }
 
-        static bool HasTaps(BuildingLayout layout)
+        static bool HasOutlets(BuildingLayout layout, string fluid)
         {
-            foreach (var o in layout.Outlets) if (BuildingState.OutletFluid(o.Type) == "water") return true;
+            foreach (var o in layout.Outlets) if (BuildingState.OutletFluid(o.Type) == fluid) return true;
             return false;
         }
+
+        /// <summary>Gas leaks, alarm, explosion timer and the certificate.</summary>
+        public Failures.GasSafety GasSafety { get; }
+
+        /// <summary>Connection pressure the reference layouts (and fixtures without a city) assume for gas, Pa: a share of the LP pressure.</summary>
+        public static double ReferenceGasPressure(DataRepository data) =>
+            data.Balancing.City.FacilityPressure.TryGetValue("gas-lp", out double p) ? p * data.Balancing.Gas.ReferenceConnectionFactor : 0;
 
         /// <summary>Connection pressure the reference layouts (and fixtures without a city) assume, Pa.</summary>
         public static double ReferenceWaterPressure(DataRepository data) =>
@@ -263,6 +295,9 @@ namespace HeadLoss.Game.Session
             DuctNode? c = Committed.Net(fluid).NodeAt(design.Pos);
             return c != null && c.Kind == DuctNodeKind.Inline && c.PartId == design.PartId ? c : null;
         }
+
+        /// <summary>True when an item may be used in this game: its tier is unlocked or a prestige bonus grants it.</summary>
+        public bool ItemUnlocked(string itemId) => Progression.Tech.ItemUnlocked(Data, Game, itemId);
 
         /// <summary>True when any ceiling tile holds more capacity units than it has.</summary>
         public bool CeilingOverfull(BuildingState state)
@@ -315,8 +350,14 @@ namespace HeadLoss.Game.Session
                 NodeTemperatureK = nodeK,
                 WaterConnected = Supply.Connected,
                 WaterPressurePa = Supply.PressurePa,
+                GasConnected = GasSupply.Connected,
+                GasPressurePa = GasSupply.PressurePa,
                 PowerSpeed = PowerSpeedFor(committed),
                 BurstSegments = Failures.AllBurstSegments(committed ? Committed : State),
+                // Leaks and damage are on what is built; a pending design previews them only where it still matches.
+                Leaks = Record.Failures.Leaks.Count > 0 ? Record.Failures.Leaks.ConvertAll(l => l.Clone()) : null,
+                AutoClosed = HasGas ? GasSafety.AutoClosedTiles() : null,
+                Damaged = Record.Failures.DamagedEquipment.Count > 0 ? new HashSet<string>(Record.Failures.DamagedEquipment) : null,
             };
 
         /// <summary>Speed factor on powered devices: 0 while the panel is tripped, cbrt(available/draw) in a brownout.</summary>
@@ -344,6 +385,24 @@ namespace HeadLoss.Game.Session
 
         /// <summary>Power the equipment can have, kW: min(panel limit, connection, city allocation).</summary>
         public double AvailableKW => Math.Min(PanelLimitKW, Power.Cabled ? Math.Min(ConnectionKW, Power.AllocatedKW) : ConnectionKW);
+
+        /// <summary>
+        /// What the building draws from its gas main, m³/s at its own pressure: the inflow of the built gas network's last
+        /// solve (leaks included), or the design flow of every connected stove.
+        /// </summary>
+        public double GasDemand()
+        {
+            FluidSolve? g = CommittedSnapshot?.Gas;
+            if (g != null && g.Compiled.SupplyNode >= 0) return Math.Max(0, g.Compiled.SupplyFlow(g.Result));
+            double q = 0;
+            foreach (OutletPlacementDef o in Layout.Outlets)
+            {
+                if (BuildingState.OutletFluid(o.Type) != BuildingState.GasFluid) continue;
+                DuctNode? n = Committed.Gas.Nodes.Find(x => x.Kind == DuctNodeKind.Outlet && x.AnchorId == o.Id);
+                if (n != null && Committed.Gas.Degree(n.Id) > 0) q += NetworkCompiler.DesignFlow(Data, Layout, o);
+            }
+            return q;
+        }
 
         /// <summary>
         /// What the building draws from its water main, m³/s: the inflow of the built water network's last solve, or
@@ -407,13 +466,39 @@ namespace HeadLoss.Game.Session
                 if (upgradeDiameterMm > 0) up.DiameterMm = upgradeDiameterMm;
                 double metres = edges.Count * (DuctEditor.IsRiser(net, s) ? Data.Balancing.Building.FloorHeight : 1);
                 extra = Math.Max(0, (Pricing.SegmentPerMetre(Data, up) - Pricing.SegmentPerMetre(Data, s)) * metres);
-                if (!Unlocked(Progression.Tech.ItemTier(Data, up.MaterialId)) || !Unlocked(Progression.Tech.SizeTier(Data, up.MaterialId, up.DiameterMm))) return false;
+                if (!ItemUnlocked(up.MaterialId) || !Unlocked(Progression.Tech.SizeTier(Data, up.MaterialId, up.DiameterMm))) return false;
             }
             bool ok = Failures.StartRepair(fluid, edge, emergency, upgradeMaterial, upgradeDiameterMm, net, s, price =>
             {
                 if (!Game.CanAfford(price + extra)) return false;
                 Game.Wallet -= price + extra;
                 Record.SpentTotal += extra;
+                return true;
+            });
+            if (ok) MarkDirty();
+            return ok;
+        }
+
+        /// <summary>Books a crew for a gas leak (paid now, from the wallet).</summary>
+        public bool RepairLeak(string leakKey, bool emergency)
+        {
+            bool ok = Failures.RepairLeak(leakKey, emergency, price =>
+            {
+                if (!Game.CanAfford(price)) return false;
+                Game.Wallet -= price;
+                return true;
+            });
+            if (ok) MarkDirty();
+            return ok;
+        }
+
+        /// <summary>Books a crew for equipment knocked offline by a blast (paid now, from the wallet).</summary>
+        public bool RepairEquipment(string key, bool emergency)
+        {
+            bool ok = Failures.RepairEquipment(key, emergency, price =>
+            {
+                if (!Game.CanAfford(price)) return false;
+                Game.Wallet -= price;
                 return true;
             });
             if (ok) MarkDirty();
@@ -480,7 +565,8 @@ namespace HeadLoss.Game.Session
         {
             FluidSolve air = SolveFluid(state, "air", warmFrom?.Air, solvers.Air, options, Air);
             FluidSolve? water = HasWater ? SolveFluid(state, "water", warmFrom?.Water, solvers.Water, options, Water) : null;
-            return new NetworkSnapshot(air, water, state);
+            FluidSolve? gas = HasGas ? SolveFluid(state, BuildingState.GasFluid, warmFrom?.Gas, solvers.Gas, options, GasProperties) : null;
+            return new NetworkSnapshot(air, water, state, gas);
         }
 
         FluidSolve SolveFluid(BuildingState state, string fluid, FluidSolve? warmFrom, NetworkSolver solver, CompileOptions options, IFluidProperties props)
@@ -510,6 +596,7 @@ namespace HeadLoss.Game.Session
             TickPower(dt);
             Failures.Tick(dt, CommittedSnapshot, Committed, Game.PlayTimeSeconds);
             Failures.TickRepairs(dt, Record);
+            GasSafety.Tick(dt);
             if (Failures.Revision != _failRev)
             {
                 _failRev = Failures.Revision;
@@ -533,8 +620,21 @@ namespace HeadLoss.Game.Session
         {
             NetworkSnapshot? snap = IsOpen ? Current : CommittedSnapshot;
             if (snap != null) Rooms.Index(snap.Compiled, snap.State.Air);
+            Rooms.PassiveVents = PassiveVents(snap?.State ?? Committed);
             Rooms.Tick(dt, IsOpen, snap?.Compiled, snap?.Result);
         }
+
+        /// <summary>The passive vents of a state (the list is rebuilt only when the state changes).</summary>
+        IReadOnlyList<SafetyDevice> PassiveVents(BuildingState state)
+        {
+            if (state == _ventsOf) return _vents;
+            _ventsOf = state;
+            _vents = state.Safety.FindAll(d => d.EquipmentId == HeadLoss.Game.Failures.GasSafetyIds.PassiveVent);
+            return _vents;
+        }
+
+        BuildingState? _ventsOf;
+        List<SafetyDevice> _vents = new List<SafetyDevice>();
 
         void StartSolve(bool async)
         {
@@ -576,15 +676,11 @@ namespace HeadLoss.Game.Session
             Failures.DetectSurges(before, CommittedSnapshot);
             DesignEvaluation = BuildingEconomy.Evaluate(Data, Layout, d);
             CommittedEvaluation = c == null ? BuildingEconomy.Evaluate(Data, Layout, d) : BuildingEconomy.Evaluate(Data, Layout, c);
-            DesignEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, d.State));
-            CommittedEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, CommittedSnapshot.State));
-            ApplyBurstCut(CommittedEvaluation, CommittedSnapshot, Committed);
-            ApplyBurstCut(DesignEvaluation, d, State);
-            if (Record.PanelTripped)
-            {
-                CommittedEvaluation.ApplyPanelTrip();
-                DesignEvaluation.ApplyPanelTrip();
-            }
+            DesignEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, d.State, d));
+            CommittedEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, CommittedSnapshot.State, CommittedSnapshot));
+            ApplyEffects(CommittedEvaluation, CommittedSnapshot, Committed, OfflineRules);
+            ApplyEffects(DesignEvaluation, d, State, OfflineRules);
+            GasSafety.UpdateInjections();
             SolveRevision++;
             Solved?.Invoke();
         }
@@ -650,18 +746,32 @@ namespace HeadLoss.Game.Session
             if (m == null || !m.Fluids.Contains(fluid)) return DrawError.WrongMaterial;
             if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
                 return DrawError.NoCeilingSpace;
-            if (!Unlocked(Progression.Tech.SizeTier(Data, materialId, diameterMm)) || !Unlocked(Progression.Tech.ItemTier(Data, materialId))
+            if (!Unlocked(Progression.Tech.SizeTier(Data, materialId, diameterMm)) || !ItemUnlocked(materialId)
                 || (smoothElbows && !Unlocked(Progression.Tech.SmoothFittingsTier(Data))))
                 return DrawError.Locked;
             return DrawError.None;
         }
 
-        /// <summary>The burst factor on gross (02 §Income formula): 0 in game, 0.25 offline, while a burst is not isolated.</summary>
-        void ApplyBurstCut(BuildingEvaluation ev, NetworkSnapshot snap, BuildingState state)
+        /// <summary>
+        /// Everything after the outlets, in the order of the income formula (<c>02-economy.md</c>): prestige pay and electricity,
+        /// the certificate penalty, the burst factor (0 in game, 0.25 offline, while a burst is not isolated), evacuation, a tripped panel.
+        /// </summary>
+        void ApplyEffects(BuildingEvaluation ev, NetworkSnapshot snap, BuildingState state, bool offline)
         {
-            if (!Failures.HasActiveBurst(snap, state)) return;
-            EconomyDef e = Data.Balancing.Economy;
-            ev.ApplyBurst(OfflineRules ? e.OfflineBurstFactor : e.InGameBurstFactor);
+            ev.ApplyPayFactor(Progression.PrestigeEffects.PayFactor(Data, Game));
+            ev.Electricity *= Progression.PrestigeEffects.ElectricityFactor(Data, Game);
+            if (GasSafety.CertificateExpired)
+            {
+                ev.CertificateExpired = true;
+                ev.ApplyPayFactor(Data.Balancing.Inspection.GasCertExpiredFactor);
+            }
+            if (Failures.HasActiveBurst(snap, state))
+            {
+                EconomyDef e = Data.Balancing.Economy;
+                ev.ApplyBurst(offline ? e.OfflineBurstFactor : e.InGameBurstFactor);
+            }
+            if (GasSafety.Evacuated) ev.ApplyEvacuation();
+            if (Record.PanelTripped) ev.ApplyPanelTrip();
         }
 
         /// <summary>Validates a run in progress and solves the networks as if it were placed (state untouched).</summary>
@@ -686,8 +796,9 @@ namespace HeadLoss.Game.Session
         {
             BuildingState copy = State.Clone();
             change(copy);
-            BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, SolveCopy(copy));
-            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, copy));
+            NetworkSnapshot snap = SolveCopy(copy);
+            BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
+            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, copy, snap));
             return ev;
         }
 
@@ -700,7 +811,7 @@ namespace HeadLoss.Game.Session
             var none = new Dictionary<int, double>();
             NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true));
             BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
-            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State));
+            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State, snap));
             LastSteadySnapshot = snap;
             if (Failures.HasActiveBurst(snap, snap.State))
             {
@@ -708,12 +819,12 @@ namespace HeadLoss.Game.Session
                 // when the broken pipe has left its outlets short and the building could not count as online.
                 CompileOptions whole = OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true);
                 whole.BurstSegments = null;
-                BuildingEvaluation intact = BuildingEconomy.Evaluate(Data, Layout, SolveState(Committed.Clone(), null, _offlineSolver, whole));
-                intact.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State));
+                NetworkSnapshot intactSnap = SolveState(Committed.Clone(), null, _offlineSolver, whole);
+                BuildingEvaluation intact = BuildingEconomy.Evaluate(Data, Layout, intactSnap);
+                intact.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State, intactSnap));
                 ev.Gross = intact.Gross;
-                ev.ApplyBurst(Data.Balancing.Economy.OfflineBurstFactor);
             }
-            if (Record.PanelTripped) ev.ApplyPanelTrip();
+            ApplyEffects(ev, snap, snap.State, true);
             return ev;
         }
 
@@ -750,7 +861,7 @@ namespace HeadLoss.Game.Session
         public CommitCheck CheckCommit()
         {
             if (!HasPendingDesign) return new CommitCheck(false, "Nothing to commit");
-            double net = PendingCost.Net;
+            double net = NetCommitCost();
             if (net <= 0) return new CommitCheck(true, "");
             string symbol = Data.Game.CurrencySymbol;
             if (Game.Debt > 0) return new CommitCheck(false, "Purchases wait until the debt is repaid");
@@ -761,17 +872,47 @@ namespace HeadLoss.Game.Session
             return new CommitCheck(true, "");
         }
 
+        /// <summary>What a Commit takes now, $: the pending cost less the starter items in hand it places (prestige starter kit).</summary>
+        public double NetCommitCost() => PendingCost.Net - StarterItemsValue(Record.Committed, Record.Design);
+
+        /// <summary>The worth of starter items in hand the design newly places, $ (the first of each is free).</summary>
+        public double StarterItemsValue(BuildingState before, BuildingState after)
+        {
+            if (Game.City == null || Game.City.StarterItems.Count == 0) return 0;
+            double value = 0;
+            foreach (string id in Game.City.StarterItems)
+                if (Count(after, id) > Count(before, id)) value += Data.FindEquipment(id)?.Price ?? 0;
+            return value;
+        }
+
+        static int Count(BuildingState s, string equipmentId)
+        {
+            int n = 0;
+            foreach (EquipmentState e in s.Equipment) if (e.EquipmentId == equipmentId) n++;
+            foreach (DuctNetworkState net in s.Networks)
+                foreach (DuctNode d in net.Nodes) if (d.Kind == DuctNodeKind.Inline && d.PartId == equipmentId) n++;
+            return n;
+        }
+
+        void UseStarterItems(BuildingState before, BuildingState after)
+        {
+            if (Game.City == null) return;
+            Game.City.StarterItems.RemoveAll(id => Count(after, id) > Count(before, id));
+        }
+
         /// <summary>Pays for the design and makes it the committed state. Use <see cref="CommitDesignCommand"/> from the UI.</summary>
         public bool Commit()
         {
             if (!CheckCommit().Allowed) return false;
-            double net = PendingCost.Net;
+            double net = NetCommitCost();
             if (net > 0) Game.Wallet -= net;
             else Game.ApplyIncome(-net);
             Record.SpentTotal += net;
             BuildingState before = Record.Committed;
+            UseStarterItems(before, Record.Design);
             Record.Committed = Record.Design.Clone();
             Failures.OnCommit(before, Record.Committed);
+            GasSafety.OnCommit();
             MarkDirty();
             DesignCommitted?.Invoke();
             return true;

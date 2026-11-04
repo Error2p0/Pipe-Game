@@ -50,7 +50,9 @@ namespace HeadLoss.Game.Networks
         public Dictionary<int, (int a, int b)> BurstLinks = new Dictionary<int, (int, int)>();
         /// <summary>Fan link index → efficiency multiplier of a fitted variable-speed drive.</summary>
         public Dictionary<int, double> DriveFactor = new Dictionary<int, double>();
-        /// <summary>The city connection node (water): flow out of it is the building's draw from the main. −1 when none.</summary>
+        /// <summary>Gas leak key → its orifice link to the room.</summary>
+        public Dictionary<string, int> LeakLinks = new Dictionary<string, int>();
+        /// <summary>The city connection node (water, gas): flow out of it is the building's draw from the main. −1 when none.</summary>
         public int SupplyNode = -1;
         /// <summary>Outlets cut off from the supply by a closed shutoff (exempt from the minimum check, pay 0).</summary>
         public HashSet<string> IsolatedOutlets = new HashSet<string>();
@@ -92,6 +94,16 @@ namespace HeadLoss.Game.Networks
         public double PowerSpeed = 1;
         /// <summary>Burst segments per fluid (segment ids): removed, with an open end at each of their nodes.</summary>
         public IReadOnlyDictionary<string, HashSet<int>>? BurstSegments;
+        /// <summary>Gas: the building has a city gas connection.</summary>
+        public bool GasConnected;
+        /// <summary>Gas: connection pressure from the city solve, Pa gauge.</summary>
+        public double GasPressurePa;
+        /// <summary>Gas leaks to open: orifice links into the room (<c>05-simulation.md</c> §1.1).</summary>
+        public IReadOnlyList<Failures.LeakState>? Leaks;
+        /// <summary>Automatic shutoff valves closed now (by the alarm or on power loss), tiles.</summary>
+        public HashSet<TilePos>? AutoClosed;
+        /// <summary>Equipment knocked offline by a blast (see <see cref="Failures.FailureState.DamagedEquipment"/>).</summary>
+        public HashSet<string>? Damaged;
     }
 
     /// <summary>
@@ -114,13 +126,16 @@ namespace HeadLoss.Game.Networks
         public static CompiledNetwork Compile(BuildingLayout layout, BuildingState state, DataRepository data, string fluid, CompileOptions o)
         {
             bool water = fluid != "air";
-            double tWater = Units.CToK(data.Balancing.Water.MainsTemperatureC);
+            bool gas = fluid == BuildingState.GasFluid;
+            double tWater = Units.CToK(gas ? data.Balancing.Gas.SupplyTemperatureC : data.Balancing.Water.MainsTemperatureC);
             double SegT(int id) => water ? tWater : o.SegmentTemperatureK != null && o.SegmentTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
             double NodeT(int id) => water ? tWater : o.NodeTemperatureK != null && o.NodeTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
             DuctNetworkState net = state.Net(fluid);
             var c = new CompiledNetwork { Fluid = fluid };
             NetworkGraph g = c.Graph;
             BuildingBalancingDef bb = data.Balancing.Building;
+            // Gauge pressure is referenced to the local atmosphere: a gas column's elevation term is its density minus the air's (D7).
+            if (gas) g.AmbientDensity = IdealAir(data, o.AirTemperatureK);
             // Air nodes all sit at one elevation: the outside air column cancels the duct's (D7). Water nodes sit at
             // their floor's ceiling layer; taps and the connection at the floor layer.
             double Ceiling(int floor) => water ? floor * bb.FloorHeight + bb.CeilingLayerOffset : bb.CeilingLayerOffset;
@@ -191,24 +206,35 @@ namespace HeadLoss.Game.Networks
                     int outside = g.AddFixed(0, Ceiling(n.Floor), $"outside-{n.AnchorId}");
                     int fan = g.AddFan(outside, c.NodeIndex[n.Id], FanCurve.FromDef(def!), Units.MmToM(def!.ConnectionDiameterMm),
                         DeviceSpeed(def, eq!, o.CrankSpeed, speedFactor), eq!.EquipmentId);
+                    if (IsDamaged(o, Failures.DamageKeys.Opening(n.AnchorId))) g.Links[fan].Speed = 0;
                     g.Links[fan].Temperature = o.AirTemperatureK;
                     c.FanLink[n.AnchorId] = fan;
                     if (eq.Vsd) c.DriveFactor[fan] = DriveEfficiency(data, def.Category);
                     continue;
                 }
 
-                // Water: city (fixed, connection pressure) → [pump] → connection → drop up to the ceiling pipe.
-                if (!o.WaterConnected) continue;
+                // Water and gas: city (fixed, connection pressure) → [pump or regulator] → connection → drop up to the ceiling pipe.
+                if (!(gas ? o.GasConnected : o.WaterConnected)) continue;
                 DuctSegment? first = FirstSegment(n);
                 double z = FloorLayer(n.Floor);
-                int city = g.AddFixed(o.WaterPressurePa, z, $"city-{n.AnchorId}");
+                int city = g.AddFixed(gas ? o.GasPressurePa : o.WaterPressurePa, z, $"city-{n.AnchorId}");
                 c.SupplyNode = city;
                 int connection = city;
-                if (device)
+                bool damaged = IsDamaged(o, Failures.DamageKeys.Opening(n.AnchorId));
+                if (gas && def != null && def.Category == "gas-supply" && first != null)
+                {
+                    // A damaged regulator lets no gas through.
+                    connection = g.AddJunction(z, $"connection-{n.AnchorId}");
+                    int reg = g.AddRegulator(city, connection, def.RegulatorK, InnerD(first), def.SetpointPa, def.Id);
+                    g.Links[reg].Temperature = tWater;
+                    if (damaged) g.Links[reg].Closed = true;
+                }
+                else if (device)
                 {
                     connection = g.AddJunction(z, $"connection-{n.AnchorId}");
                     int pump = g.AddFan(city, connection, FanCurve.FromDef(def!), Units.MmToM(def!.ConnectionDiameterMm),
                         DeviceSpeed(def, eq!, 0, speedFactor), eq!.EquipmentId);
+                    if (damaged) g.Links[pump].Speed = 0;
                     g.Links[pump].Temperature = tWater;
                     c.FanLink[n.AnchorId] = pump;
                     if (eq.Vsd) c.DriveFactor[pump] = DriveEfficiency(data, def.Category);
@@ -236,7 +262,7 @@ namespace HeadLoss.Game.Networks
                 if (devDef != null && devDef.Curve.Count > 0)
                 {
                     bool variable = devDef.SpeedControl == "variable" || n.Vsd;
-                    double speed = (!n.On ? 0 : variable ? n.Speed : 1) * speedFactor;
+                    double speed = (!n.On || IsDamaged(o, Failures.DamageKeys.Inline(fluid, n.Pos)) ? 0 : variable ? n.Speed : 1) * speedFactor;
                     link = g.AddFan(from, to, FanCurve.FromDef(devDef), Units.MmToM(devDef.ConnectionDiameterMm), speed, $"{n.PartId}-n{n.Id}");
                     if (n.Vsd) c.DriveFactor[link] = DriveEfficiency(data, devDef.Category);
                 }
@@ -271,7 +297,8 @@ namespace HeadLoss.Game.Networks
                             // Dampers, balancing valves (K(θ) = K_open/θ²), shutoffs and ball valves (open or closed), fire dampers.
                             double theta = f.Model == "valve" ? Math.Max(f.MinOpening, Math.Min(1, n.Opening)) : 1;
                             link = g.AddValve(from, to, f.K, f.Model == "valve" || water ? dIn : Units.MmToM(dMm), theta, $"{n.PartId}-n{n.Id}");
-                            if (f.Model == "valve" && f.MinOpening >= 1 && !n.On) g.Links[link].Closed = true;
+                            bool autoClosed = f.AutoShutoff && o.AutoClosed != null && o.AutoClosed.Contains(n.Pos);
+                            if (f.Model == "valve" && f.MinOpening >= 1 && (!n.On || autoClosed)) g.Links[link].Closed = true;
                             break;
                         }
                     }
@@ -351,12 +378,50 @@ namespace HeadLoss.Game.Networks
                     c.OutletNode[n.AnchorId] = tap;
                 }
                 // Dead ends on water pipes are capped: they carry no flow (D71).
+                if (gas && o.Leaks != null)
+                {
+                    // A leak is an orifice to the room at its tile: Q = C_d·A·sqrt(2Δp/ρ), a power law with n = 0.5.
+                    GasDef gd = data.Balancing.Gas;
+                    double rhoGas = IdealGasDensity(data, fluid, tWater);
+                    foreach (Failures.LeakState leak in o.Leaks)
+                    {
+                        int attach = LeakNode(net, leak.Pos, c);
+                        if (attach < 0) continue;
+                        double coefficient = gd.LeakDischargeCoefficient * leak.AreaM2 * Math.Sqrt(2 / rhoGas);
+                        int room = g.AddFixed(0, g.Nodes[attach].Elevation, $"room-{leak.Key}");
+                        int link = g.AddLeak(attach, room, coefficient, 0.5, leak.Key);
+                        g.Links[link].Temperature = tWater;
+                        c.LeakLinks[leak.Key] = link;
+                    }
+                }
             }
 
             AssignFittings(net, data, c, segLink, water);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
             if (c.SupplyNode >= 0) MarkIsolated(net, c);
             return c;
+        }
+
+        static bool IsDamaged(CompileOptions o, string key) => o.Damaged != null && o.Damaged.Contains(key);
+
+        /// <summary>Air density at atmospheric pressure, kg/m³ (the ambient of a gas column).</summary>
+        static double IdealAir(DataRepository data, double temperatureK) =>
+            HeadLoss.Sim.Fluids.IdealGas.Density(data.Balancing.Physics.AtmosphericPressurePa, data.Fluid("air").MolarMass, temperatureK, data.Balancing.Physics.GasConstant);
+
+        /// <summary>A gas's density at atmospheric pressure, kg/m³ (leak orifices, the energy of a cloud).</summary>
+        public static double IdealGasDensity(DataRepository data, string fluid, double temperatureK) =>
+            HeadLoss.Sim.Fluids.IdealGas.Density(data.Balancing.Physics.AtmosphericPressurePa, data.Fluid(fluid).MolarMass, temperatureK, data.Balancing.Physics.GasConstant);
+
+        /// <summary>The graph node a leak at a tile opens from: the duct node there, or the end of the segment that covers it.</summary>
+        static int LeakNode(DuctNetworkState net, TilePos tile, CompiledNetwork c)
+        {
+            DuctNode? n = net.NodeAt(tile);
+            if (n != null) return c.NodeIndex.TryGetValue(n.Id, out int i) ? i : -1;
+            foreach (DuctSegment s in net.Segments)
+                if (c.SegmentLink.TryGetValue(s.Id, out int link))
+                    foreach (TilePos t in DuctEditor.Tiles(net, s))
+                        if (t == tile) return c.Graph.Links[link].From;
+            return -1;
         }
 
         /// <summary>

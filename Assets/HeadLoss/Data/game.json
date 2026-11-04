@@ -1,10 +1,31 @@
 {
   "displayName": "Head Loss",
-  "version": "0.3.0-phase3",
+  "version": "0.5.0-phase5",
   "currencySymbol": "$",
-  "steam": { "appId": 480, "restartIfNecessary": false },
+  "steam": {
+    "appId": 480,
+    "restartIfNecessary": false
+  },
   "toolbox": {
-    "parts": ["damper", "inline-duct-fan", "fire-damper", "shutoff-valve", "ball-valve", "balancing-valve", "check-valve", "pressure-reducing-valve", "relief-valve", "pressure-tank", "inline-booster-pump", "circulation-pump"]
+    "parts": [
+      "damper",
+      "inline-duct-fan",
+      "fire-damper",
+      "shutoff-valve",
+      "ball-valve",
+      "auto-shutoff-valve",
+      "balancing-valve",
+      "check-valve",
+      "pressure-reducing-valve",
+      "relief-valve",
+      "pressure-tank",
+      "inline-booster-pump",
+      "circulation-pump"
+    ],
+    "safety": [
+      "gas-detector",
+      "passive-vent-opening"
+    ]
   },
   "theme": {
     "paper": "#F4F1EA",
@@ -39,7 +60,11 @@
     "city": {
       "ground": "#EEEAE0",
       "countryside": "#E2E3D2",
-      "districts": { "residential": "#8FB08A", "commercial": "#8A9FC2", "industrial": "#B59B7A" },
+      "districts": {
+        "residential": "#8FB08A",
+        "commercial": "#8A9FC2",
+        "industrial": "#B59B7A"
+      },
       "districtAlpha": 0.16,
       "road": "#CFC9BC",
       "mainRoad": "#B6AFA2",
@@ -47,7 +72,13 @@
       "park": "#A8C79E",
       "protected": "#C2D6B4",
       "historic": "#C49A7C",
-      "facilities": { "water": "#4F93B8", "gas": "#C9A43B", "heating": "#B86A4F", "special-gas": "#8C7AB8", "power": "#5E6B78" },
+      "facilities": {
+        "water": "#4F93B8",
+        "gas": "#C9A43B",
+        "heating": "#B86A4F",
+        "special-gas": "#8C7AB8",
+        "power": "#5E6B78"
+      },
       "plotOffline": "#A7A9AB",
       "plotLocked": "#C9C9C4",
       "plotOnline": "#F3D58C",

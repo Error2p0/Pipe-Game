@@ -20,6 +20,7 @@ namespace HeadLoss.Game.Generation
     {
         const int MaxInternalAttempts = 40;
         public const string WaterId = "water-connection";
+        public const string GasId = "gas-connection";
         public const string PowerId = "power-connection";
 
         public static BuildingLayoutDef? Generate(DataRepository data, BuildingRequest req, int attempt)
@@ -247,6 +248,8 @@ namespace HeadLoss.Game.Generation
             if (!PlaceOpening(data, type, b, openings, "air", BuildingGenerator.AirIntakeId, tier.ReferenceEquipment)) return false;
             bool water = b.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == "water");
             if (water && !PlaceOpening(data, type, b, openings, "water", WaterId, tier.ReferenceWaterEquipment)) return false;
+            bool gas = b.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == BuildingState.GasFluid);
+            if (gas && !PlaceOpening(data, type, b, openings, "gas", GasId, tier.ReferenceGasEquipment)) return false;
             if (!PlaceOpening(data, type, b, openings, "power", PowerId, new List<string> { "panel-basic" })) return false;
             Windows(data, b);
             Columns(data, b, rng);
@@ -342,7 +345,7 @@ namespace HeadLoss.Game.Generation
         static void Outlets(DataRepository data, BuildingLayoutDef b, Rng rng, List<int> outletCounts)
         {
             BuildingGenerationDef gen = data.Buildings.Generation;
-            int vents = 0, taps = 0;
+            int vents = 0, taps = 0, stoves = 0;
             for (int ri = 0; ri < b.Rooms.Count; ri++)
             {
                 RoomDef r = b.Rooms[ri];
@@ -352,7 +355,9 @@ namespace HeadLoss.Game.Generation
                     OutletDef outlet = data.Outlet(rule.Type);
                     if (rule.FromTier > b.Tier || !gen.PhaseFluids.Contains(outlet.Fluid)) continue;
                     if (!outlet.Tiers.TryGetValue(b.Tier.ToString(), out OutletRequirementDef? req)) continue;
-                    bool tap = BuildingState.OutletFluid(rule.Type) == "water";
+                    // Taps and stoves stand along the walls on the floor layer; vents throw across the room from the ceiling.
+                    string fluid = BuildingState.OutletFluid(rule.Type);
+                    bool tap = fluid != "air";
                     int area = r.Width * r.Height;
                     int count = rule.AreaPerOutlet > 0 ? Math.Max(rule.Min, (int)Math.Ceiling(area / rule.AreaPerOutlet)) : rule.Min;
                     if (!tap && outletCounts[ri] > 0) count = outletCounts[ri];
@@ -381,13 +386,14 @@ namespace HeadLoss.Game.Generation
                                 ? (alongX ? (rng.Chance(0.5) ? "east" : "west") : (rng.Chance(0.5) ? "north" : "south"))
                                 : alongX ? (along < len / 2.0 ? "east" : "west") : (along < len / 2.0 ? "north" : "south");
                         }
-                        double f = 1 + gen.RequirementVariation * (2 * rng.NextDouble() - 1);
+                        double variation = outlet.RequirementVariation > 0 ? outlet.RequirementVariation : gen.RequirementVariation;
+                        double f = 1 + variation * (2 * rng.NextDouble() - 1);
                         double step = gen.RoundingSteps.TryGetValue(outlet.Unit, out double st) ? st : 1;
                         double mn = Round(req.Min * f, step), ideal = Math.Max(mn + step, Round(req.Ideal * f, step));
                         double mx = req.Max > 0 ? Math.Max(ideal + step, Round(req.Max * f, step)) : 0;
                         b.Outlets.Add(new OutletPlacementDef
                         {
-                            Id = tap ? $"tap-{++taps}" : $"vent-{++vents}",
+                            Id = fluid == "water" ? $"tap-{++taps}" : tap ? $"stove-{++stoves}" : $"vent-{++vents}",
                             Type = rule.Type, X = x, Y = y, Floor = r.Floor, Min = mn, Ideal = ideal, Max = mx, Facing = facing,
                         });
                     }
@@ -441,6 +447,14 @@ namespace HeadLoss.Game.Generation
                     if (utility == "power" ? electricalExists && !electrical : electrical) continue;
                     if (OutletAt(b, x, y, floor) || IsDoorTile(b, x, y, floor)) continue;
                     if (b.EntryOpenings.Exists(o => o.Floor == floor && Math.Abs(o.X - x) + Math.Abs(o.Y - y) <= 1)) continue;
+                    // Gas separation: the gas connection and the panel keep their distance, as do stoves and the panel.
+                    if (utility == "gas" || utility == "power")
+                    {
+                        int clear = (int)(data.FindCode("gas-separation")?.Parameters.GetValueOrDefault("tiles", 2) ?? 2);
+                        string other = utility == "gas" ? "power" : "gas";
+                        if (b.EntryOpenings.Exists(o => o.Utility == other && o.Floor == floor && Math.Max(Math.Abs(o.X - x), Math.Abs(o.Y - y)) <= clear + 1)) continue;
+                        if (utility == "power" && b.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == BuildingState.GasFluid && o.Floor == floor && Math.Max(Math.Abs(o.X - x), Math.Abs(o.Y - y)) <= clear)) continue;
+                    }
                     foreach ((string side, int dx, int dy) in Sides)
                     {
                         if (RoomAt(b, x + dx, y + dy, floor) >= 0) continue;

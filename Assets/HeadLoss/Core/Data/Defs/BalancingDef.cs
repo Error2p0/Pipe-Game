@@ -28,6 +28,98 @@ namespace HeadLoss.Core.Data.Defs
         public FailureDef Failure = new FailureDef();
         public PowerDef Power = new PowerDef();
         public CityUtilitiesDef City = new CityUtilitiesDef();
+        public GasDef Gas = new GasDef();
+        public FinesDef Fines = new FinesDef();
+        public InspectionDef Inspection = new InspectionDef();
+        public PrestigeBalancingDef Prestige = new PrestigeBalancingDef();
+        public DemoDef Demo = new DemoDef();
+    }
+
+    /// <summary>Natural gas in buildings: leaks, alarms and safety gear (<c>06-fluids.md</c>, <c>08-failures.md</c>).</summary>
+    public sealed class GasDef
+    {
+        /// <summary>Temperature of the gas in the building, °C.</summary>
+        public double SupplyTemperatureC;
+        /// <summary>The auto-router's reference assumes a connection pressure of this share of the LP facility pressure.</summary>
+        public double ReferenceConnectionFactor;
+        /// <summary>Alarm at a detector cell, as a share of the lower flammable limit.</summary>
+        public double AlarmDetectorFraction;
+        /// <summary>Alarm anywhere ("smelled by occupants"), as a share of the lower flammable limit.</summary>
+        public double AlarmAnywhereFraction;
+        /// <summary>Evacuation ends once the leak is repaired and every cell is below this share of the lower flammable limit.</summary>
+        public double ClearFraction;
+        /// <summary>A threshold must hold this long before the alarm sounds, s (the rapid-response bonus shortens it).</summary>
+        public double DetectionSeconds;
+        /// <summary>Gas in range this close to an ignition source can explode, m.</summary>
+        public double IgnitionRadiusMetres;
+        /// <summary>Orifice discharge coefficient C_d of a leak.</summary>
+        public double LeakDischargeCoefficient;
+        /// <summary>Leak area of a burst gas pipe, as a share of its internal cross-section.</summary>
+        public double BurstLeakAreaFraction;
+        /// <summary>Leak area of a weeping pipe, as a share of the burst leak area.</summary>
+        public double WeepLeakFraction;
+        /// <summary>Leak area of a leaking fitting, as a share of its largest pipe's cross-section.</summary>
+        public double FittingLeakAreaFraction;
+        /// <summary>Fresh air a passive vent opening lets in at wind factor 1, m³/h.</summary>
+        public double PassiveVentFlowM3h;
+        /// <summary>Tech tier that unlocks spark-free variants.</summary>
+        public int SparkFreeTier;
+        /// <summary>A spark-free variant costs this factor of the item's price.</summary>
+        public double SparkFreeFactor;
+        /// <summary>The least a spark-free upgrade costs, $ (the pre-placed panel is otherwise free).</summary>
+        public double SparkFreeMinPrice;
+    }
+
+    /// <summary>One-off fines (<c>13-balancing.md</c> §Failures).</summary>
+    public sealed class FinesDef
+    {
+        /// <summary>Explosion fine: this many hours of the building's gross income, h.</summary>
+        public double ExplosionGrossHours;
+        /// <summary>Explosion fine at least this, $ (× tier factor).</summary>
+        public double ExplosionMinimum;
+        /// <summary>Damaged neighbour: this many hours of its gross income × damage, h.</summary>
+        public double NeighbourGrossHours;
+        /// <summary>Damaged neighbour at least this, $ (× its tier factor).</summary>
+        public double NeighbourMinimum;
+    }
+
+    /// <summary>Periodic checks (<c>10-events.md</c> §Inspections). Phase 5: the gas safety certificate.</summary>
+    public sealed class InspectionDef
+    {
+        /// <summary>A gas safety certificate is valid this long, real time, h.</summary>
+        public double GasCertHours;
+        /// <summary>Renewal price, $ (× tier factor).</summary>
+        public double GasCertRenewalPrice;
+        /// <summary>The renewal check takes this long, s.</summary>
+        public double GasCertCheckSeconds;
+        /// <summary>Pay factor while the certificate has expired.</summary>
+        public double GasCertExpiredFactor;
+        /// <summary>A reminder appears this long before expiry, h.</summary>
+        public double GasCertReminderHours;
+    }
+
+    /// <summary>The prestige milestone and reward (<c>03-city.md</c> §Prestige).</summary>
+    public sealed class PrestigeBalancingDef
+    {
+        /// <summary>Share of the plots that must be online.</summary>
+        public double ShareOnline;
+        /// <summary>Lifetime city income target of the first city, $.</summary>
+        public double IncomeTargetFirst;
+        /// <summary>Each later city's target is this factor of the one before.</summary>
+        public double IncomeTargetGrowth;
+        /// <summary>Reputation = floor(k · log10(lifetime city income)).</summary>
+        public double K;
+        /// <summary>Rebuilding a ruin costs this factor of the plot's reference build cost.</summary>
+        public double ReconstructionCostFactor;
+    }
+
+    /// <summary>What the demo build allows (<c>14-roadmap.md</c> Phase 5 task 8).</summary>
+    public sealed class DemoDef
+    {
+        /// <summary>Highest tech tier a demo player can reach.</summary>
+        public int MaxTier;
+        /// <summary>Founding a new city is available in the demo.</summary>
+        public bool Prestige;
     }
 
     /// <summary>Building water networks (<c>05-simulation.md</c>, <c>06-fluids.md</c>).</summary>
@@ -79,6 +171,20 @@ namespace HeadLoss.Core.Data.Defs
         public double PumpChangeSeconds;
         public double BurstSeconds;
         public double CheckValveSeconds;
+        /// <summary>Random leaks per gas fitting per hour (flat rate).</summary>
+        public double FittingLeakPerHour;
+        /// <summary>The explosion timer after an alarm, s.</summary>
+        public double ExplosionTimerSeconds;
+        /// <summary>Share of the gas's heating value that goes into the blast.</summary>
+        public double YieldFactor;
+        /// <summary>Blast radius = k_r · E^(1/3), m/J^(1/3).</summary>
+        public double BlastRadiusK;
+        /// <summary>Damage at or above this ruins a neighbour.</summary>
+        public double HeavyDamage;
+        /// <summary>Damage below this has no effect.</summary>
+        public double LightDamage;
+        /// <summary>Repairing damaged equipment (standard crew) costs this share of its price, at least the minimum repair price.</summary>
+        public double EquipmentRepairFraction;
     }
 
     /// <summary>Electricity (<c>03-city.md</c> §Electricity, <c>04-buildings.md</c> §Electrical panel).</summary>
@@ -154,6 +260,11 @@ namespace HeadLoss.Core.Data.Defs
         public double OutdoorCo2Ppm;
         /// <summary>Oxygen volume fraction of fresh air.</summary>
         public double OutdoorO2;
+        /// <summary>Wind factor on passive vents, range and period (<c>07-equipment.md</c>: 0.5–1.5 from climate).</summary>
+        public double WindFactorMin;
+        public double WindFactorMax;
+        /// <summary>Period of the wind's slow swing, h.</summary>
+        public double WindPeriodHours;
     }
 
     /// <summary>Room grid (<c>05-simulation.md</c> §3, <c>13-balancing.md</c> §Room grid).</summary>
@@ -223,6 +334,8 @@ namespace HeadLoss.Core.Data.Defs
         public double AirBranchVelocity;
         /// <summary>Pipe sizing velocity limit for water, m/s.</summary>
         public double WaterVelocity;
+        /// <summary>Pipe sizing velocity limit for gas, m/s.</summary>
+        public double GasVelocity;
         /// <summary>Straight tiles the trunk runs in from the intake before it may turn or branch.</summary>
         public int LeadInTiles;
         /// <summary>Path cost of a turn, in tiles (fewer elbows).</summary>
@@ -346,6 +459,19 @@ namespace HeadLoss.Core.Data.Defs
         /// <summary>Water flow scale 0 → anchor, extended in steps, L/s.</summary>
         public double FlowAnchorMaxWaterLps;
         public double FlowStepWaterLps;
+        /// <summary>Gas scales: velocity anchor (m/s), pressure anchor and step (mbar), flow anchor and step (m³/h), density [min, max] (kg/m³).</summary>
+        public double VelocityAnchorMaxGas;
+        public double PressureAnchorMaxGasMbar;
+        public double PressureStepGasMbar;
+        public double FlowAnchorMaxGasM3h;
+        public double FlowStepGasM3h;
+        public List<double> DensityAnchorGas = new List<double>();
+        /// <summary>Concentration scale top, as a multiple of the lower flammable limit.</summary>
+        public double ConcentrationAnchorFractionOfLfl;
+        /// <summary>CO₂ scale [min, max], ppm.</summary>
+        public List<double> Co2AnchorPpm = new List<double>();
+        /// <summary>O₂ deficit scale [min, max], volume fraction below fresh air.</summary>
+        public List<double> O2DeficitAnchor = new List<double>();
         /// <summary>Water density scale [min, max], kg/m³.</summary>
         public List<double> DensityAnchorWater = new List<double>();
         /// <summary>Opacity of the room heatmap over the room fills.</summary>
