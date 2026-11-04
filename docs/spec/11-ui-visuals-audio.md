@@ -89,7 +89,7 @@ The UI should scale cleanly to a phone screen later; avoid tiny click targets an
 - Every hover tooltip is also available by tap/select (selection panel).
 - Never use colour alone: icons, patterns, labels.
 - Reduce motion setting turns off particles' speed variation, glow breathing and ripple animations.
-- Input through the Input System with action maps (Mouse+Keyboard now; Touch map stubbed for later).
+- Input through the Input System with action maps (Mouse+Keyboard; the Touch map stays a stub, as there is no phone release, D133).
 
 ## Procedural audio [impl]
 

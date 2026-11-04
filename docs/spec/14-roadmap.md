@@ -9,7 +9,7 @@
 | 3 · Idle city | Procedural city and houses, offline earnings, room grid, temperature. Upgrade shop, first Steam playtest build | Playtesters return the next day |
 | 4 · Water, floors and power | Multi-floor buildings, risers, pumps, burst model, building codes. Ceiling layer, repairs, relief valves, city power cables, electrical panels | Bursts feel fair, never arbitrary |
 | 5 · Gas and prestige | Natural gas, leaks, alarms, explosions, new-city prestige. Steam page, demo, Early Access prep | Ready for Early Access |
-| 6 · Full content [confirm] | Everything in the spec not named above (see list) | Agreed with the user at the Phase 5 gate |
+| 6 · Full content [confirm] | Everything in the spec not named above (see list) | See the gate checklist under Phase 6 (D136) |
 
 ## Definition of done (every phase) [impl]
 
@@ -111,14 +111,18 @@ Spec files: `03` (gas mains, prestige, modifiers), `06` (natural gas), `07` (gas
 
 ## Phase 6 · Full content [confirm]
 
-Everything in the spec that the doc's roadmap does not name. Order to agree with the user. The user decided at the Phase 5 gate that all nine items below go into the Early Access launch, in full (D132).
+Everything in the spec that the doc's roadmap does not name. The user decided at the Phase 5 gate that items 1–8 below go into the Early Access launch, in full (D132).
+
+Build order, agreed with the user (D135): 0 foundations → 4 and 6 → 3 (shell, no heating yet) → 1 → 2 → 3 (finish, tier 4 opens) → 5 (without the lab branch) → 8 → 7 (with the lab branch, tier 5 opens) → balance and phase end. The detailed checklist is in `docs/dev/progress.md`.
 
 1. Hot water and heating: water heater, hot taps, circulation loops, legionella code, district heating plant and mains, heat exchanger, gas boiler, radiators, heating loops, condensation code (tier 3–4).
 2. Cooling: aircon split, heat pump, refrigerant lines, cooling terminals, heat recovery units, exhaust networks, industrial AHU with slots (tier 4).
-3. Tier 4 buildings (warehouse, office), wall cavity layer, transformer room, smart building controller, gas booster compressor, gas manifold, VS pump set.
+3. Tier 4 buildings (warehouse, office), wall cavity layer, transformer room, smart building controller, gas booster compressor, gas manifold, VS pump set, slow ageing (D134).
 4. Indoor air quality (CO₂) code with occupants.
 5. Events: heatwave, cold snap, plant maintenance, power outage with full cascade (gas ventilation loss, lab chillers and tank venting, basement flooding, sump pumps, raised panels, backup generators), new tenant, city festival.
 6. Inspections: random inspection, energy rating A–G.
 7. Tier 5: factory, lab, hospital; propane (basement code), special gases (CO₂, nitrogen, oxygen, hydrogen), purity, oxygen enrichment, asphyxiation zones, hydrogen high-level ventilation, backflow prevention, industrial gas depot and its strict mains, gas storage tanks, air filters (basic, HEPA), clean-air vents.
 8. Substation upgrades, booster/compressor stations, HP gas mains, historic foundations code.
-9. Mobile readiness pass (touch action map, UI review).
+9. Dropped by the user: no phone release, so no mobile readiness pass (D133).
+
+**Gate checklist:** from a new city, tiers 4 and 5 can be reached and brought online without dev tools; heating and cooling read clearly on the temperature heatmap; a power outage feels fair and each protection visibly helps; a special-gas leak feels different from natural gas; every tier and the prestige pace feel right; the user agrees it is ready for Early Access.

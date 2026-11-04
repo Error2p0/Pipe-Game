@@ -2,7 +2,7 @@
 
 ## What the game is
 
-A relaxing, minimal top-down 2D idle/incremental game for PC (Steam), with mobile as a possible later port. The player designs pipe and duct networks inside buildings across a procedurally generated city, and earns money for every outlet that receives enough flow.
+A relaxing, minimal top-down 2D idle/incremental game for PC (Steam). The player designs pipe and duct networks inside buildings across a procedurally generated city, and earns money for every outlet that receives enough flow.
 
 Working title: **Head Loss** (the engineering term for pressure lost to friction), the strongest name so far. Alternatives still under consideration: Laminar, Throughput, Mains, Undercurrent, Flowtown, Pressure Point. Keep the name in one place (`Data/game.json → displayName`) so it can change.
 

@@ -162,7 +162,7 @@ Spark-free variants ×1.5.
 | Heavy / light damage thresholds | 0.6 / 0.1 |
 | Repair, standard | 2 h; $5 × metres × (D/D_ref) × `tierFactor`, min $10 × `tierFactor` |
 | Repair, emergency | 3 min; 5 × standard price |
-| `ageing` | off |
+| `ageingRate` | on, tier 4+ (D134); rate to tune |
 | `hammer.durationSeconds` | 2 |
 | Accumulator surge factor | 0.2 |
 

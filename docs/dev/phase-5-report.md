@@ -102,7 +102,7 @@ The report's other off-target line is the next tier's cheapest item: 22.6 min ag
 - [x] Gas danger feels tense but fair and calm.
 - [x] You agree it is ready for Early Access.
 
-**Gate passed 2026-11-04.** All nine items below go into the launch (D132).
+**Gate passed 2026-11-04.** Items 1–8 below go into the launch (D132); item 9 is dropped (D133).
 
 ## Question for this gate: what goes into the Early Access launch?
 

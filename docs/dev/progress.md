@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **6 · Full content** (not started, order and gate to agree) (`docs/spec/14-roadmap.md`).
+Current phase: **6 · Full content** (not started; next session starts at task 0) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -101,19 +101,21 @@ Task list from `14-roadmap.md` §Phase 5:
 - [x] 8. Steam page assets (generated in-engine screenshots and a capsule rendered from the game), demo build configuration, Early Access checklist (achievements optional, store text draft for the user).
 - [x] Carry-over from earlier phases: table density for MP mains (D21); concentration heatmap's species picker (D64); tier 3 buildings gain gas, replacing the air-and-water stopgap (D101); re-run the balancing report for tier 3 with gas in its cost, payback was 2.3 min against the 20 min target (D91).
 - [x] Phase end: all tests green, Windows build in `Builds/phase-5/`, `docs/dev/phase-5-report.md`.
-- [x] Gate playtest by the user: **passed 2026-11-04**, with D107, D108, D109, D110, D112, D117, D121 and D126 confirmed and all nine Phase 6 items in the Early Access launch (D132).
+- [x] Gate playtest by the user: **passed 2026-11-04**, with D107, D108, D109, D110, D112, D117, D121 and D126 confirmed and Phase 6 in the Early Access launch (D132).
 
 ## Phase 6 · Full content
 
-Scope, set by the user at the Phase 5 gate (2026-11-04): all nine roadmap items go into the Early Access launch, in full (D132). Task numbers below are the roadmap's. Sub-items come from the spec file named on each task. Spec files: `03`–`11`, `13`, `15`.
+Scope, set by the user at the Phase 5 gate (2026-11-04): roadmap items 1–8 go into the Early Access launch, in full (D132). Item 9, mobile readiness, is dropped (D133). Task numbers below are the roadmap's. Sub-items come from the spec file named on each task. Spec files: `03`–`11`, `13`, `15`.
 
-Not started. Three things need the user's answer first: build order, the gate, and tier 3 radiators (see "To agree").
+Not started. The user will begin it in a new session.
 
-### To agree before building
+### Agreed with the user (2026-11-04)
 
-- [ ] **Build order** (`14-roadmap.md`: "Order to agree with the user"). Proposed: 0 → 4 and 6 → 3 (shell, no heating yet) → 1 → 2 → 3 (finish, tier 4 opens) → 5 (without the lab branch) → 8 → 7 (with the lab branch, tier 5 opens) → 9 → balance and phase end. Heating and cooling need tier 4 rooms to be tested in, events need heating, cooling and basements to act on, and mobile goes last because the UI has settled by then. A playtest build after tier 4 opens and after events, neither of them a gate.
-- [ ] **The gate** (`14-roadmap.md` leaves it open). Proposed: from a new city, tiers 4 and 5 can be reached and brought online without dev tools; heating and cooling read clearly on the temperature heatmap; a power outage feels fair and each protection visibly helps; a special-gas leak feels different from natural gas; every tier and the prestige pace feel right; the user agrees it is ready for Early Access.
-- [ ] **Radiators in tier 3?** The spec disagrees: `03` lists tier 3 as air, water and gas, while `13` gives tier 3 radiator values and `06` and `07` put heating and boilers at tier 3. Proposed: yes, following `13` and `04`. This changes tier 3 balance and rebuilds tier 3 buildings in old saves, with a refund. Hot taps stay tier 4+, as `04` and `13` say, so the tier 3 water heater has no tier 3 outlet to feed.
+- [x] **Build order (D135):** 0 → 4 and 6 → 3 (shell, no heating yet) → 1 → 2 → 3 (finish, tier 4 opens) → 5 (without the lab branch) → 8 → 7 (with the lab branch, tier 5 opens) → balance and phase end. A playtest build after tier 4 opens and after events; neither is a gate.
+- [x] **The gate (D136):** from a new city, tiers 4 and 5 can be reached and brought online without dev tools; heating and cooling read clearly on the temperature heatmap; a power outage feels fair and each protection visibly helps; a special-gas leak feels different from natural gas; every tier and the prestige pace feel right; the user agrees it is ready for Early Access.
+- [x] **Radiators in tier 3: yes (D137).** Tier 3 needs rebalancing, and tier 3 buildings in old saves are rebuilt with a refund. Hot taps stay tier 4+, so the tier 3 water heater has no tier 3 outlet to feed.
+- [x] **Slow ageing on (D134).**
+- [x] **No mobile readiness pass (D133).**
 
 ### Tasks
 
@@ -152,6 +154,7 @@ Not started. Three things need the user's answer first: build order, the gate, a
   - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
   - [ ] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set`.
   - [ ] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (`07`; D110 covers the fixed 25 mbar only).
+  - [ ] Slow ageing on, tier 4+ (D134): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
   - [ ] Tier 4 opens (D104 lifts): unlocks, tree, milestone and tests that assume tier 3 is the top.
 - [ ] 4. Indoor air quality code (`09`, `05` §3)
   - [ ] 1 000 ppm room mean CO₂: every air outlet in that room pays 0, on the sheet and in the code list, with tests.
@@ -187,19 +190,15 @@ Not started. Three things need the user's answer first: build order, the gate, a
   - [ ] Booster stations on a main: water +3 bar, gas +2 bar, drawing from the nearest substation.
   - [ ] HP gas mains in play (7 bar, tier 5; D107).
   - [ ] Historic foundations code: routes already pay the fine and drilling already avoids it (`Game/City/Utilities.cs`). Still needed: a passing and a failing test (`15`), the city codes in `codes.json` (`09`), and a check of why the Phase 5 report calls it unreachable.
-- [ ] 9. Mobile readiness (`11`, D133)
-  - [ ] Touch action map: tap selects, drag pans or draws, pinch zooms; on-screen buttons for everything that only has a hotkey.
-  - [ ] Every hover has a tap equivalent; audit of 44 × 44 px hit targets; never colour alone.
-  - [ ] UI review at phone-sized screens and UI scales, including everything added in this phase.
 - [ ] Balance (`13`)
   - [ ] Balancing report covers tiers 4 and 5: payback 40 and 80 min, electricity 10–25%.
   - [ ] Base pay for T4 and T5: `balancing.json` still has `13`'s $30 and $180, a 40× jump from T3's confirmed $0.75 (D109). Re-cut them and log it.
   - [ ] First prestige still 15–25 h now that T4 and T5 plots count toward the 60% (D108); measure and retune.
-  - [ ] T3 payback, still 3.5 min against 20 (D109), with heating in its cost if radiators go into tier 3.
+  - [ ] T3 payback, still 3.5 min against 20 (D109), with heating in its cost (D137).
 - [ ] Performance (`01`): budgets with tier 5 buildings and a full city. 10-floor room grid < 2 ms, 2 000 segments < 5 ms, city solve < 10 ms, 72 h catch-up with 100 buildings < 2 s, memory < 1.5 GB, frames under 8 ms. Up to 3% of frames were already over at the end of Phase 5, with smaller buildings.
-- [ ] Spec sweep: read every spec file against the game for anything named and still missing (this is what `14-roadmap.md` means by "everything in the spec"), and fix or report each one.
+- [ ] Spec sweep: read every spec file against the game for anything named and still missing (this is what `14-roadmap.md` means by "everything in the spec"), and fix or report each one. The Touch map is out (D133).
 - [ ] Early Access material: store text, capsules and screenshots remade to show the new content; checklist updated. The demo stays at tier 2 (D126).
 - [ ] Phase end: all tests green, 10-minute session clean, data validator clean, Windows build in `Builds/phase-6/`, `docs/dev/phase-6-report.md`.
 - [ ] Gate playtest by the user.
 
-Not in this phase: slow ageing stays off (`08`: "enable only if the user approves"); achievements and a trailer (optional or not in the spec, on the Early Access checklist).
+Not in this phase: mobile readiness (D133); achievements and a trailer (optional or not in the spec, on the Early Access checklist).

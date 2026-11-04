@@ -15,7 +15,7 @@ The city is the hub and the level select. Every building is open from the start;
 | --- | --- | --- | --- |
 | 1 | Small house, kiosk | Air | 1 |
 | 2 | Family house, shop | Air, water | 1–2 |
-| 3 | Apartment block, restaurant | Air, water, natural gas | 2–4 |
+| 3 | Apartment block, restaurant | Air, water, natural gas, heating (D137) | 2–4 |
 | 4 | Warehouse, office | Air, water, gas, heating/cooling | 1–6 |
 | 5 | Factory, lab, hospital | Special gases, flammables, mixed | 2–10 |
 

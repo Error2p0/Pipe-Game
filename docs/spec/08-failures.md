@@ -9,7 +9,7 @@ All random rolls use the building's failure RNG stream (`Rng` seeded from `build
 ## Burst model [doc]
 
 - Each segment has a rated pressure from its material and diameter.
-- Below rating: no stress builds (slow optional ageing in later tiers).
+- Below rating: no stress builds, except slow ageing in tier 4+.
 - Above rating: stress accumulates each tick, faster the higher the overpressure ratio.
 - Each tick, burst chance rises with accumulated stress (a Weibull-style hazard curve). Result: "holds X pressure for roughly X time, then bursts," with fair randomness.
 - Hovering a pipe shows its stress as a bar, so players see trouble coming.
@@ -26,7 +26,7 @@ P_burst this tick = 1 − exp( −h(S) · dS )    // probability uses the stress
 
 - With the defaults, a segment held at 2× its rating reaches S = 1 in about an hour, where the cumulative burst chance is ~63%. At 1.2× it takes ~11 hours. This is the "holds X for roughly X time" feel.
 - Stress never decays on its own. Repairing or replacing a segment resets it to 0.
-- Slow ageing (tier 4+, optional, `balancing.failure.ageing`): `dS/dt += k_age` even below rating, so very old untouched pipes eventually need attention. Off by default; enable only if the user approves.
+- Slow ageing (tier 4+, `balancing.failure.ageingRate`): `dS/dt += k_age` even below rating, so very old untouched pipes eventually need attention. On, approved by the user (D134).
 - **Weeping** (pre-burst): at S ≥ 0.6 the segment weeps (a tiny leak: water drips, air hisses) and shows a droplet icon. Pipe-wall leak sensors alert at this point.
 - **Stress heatmap** (mode 7) colours segments by S (0 → 1+). Hover shows the stress bar, current x, and (with engineering software) expected time to 50% burst chance.
 - Ducts burst too (seam failure): same model with duct ratings in Pa.
