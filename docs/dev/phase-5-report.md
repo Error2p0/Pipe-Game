@@ -59,6 +59,8 @@ The freezes were found at this phase's end: every building stepped its rooms in 
 
 **10-minute session:** 0 warnings or errors, on a live city of 40 buildings with a leak escalating for 4 minutes and a blast. That session ran before D130. After D130, the shorter frame measurements above were also clean, as were all tests.
 
+**Builds.** `Builds/phase-5/` and `Builds/demo/` both build with 0 errors, start, reach the main menu and log no errors; Steam was not running, so they logged that and carried on. The demo's title and limits are compiled into the demo only (checked in the assemblies). That is all I could check without a display: **nobody has played either standalone build yet.** The F4 leak is tested by calling it in a PlayMode test, not by pressing the key in a build, so if F4 does nothing with `-headloss-dev`, tell me.
+
 ## A bug found late
 
 During the screenshot pass, one session threw NaN errors from the solver, once a second, right after a blast (judging by the timing). I could not reproduce it: about ten more live blasts and a test of 240 damage patterns stayed clean, so **the root cause is not proven**. The solver can no longer throw on non-finite numbers, and the building keeps its last good solve (D129). If you see a `Head Loss (dev report)` line in `Player.log`, please send it to me: it names the state that caused it. Before this fix, that error would have stopped the whole game tick for as long as it lasted.
