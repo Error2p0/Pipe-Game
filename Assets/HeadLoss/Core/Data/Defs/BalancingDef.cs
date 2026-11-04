@@ -437,6 +437,8 @@ namespace HeadLoss.Core.Data.Defs
 
     public sealed class HeatmapDef
     {
+        /// <summary>A pipe's heatmap colour blends toward its joint over this distance from each end, m (at most half the pipe).</summary>
+        public double JointBlendMetres;
         /// <summary>Velocity heatmap upper anchor for air, m/s.</summary>
         public double VelocityAnchorMaxAir;
         /// <summary>Velocity heatmap upper anchor for water, m/s.</summary>

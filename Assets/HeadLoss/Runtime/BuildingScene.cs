@@ -64,7 +64,7 @@ namespace HeadLoss.Unity
             _rooms = Child<RoomHeatmapRenderer>("RoomHeatmap");
             _rooms.Init(materials.RoomHeat, session.Rooms.Grid, session.Layout.Width, session.Layout.Height);
             Ducts = Child<DuctRenderer>("Ducts");
-            Ducts.Init(palette, heatmap, session.Data.Balancing.Drawing, materials.Ducts);
+            Ducts.Init(palette, heatmap, session.Data.Balancing.Drawing, session.Data.Balancing.Heatmap, materials.Ducts);
             _particles = Child<FlowParticles>("Particles");
             _particles.Init(session.Data.Balancing.Particles, materials.Particles);
             _equipment = Child<EquipmentLayer>("Equipment");

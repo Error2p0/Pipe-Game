@@ -33,6 +33,7 @@
     "wallCavityTier": 4
   },
   "heatmap": {
+    "jointBlendMetres": 1.5,
     "velocityAnchorMaxAir": 6.0,
     "velocityAnchorMaxWater": 3.0,
     "autoRangeStep": 1.0,

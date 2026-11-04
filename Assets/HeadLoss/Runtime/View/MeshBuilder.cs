@@ -59,6 +59,23 @@ namespace HeadLoss.Unity.View
                  new Vector3(b.x + n.x, b.y + n.y, z), new Vector3(a.x + n.x, a.y + n.y, z), color);
         }
 
+        /// <summary>Thick straight line from a to b, its colour running from one end to the other.</summary>
+        public void GradientLine(Vector2 a, Vector2 b, float width, float z, Color fromColour, Color toColour)
+        {
+            Vector2 dir = b - a;
+            if (dir.sqrMagnitude < 1e-12f) return;
+            Vector2 n = new Vector2(-dir.y, dir.x).normalized * (width * 0.5f);
+            int i = _vertices.Count;
+            Color ka = Convert(fromColour), kb = Convert(toColour);
+            _vertices.Add(new Vector3(a.x - n.x, a.y - n.y, z));
+            _vertices.Add(new Vector3(b.x - n.x, b.y - n.y, z));
+            _vertices.Add(new Vector3(b.x + n.x, b.y + n.y, z));
+            _vertices.Add(new Vector3(a.x + n.x, a.y + n.y, z));
+            _colors.Add(ka); _colors.Add(kb); _colors.Add(kb); _colors.Add(ka);
+            _indices.Add(i); _indices.Add(i + 1); _indices.Add(i + 2);
+            _indices.Add(i); _indices.Add(i + 2); _indices.Add(i + 3);
+        }
+
         /// <summary>Thick circular arc (centre, radius of the centreline, start/end angle in radians).</summary>
         public void Arc(Vector2 centre, float radius, float width, float a0, float a1, int steps, float z, Color color)
         {

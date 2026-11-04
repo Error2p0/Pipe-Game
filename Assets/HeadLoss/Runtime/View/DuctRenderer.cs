@@ -86,12 +86,14 @@ namespace HeadLoss.Unity.View
         ViewPalette? _palette;
         HeatmapState? _heatmap;
         DrawingDef? _drawing;
+        HeatmapDef? _heatmapDef;
 
-        public void Init(ViewPalette palette, HeatmapState heatmap, DrawingDef drawing, Material material)
+        public void Init(ViewPalette palette, HeatmapState heatmap, DrawingDef drawing, HeatmapDef heatmapDef, Material material)
         {
             _palette = palette;
             _heatmap = heatmap;
             _drawing = drawing;
+            _heatmapDef = heatmapDef;
             _mesh = new MeshBuilder("Ducts");
             RenderLayers.Attach(gameObject, _mesh.Mesh, material, RenderLayers.Ducts);
         }
@@ -121,6 +123,101 @@ namespace HeadLoss.Unity.View
                 return neutral;
             }
             return _palette.Ramp(_heatmap.Palette, _heatmap.Normalise(Value(_heatmap.Mode, solve, link)));
+        }
+
+        /// <summary>A segment's place on the heatmap ramp, 0–1: at its two ends and along its middle.</summary>
+        struct Shade
+        {
+            public float A, Mid, B;
+        }
+
+        /// <summary>Length of one drawn piece where a colour is blending, m.</summary>
+        const float BlendPieceMetres = 0.2f;
+        readonly Dictionary<int, Shade> _shades = new Dictionary<int, Shade>();
+        readonly Dictionary<int, (float sum, int count)> _joints = new Dictionary<int, (float, int)>();
+
+        /// <summary>
+        /// Place on the ramp at distance x along a piece of length l: from the joint's value at each end to the segment's own
+        /// along the middle, over <paramref name="blend"/> metres at each end.
+        /// </summary>
+        public static float BlendAt(float x, float l, float blend, float jointA, float mid, float jointB)
+        {
+            if (blend <= 0) return mid;
+            if (x < blend) return Mathf.Lerp(jointA, mid, x / blend);
+            if (l - x < blend) return Mathf.Lerp(jointB, mid, (l - x) / blend);
+            return mid;
+        }
+
+        /// <summary>
+        /// Heatmap positions of the network in focus, and of each joint: the mean of the segments meeting there, so neighbours
+        /// run into each other (<c>11-ui-visuals-audio.md</c>). Colours that are not a value on the ramp stay flat: plain
+        /// view, burst pipes, stress over the limit, and pipes without a solve.
+        /// </summary>
+        void PrepareShades(DuctViewInput input, NetworkView v)
+        {
+            _shades.Clear();
+            _joints.Clear();
+            HeatmapMode mode = _heatmap!.Mode;
+            if (!v.Active || mode == HeatmapMode.Plain || mode == HeatmapMode.Concentration) return;
+            foreach (DuctSegment seg in v.Network.Segments)
+            {
+                if (v.BurstSegments.Contains(seg.Id)) continue;
+                Shade s;
+                if (mode == HeatmapMode.Stress)
+                {
+                    double stress = input.Stress?.Invoke(v.Fluid, seg.Id) ?? 0;
+                    if (stress >= 1) continue;
+                    s.A = s.Mid = s.B = _heatmap.Normalise(stress);
+                }
+                else
+                {
+                    FluidSolve? solve = v.Solve;
+                    if (solve == null || !solve.Compiled.SegmentLink.TryGetValue(seg.Id, out int link)) continue;
+                    s.A = s.Mid = s.B = _heatmap.Normalise(Value(mode, solve, link));
+                    // Pressure really does change along a pipe: use its two ends (a link runs From NodeA To NodeB).
+                    if (mode == HeatmapMode.Pressure)
+                    {
+                        double unit = solve.Fluid == "air" ? 1 : solve.Fluid == BuildingState.GasFluid ? Core.Units.PaPerMbar : Core.Units.PaPerBar;
+                        s.A = _heatmap.Normalise(solve.Result.PressureFrom(solve.Compiled.Graph, link) / unit);
+                        s.B = _heatmap.Normalise(solve.Result.PressureTo(solve.Compiled.Graph, link) / unit);
+                    }
+                }
+                _shades[seg.Id] = s;
+                AddToJoint(seg.NodeA, s.A);
+                AddToJoint(seg.NodeB, s.B);
+            }
+        }
+
+        void AddToJoint(int node, float value)
+        {
+            _joints.TryGetValue(node, out (float sum, int count) j);
+            _joints[node] = (j.sum + value, j.count + 1);
+        }
+
+        float Joint(int node, float fallback) => _joints.TryGetValue(node, out (float sum, int count) j) ? j.sum / j.count : fallback;
+
+        /// <summary>A segment whose colour blends into its joints: short pieces where it changes, one long piece where it does not.</summary>
+        void DrawBlended(MeshBuilder m, DuctGeometry.Segment s, Vector2 from, Vector2 to, Shade shade, float alpha)
+        {
+            float l = Vector2.Distance(from, to);
+            if (l < 1e-4f) return;
+            float blend = _heatmap!.Mode == HeatmapMode.Pressure ? l * 0.5f : Mathf.Min((float)_heatmapDef!.JointBlendMetres, l * 0.5f);
+            float jointA = Joint(s.NodeA, shade.A), jointB = Joint(s.NodeB, shade.B);
+            Color At(float x)
+            {
+                Color c = _palette!.Ramp(_heatmap.Palette, BlendAt(x, l, blend, jointA, shade.Mid, jointB));
+                c.a *= alpha;
+                return c;
+            }
+            Vector2 dir = (to - from) / l;
+            float x0 = 0;
+            while (x0 < l)
+            {
+                float x1 = x0 >= blend && x0 < l - blend ? l - blend : Mathf.Min(x0 + BlendPieceMetres, x0 < blend ? blend : l);
+                if (x1 <= x0) x1 = Mathf.Min(x0 + BlendPieceMetres, l);
+                m.GradientLine(from + dir * x0, from + dir * x1, s.Width, ZDuct, At(x0), At(x1));
+                x0 = x1;
+            }
         }
 
         /// <summary>A link's value for a heatmap mode in display units: m/s, Pa, mbar or bar, m³/h or L/s, °C, kg/m³.</summary>
@@ -287,6 +384,7 @@ namespace HeadLoss.Unity.View
         {
             DuctGeometry g = v.Geometry;
             NoteCaps(g);
+            PrepareShades(input, v);
             float fade = input.CeilingInFocus ? 1f : 0.45f;
             Color Col(int seg)
             {
@@ -297,7 +395,11 @@ namespace HeadLoss.Unity.View
             }
             foreach (DuctGeometry.Segment s in g.Segments)
             {
-                if (ClearOfCaps(s, out Vector2 from, out Vector2 to)) m.Line(from, to, s.Width, ZDuct, Col(s.Id));
+                if (ClearOfCaps(s, out Vector2 from, out Vector2 to))
+                {
+                    if (_shades.TryGetValue(s.Id, out Shade shade)) DrawBlended(m, s, from, to, shade, Col(s.Id).a);
+                    else m.Line(from, to, s.Width, ZDuct, Col(s.Id));
+                }
                 // Gas runs dotted, so colour is never the only cue (06-fluids.md).
                 if (v.Fluid != BuildingState.GasFluid) continue;
                 float length = Vector2.Distance(s.A, s.B);
@@ -306,11 +408,20 @@ namespace HeadLoss.Unity.View
                 for (float d = 0.2f; d < length; d += 0.4f)
                     m.Disc(Vector2.Lerp(s.A, s.B, d / length), s.Width * 0.22f, 8, ZCap - 0.004f, dot);
             }
-            foreach (DuctGeometry.Arc a in g.Arcs) m.Arc(a.Centre, DuctGeometry.SmoothRadius, a.Width, a.A0, a.A1, 10, ZDuct, Col(a.SegmentId));
+            // Bends and joints take the joint's value, so the segments on either side run into them.
+            Color JointCol(int node, int seg)
+            {
+                Color c = Col(seg);
+                if (!_shades.TryGetValue(seg, out Shade shade)) return c;
+                Color at = _palette!.Ramp(_heatmap!.Palette, Joint(node, shade.Mid));
+                at.a *= c.a;
+                return at;
+            }
+            foreach (DuctGeometry.Arc a in g.Arcs) m.Arc(a.Centre, DuctGeometry.SmoothRadius, a.Width, a.A0, a.A1, 10, ZDuct, JointCol(a.NodeId, a.SegmentId));
             foreach (DuctGeometry.Cap c in g.Caps)
             {
                 float h = c.Size * 0.5f;
-                m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZCap, Col(c.SegmentId));
+                m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZCap, JointCol(c.NodeId, c.SegmentId));
             }
             // Risers: a ring in the shaft with a chevron for each direction the run continues.
             foreach (DuctGeometry.Riser r in g.Risers)

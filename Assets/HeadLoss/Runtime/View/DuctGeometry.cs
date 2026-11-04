@@ -18,6 +18,8 @@ namespace HeadLoss.Unity.View
         public struct Segment
         {
             public int Id;
+            /// <summary>The nodes at A and B.</summary>
+            public int NodeA, NodeB;
             public Vector2 A, B;
             public float Width;
             public double DiameterMm;
@@ -93,7 +95,7 @@ namespace HeadLoss.Unity.View
                 Vector2 dir = (b - a).normalized;
                 if (smoothElbows.Contains(s.NodeA)) a += dir * SmoothRadius;
                 if (smoothElbows.Contains(s.NodeB)) b -= dir * SmoothRadius;
-                Segments.Add(new Segment { Id = s.Id, A = a, B = b, Width = w, DiameterMm = s.DiameterMm });
+                Segments.Add(new Segment { Id = s.Id, NodeA = s.NodeA, NodeB = s.NodeB, A = a, B = b, Width = w, DiameterMm = s.DiameterMm });
             }
 
             foreach (DuctNode n in net.Nodes)

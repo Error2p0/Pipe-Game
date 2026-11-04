@@ -112,6 +112,7 @@ An intermediate phase the user added on 2026-11-04, before Phase 6 starts. It is
 - [x] 3. Ghost floors show long-radius fittings and are fainter, so they are not mistaken for the floor on show (D141).
 - [x] 4. Generator for `equipment.json` brought up to date (D139).
 - [x] 5. The network not in focus is faint, so ducts and pipes are not mistaken for each other (D142).
+- [x] 6. Heatmap colours run smoothly along pipes instead of jumping at joints (D143).
 
 ## Phase 6 · Full content
 

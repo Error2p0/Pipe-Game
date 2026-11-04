@@ -114,6 +114,7 @@ namespace HeadLoss.Core.Data
             Positive(f + " solver.pcgTolerance", b.Solver.PcgTolerance, errors);
             if (b.Solver.PcgMaxIterations < 1) errors.Add(f + " solver.pcgMaxIterations must be ≥ 1");
             Positive(f + " building.floorHeight", b.Building.FloorHeight, errors);
+            Positive(f + " heatmap.jointBlendMetres", b.Heatmap.JointBlendMetres, errors);
             Positive(f + " heatmap.velocityAnchorMaxAir", b.Heatmap.VelocityAnchorMaxAir, errors);
             Positive(f + " heatmap.velocityAnchorMaxWater", b.Heatmap.VelocityAnchorMaxWater, errors);
             Positive(f + " heatmap.autoRangeStep", b.Heatmap.AutoRangeStep, errors);
