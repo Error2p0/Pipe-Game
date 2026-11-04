@@ -39,3 +39,4 @@ Add `--no-banner` to every call. Run from the project root so the project is aut
 - `script eval` has its own timeout and the Editor keeps running the code after it fires. A long eval (minutes of simulated ticks) leaves the Editor busy, and a following `recompile` may time out at 30 s: wait, then retry.
 - `capture game_view --width 1920 --height 1080` renders at that size whatever the Game window's size is.
 - `camera.Render()` into a `RenderTexture` works from `script eval` in play mode (URP 2D), which gives a picture without the UI Toolkit HUD. `GL.Color` is not converted to the target's colour space: pass `.linear` colours in a linear project.
+- `EditorApplication.delayCall` does not fire while the Editor is unfocused and only the CLI is driving it (the call waits for a real Editor update), so do not defer work with it from `script eval` or `invoke_menu`. Long jobs can run directly in `script eval` with a long `--timeout`.
