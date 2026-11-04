@@ -63,6 +63,20 @@ namespace HeadLoss.PlayMode.Tests
         }
 
         [UnityTest]
+        public IEnumerator DebugLeak_BurstsAGasPipeOnTheFloorInView()
+        {
+            yield return StartFixture();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            BuildingSession s = root.Session!;
+            Assert.IsFalse(root.Scene!.StartDebugLeak(), "no gas pipe yet");
+            PipeIt(s);
+            Assert.IsTrue(root.Scene.StartDebugLeak());
+            Assert.AreEqual(1, s.Failures.State.Leaks.Count);
+            Assert.AreEqual(0, s.Failures.State.Leaks[0].Floor);
+            Assert.Greater(s.GasSafety.LeakFlow(s.Failures.State.Leaks[0]), 0);
+        }
+
+        [UnityTest]
         public IEnumerator GasHouse_HasAGasTab_DrawsAndCommits_ConcentrationColoursTheRooms()
         {
             yield return StartFixture();

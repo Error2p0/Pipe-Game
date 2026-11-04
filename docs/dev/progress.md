@@ -91,14 +91,14 @@ Phase 4 complete and merged; report in `docs/dev/phase-4-report.md`. Gate passed
 
 Task list from `14-roadmap.md` §Phase 5:
 
-- [ ] 1. Natural gas fluid (ideal-gas density, compressibility warning), gas regulator, gas mains (LP/MP), gas receiving station, separation violations.
-- [ ] 2. Gas stove outlets and tier 3 buildings (apartment block, restaurant).
-- [ ] 3. Room grid species, two layers, stratification, floor exchange; concentration heatmap.
-- [ ] 4. Leaks (all causes), detectors, alarm and evacuation, explosion timer, offline pause, auto-shutoff, spark-free equipment, passive vents, ignition sources.
-- [ ] 5. Explosions: energy, radius, damage, ruins, chain reactions, fines, calm presentation.
-- [ ] 6. Gas codes; gas safety certificate.
-- [ ] 7. Prestige: milestone, Reputation, tree, Reconstruction permits, new city with modifiers (cold climate, old buildings).
-- [ ] 8. Steam page assets (generated in-engine screenshots and a capsule rendered from the game), demo build configuration, Early Access checklist (achievements optional, store text draft for the user).
-- [ ] Carry-over from earlier phases: table density for MP mains (D21); concentration heatmap's species picker (D64); tier 3 buildings gain gas, replacing the air-and-water stopgap (D101); re-run the balancing report for tier 3 with gas in its cost, payback was 2.3 min against the 20 min target (D91).
-- [ ] Phase end: all tests green, Windows build in `Builds/phase-5/`, `docs/dev/phase-5-report.md`.
+- [x] 1. Natural gas fluid (ideal-gas density, compressibility warning), gas regulator, gas mains (LP/MP), gas receiving station, separation violations.
+- [x] 2. Gas stove outlets and tier 3 buildings (apartment block, restaurant).
+- [x] 3. Room grid species, two layers, stratification, floor exchange; concentration heatmap.
+- [x] 4. Leaks (all causes), detectors, alarm and evacuation, explosion timer, offline pause, auto-shutoff, spark-free equipment, passive vents, ignition sources.
+- [x] 5. Explosions: energy, radius, damage, ruins, chain reactions, fines, calm presentation.
+- [x] 6. Gas codes; gas safety certificate.
+- [x] 7. Prestige: milestone, Reputation, tree, Reconstruction permits, new city with modifiers (cold climate, old buildings).
+- [x] 8. Steam page assets (generated in-engine screenshots and a capsule rendered from the game), demo build configuration, Early Access checklist (achievements optional, store text draft for the user).
+- [x] Carry-over from earlier phases: table density for MP mains (D21); concentration heatmap's species picker (D64); tier 3 buildings gain gas, replacing the air-and-water stopgap (D101); re-run the balancing report for tier 3 with gas in its cost, payback was 2.3 min against the 20 min target (D91).
+- [x] Phase end: all tests green, Windows build in `Builds/phase-5/`, `docs/dev/phase-5-report.md`.
 - [ ] Gate playtest by the user. Checklist: the whole loop from crank to first prestige plays without dev tools; gas danger feels tense but fair and calm; the user agrees it is ready for Early Access. At this gate, ask the user which Phase 6 items must be in the Early Access launch.

@@ -13,7 +13,7 @@ namespace HeadLoss.Unity.Interaction
         public readonly InputActionMap MouseKeyboard = new InputActionMap("MouseKeyboard");
         public readonly InputActionMap Touch = new InputActionMap("Touch");
 
-        public readonly InputAction Point, Primary, Secondary, Middle, Scroll, Pan, Cancel, Delete, DebugOverlay, Plain;
+        public readonly InputAction Point, Primary, Secondary, Middle, Scroll, Pan, Cancel, Delete, DebugOverlay, DebugLeak, Plain;
         public readonly InputAction Undo, Redo, Commit, Sheet, Crank, Rotate, RoomLayer;
         /// <summary>Floor up / down (PageUp / PageDown) and the layer cycle (L).</summary>
         public readonly InputAction FloorUp, FloorDown, Layer;
@@ -33,6 +33,7 @@ namespace HeadLoss.Unity.Interaction
             Delete = MouseKeyboard.AddAction("Delete", InputActionType.Button, "<Keyboard>/delete");
             Delete.AddBinding("<Keyboard>/backspace");
             DebugOverlay = MouseKeyboard.AddAction("DebugOverlay", InputActionType.Button, "<Keyboard>/f3");
+            DebugLeak = MouseKeyboard.AddAction("DebugLeak", InputActionType.Button, "<Keyboard>/f4");
             Undo = MouseKeyboard.AddAction("Undo", InputActionType.Button);
             Undo.AddCompositeBinding("ButtonWithOneModifier").With("Modifier", "<Keyboard>/ctrl").With("Button", "<Keyboard>/z");
             Redo = MouseKeyboard.AddAction("Redo", InputActionType.Button);

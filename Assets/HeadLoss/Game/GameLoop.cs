@@ -441,11 +441,15 @@ namespace HeadLoss.Game
         /// <summary>True when the building exists and can be opened in this version.</summary>
         public bool CanOpen(string buildingId) => FindLayout(buildingId) != null && !IsRuin(buildingId);
 
+        int _sessionsMade;
+
         BuildingSession CreateSession(BuildingRecord r)
         {
             GeneratedBuilding? g = CityBuildings != null ? CityBuildings.Get(r.BuildingId) : null;
             BuildingLayout layout = g?.Layout ?? FindLayout(r.BuildingId)!;
             var s = new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate);
+            // Golden-ratio steps spread any number of sessions evenly over their intervals.
+            s.SetPhase(++_sessionsMade * 0.6180339887498949 % 1);
             // In a city, water and gas come only through routed mains (the first city solve sets them).
             if (City != null)
             {

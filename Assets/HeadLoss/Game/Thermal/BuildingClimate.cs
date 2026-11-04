@@ -131,6 +131,8 @@ namespace HeadLoss.Game.Thermal
         readonly BuildingLayout _layout;
         readonly int _perTile;
         double _sinceStep, _sinceThermal;
+        int _stepsLeft;
+        float _stepDt;
 
         public BuildingClimate(DataRepository data, BuildingLayout layout, Climate climate)
         {
@@ -163,10 +165,49 @@ namespace HeadLoss.Game.Thermal
             }
             _sinceStep += dt;
             double interval = 1.0 / (open ? g.OpenHz : g.BackgroundHz);
-            if (_sinceStep < interval) return;
-            double elapsed = Math.Min(_sinceStep, open ? 4 * interval : interval * 2);
-            _sinceStep = 0;
-            Step(elapsed, open ? elapsed : g.BackgroundStepFactor / g.OpenHz, network, result);
+            if (open)
+            {
+                PayOut(_stepsLeft);
+                if (_sinceStep < interval) return;
+                double elapsed = Math.Min(_sinceStep, 4 * interval);
+                _sinceStep = 0;
+                Step(elapsed, elapsed, network, result);
+                return;
+            }
+            // A background round is many sub-steps: paid out one a frame (or as many as a long tick covers), never all at once.
+            double subStep = g.BackgroundStepFactor / g.OpenHz;
+            if (_stepsLeft == 0)
+            {
+                if (_sinceStep < interval) return;
+                double elapsed = Math.Min(_sinceStep, interval * 2);
+                _sinceStep = 0;
+                FillInputs(network, result);
+                _stepsLeft = Math.Max(1, (int)Math.Ceiling(elapsed / subStep - 1e-9));
+                _stepDt = (float)(elapsed / _stepsLeft);
+            }
+            PayOut(Math.Max(1, (int)Math.Ceiling(dt / subStep - 1e-9)));
+        }
+
+        /// <summary>Runs up to <paramref name="steps"/> sub-steps of the round in progress; its last one updates the summaries.</summary>
+        void PayOut(int steps)
+        {
+            if (_stepsLeft == 0) return;
+            steps = Math.Min(steps, _stepsLeft);
+            for (int i = 0; i < steps; i++) Stepper.Step(Grid, State, Inputs, Params, _stepDt);
+            _stepsLeft -= steps;
+            if (_stepsLeft == 0) FinishStep();
+        }
+
+        /// <summary>
+        /// Moves this building's rounds later by a share of their interval, so buildings loaded together do not all step in one
+        /// frame. A scheduling matter only: the simulated time per round is unchanged.
+        /// </summary>
+        /// <param name="phase">Share of the interval, 0–1.</param>
+        public void SetPhase(double phase)
+        {
+            RoomGridDef g = _data.Balancing.RoomGrid;
+            _sinceStep = -phase / g.BackgroundHz;
+            _sinceThermal = -phase / g.ThermalHz;
         }
 
         /// <summary>Advances the room grid by <paramref name="seconds"/> in sub-steps of at most <paramref name="subStep"/>.</summary>
@@ -176,6 +217,11 @@ namespace HeadLoss.Game.Thermal
             int steps = Math.Max(1, (int)Math.Ceiling(seconds / subStep - 1e-9));
             float dt = (float)(seconds / steps);
             for (int i = 0; i < steps; i++) Stepper.Step(Grid, State, Inputs, Params, dt);
+            FinishStep();
+        }
+
+        void FinishStep()
+        {
             Rooms = RoomGridMath.Summaries(Grid, State, Inputs, Params);
             if (Inputs.GasActive) UpdateGasPresent();
             Revision++;

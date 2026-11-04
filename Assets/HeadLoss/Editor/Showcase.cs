@@ -212,6 +212,28 @@ namespace HeadLoss.Editor
             return "city";
         }
 
+        /// <summary>
+        /// What frames cost on the main thread with the sessions live now: game logic at 60 fps, without rendering, ms. Worker
+        /// solves get less wall time here than in play, so this errs on the slow side for buildings past the async threshold.
+        /// </summary>
+        public static string FrameCost(int frames = 600)
+        {
+            GameRoot root = Root;
+            var loop = (GameLoop)typeof(GameRoot).GetField("_loop", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(root)!;
+            var times = new List<double>(frames);
+            for (int i = 0; i < frames; i++)
+            {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                loop.Tick(1.0 / 60);
+                times.Add(sw.Elapsed.TotalMilliseconds);
+            }
+            times.Sort();
+            int over = times.FindAll(x => x > 8).Count;
+            double total = 0;
+            foreach (double x in times) total += x;
+            return $"{root.Context!.Sessions.Count} sessions, {frames} frames: mean {total / frames:0.00} ms, median {times[frames / 2]:0.00}, 99th {times[frames * 99 / 100]:0.00}, worst {times[frames - 1]:0.00}, over 8 ms: {over}";
+        }
+
         /// <summary>Raises the alarm in the open building.</summary>
         public static string Alarm()
         {

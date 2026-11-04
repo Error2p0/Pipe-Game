@@ -57,7 +57,8 @@ namespace HeadLoss.Unity
         BuildingListScreen? _list;
         CityScene? _city;
         BuildingScene? _scene;
-        Jobs.BurstRoomGridStepper? _burstRooms;
+        /// <summary>A room grid stepper per live session (they hold native copies of its grid, about 300 KB for an apartment block).</summary>
+        readonly System.Collections.Generic.Dictionary<BuildingSession, Jobs.BurstRoomGridStepper> _roomSteppers = new System.Collections.Generic.Dictionary<BuildingSession, Jobs.BurstRoomGridStepper>();
         ShopScreen? _shop;
         AwayScreen? _away;
         PrestigeScreen? _prestige;
@@ -290,6 +291,7 @@ namespace HeadLoss.Unity
             _online.Clear();
             foreach (BuildingSession s in _ctx.Sessions) Hook(s);
             _ctx.SessionCreated += Hook;
+            _ctx.SessionRemoved += OnSessionRemoved;
             _ctx.TierUnlocked += OnTierUnlocked;
             _topBar = new TopBar(_uiRoot!, _ui!, _ctx);
             _notice = new Notice(_uiRoot!, _ui!);
@@ -299,8 +301,24 @@ namespace HeadLoss.Unity
             if (_saving) SaveNow();
         }
 
+        void ReleaseRoomSteppers()
+        {
+            foreach (Jobs.BurstRoomGridStepper stepper in _roomSteppers.Values) stepper.Dispose();
+            _roomSteppers.Clear();
+        }
+
+        void OnSessionRemoved(BuildingSession s)
+        {
+            if (!_roomSteppers.TryGetValue(s, out Jobs.BurstRoomGridStepper stepper)) return;
+            stepper.Dispose();
+            _roomSteppers.Remove(s);
+        }
+
         void Hook(BuildingSession s)
         {
+            var stepper = new Jobs.BurstRoomGridStepper();
+            _roomSteppers[s] = stepper;
+            s.Rooms.Stepper = stepper;
             s.DesignCommitted += OnCommitted;
             s.Commands.Executed += OnCommand;
             s.SolveProblem += message => Debug.LogWarning("Head Loss (dev report): " + message);
@@ -333,6 +351,12 @@ namespace HeadLoss.Unity
         /// <summary>Shows the city view (tools and tests that change the game from outside the screens).</summary>
         public void ShowCityView() => ShowCity();
 
+        /// <summary>The scene of the open building (dev tools and tests).</summary>
+        public BuildingScene? Scene => _scene;
+
+        /// <summary>F3 and F4: development builds, or a player build started with <c>-headloss-dev</c>.</summary>
+        static bool DevTools => Debug.isDebugBuild || Array.IndexOf(Environment.GetCommandLineArgs(), "-headloss-dev") >= 0;
+
 #if HEADLOSS_DEMO
         string MenuTitle => _data!.Game.DisplayName + " · Demo";
 #else
@@ -363,8 +387,7 @@ namespace HeadLoss.Unity
             _city = null;
             _scene?.Dispose();
             BuildingSession s = _ctx!.Open(id);
-            _burstRooms ??= new Jobs.BurstRoomGridStepper();
-            _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, Debug.isDebugBuild, _burstRooms);
+            _scene = new BuildingScene(s, _materials, _palette!, _ui!, _heatmap!, _camera!, _input!, _uiRoot!, DevTools, null);
             GameContext ctx = _ctx;
             _scene.Hud.UnlockCondition = tier => Game.Progression.Tech.Condition(ctx.Data, ctx, tier);
             _scene.ReduceMotion = _settings.ReduceMotion;
@@ -385,6 +408,7 @@ namespace HeadLoss.Unity
             if (save) SaveNow();
             _scene?.Dispose();
             _scene = null;
+            ReleaseRoomSteppers();
             _list?.Dispose();
             _list = null;
             _city?.Dispose();
@@ -721,7 +745,7 @@ namespace HeadLoss.Unity
         {
             _scene?.Dispose();
             _city?.Dispose();
-            _burstRooms?.Dispose();
+            ReleaseRoomSteppers();
             _input?.Dispose();
             foreach (Material m in _ownedMaterials) Destroy(m);
         }

@@ -12,6 +12,97 @@ namespace HeadLoss.Game.Tests
 {
     public class ClimateTests
     {
+        sealed class CountingStepper : IRoomGridStepper
+        {
+            public int Steps;
+            public double Seconds;
+            public void Step(RoomGridLayout layout, RoomGridState state, RoomGridInputs inputs, RoomGridParams p, float dt)
+            {
+                Steps++;
+                Seconds += dt;
+            }
+        }
+
+        static BuildingSession CountingSession(out CountingStepper stepper)
+        {
+            BuildingSession s = TestHouseWithFan();
+            stepper = new CountingStepper();
+            s.Rooms.Stepper = stepper;
+            s.SolveNow();
+            s.Rooms.Index(s.Current!.Compiled, s.Current.State.Air);
+            return s;
+        }
+
+        /// <summary>A round of sub-steps must not land in one frame (01-architecture.md: under 8 ms a frame), and no simulated time may go missing.</summary>
+        [Test]
+        public void BackgroundRound_IsPaidOutOneStepPerFrame_KeepingAllItsTime()
+        {
+            BuildingSession s = CountingSession(out CountingStepper c);
+            NetworkSnapshot n = s.Current!;
+            int revision = s.Rooms.Revision;
+            int previous = 0;
+            for (int frame = 0; frame < 60 * 6; frame++)
+            {
+                s.Rooms.Tick(1.0 / 60, false, n.Compiled, n.Result);
+                Assert.LessOrEqual(c.Steps - previous, 1, "at most one sub-step a frame");
+                previous = c.Steps;
+            }
+            double sub = Data.Balancing.RoomGrid.BackgroundStepFactor / Data.Balancing.RoomGrid.OpenHz;
+            Assert.AreEqual(Math.Ceiling(5 / sub), c.Steps, 1, "one round's sub-steps");
+            Assert.AreEqual(5.0, c.Seconds, 0.05, "all of the round's time");
+            Assert.AreEqual(revision + 1, s.Rooms.Revision, "the summary updates once, at the end of the round");
+        }
+
+        [Test]
+        public void BackgroundRound_WithALongTick_FinishesInThatTick()
+        {
+            BuildingSession s = CountingSession(out CountingStepper c);
+            NetworkSnapshot n = s.Current!;
+            s.Rooms.Tick(5, false, n.Compiled, n.Result);
+            Assert.AreEqual(5.0, c.Seconds, 1e-3);
+        }
+
+        [Test]
+        public void OpeningTheBuilding_FinishesARoundInProgress()
+        {
+            BuildingSession s = CountingSession(out CountingStepper c);
+            NetworkSnapshot n = s.Current!;
+            for (int frame = 0; frame < 5 * 60 + 3 && c.Steps < 2; frame++) s.Rooms.Tick(1.0 / 60, false, n.Compiled, n.Result);
+            Assert.AreEqual(2, c.Steps);
+            s.Rooms.Tick(1.0 / 60, true, n.Compiled, n.Result);
+            Assert.GreaterOrEqual(c.Seconds, 5.0 - 1e-3);
+        }
+
+        [Test]
+        public void SessionPhase_DelaysItsFirstRound()
+        {
+            BuildingSession s = CountingSession(out CountingStepper c);
+            NetworkSnapshot n = s.Current!;
+            s.SetPhase(0.5);
+            for (int frame = 0; frame < 60 * 7; frame++) s.Rooms.Tick(1.0 / 60, false, n.Compiled, n.Result);
+            Assert.AreEqual(0, c.Steps, "half of the 5 s interval later than usual: 7.5 s");
+            for (int frame = 0; frame < 60; frame++) s.Rooms.Tick(1.0 / 60, false, n.Compiled, n.Result);
+            Assert.Greater(c.Steps, 0);
+        }
+
+        [Test]
+        public void SessionsInACity_GetDifferentPhases()
+        {
+            GameState g = GameContext.NewGame(Data, 3);
+            var ctx = new GameContext(Data, g);
+            var seen = new System.Collections.Generic.HashSet<double>();
+            int count = 0;
+            foreach (Game.City.Plot p in ctx.City!.Plots)
+            {
+                if (p.Tier != 1 || count >= 8) continue;
+                BuildingSession s = ctx.Open(p.Id);
+                seen.Add(s.Phase);
+                count++;
+            }
+            ctx.Leave();
+            Assert.AreEqual(count, seen.Count);
+        }
+
         [Test]
         public void OutsideTemperature_FollowsTheLocalClock_WarmestAtThree()
         {

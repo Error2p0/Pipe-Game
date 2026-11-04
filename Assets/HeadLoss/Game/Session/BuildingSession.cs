@@ -587,6 +587,24 @@ namespace HeadLoss.Game.Session
             return (d, c);
         }
 
+        /// <summary>Where this session's periodic work falls within its interval, 0–1 (<see cref="SetPhase"/>).</summary>
+        public double Phase { get; private set; }
+
+        /// <summary>
+        /// Spreads this session's periodic solve and room rounds away from other sessions' (a city loads them all in one frame).
+        /// Scheduling only: what is simulated does not change.
+        /// </summary>
+        /// <param name="phase">Share of each interval, 0–1.</param>
+        public void SetPhase(double phase)
+        {
+            Phase = phase;
+            _solveDelay = phase * Data.Balancing.Solver.ResolveIntervalSeconds;
+            _sinceSolve = -_solveDelay;
+            Rooms.SetPhase(phase);
+        }
+
+        double _solveDelay;
+
         /// <summary>Advances the session: crank decay; re-solve when dirty, when the crank moved, or on the drift interval.</summary>
         /// <param name="dt">Seconds since the last tick.</param>
         public void Tick(double dt)
@@ -639,7 +657,9 @@ namespace HeadLoss.Game.Session
         void StartSolve(bool async)
         {
             _dirty = false;
-            _sinceSolve = 0;
+            // The first solve after a phase is set keeps the phase (a new session is dirty at once, and that would undo it).
+            _sinceSolve = -_solveDelay;
+            _solveDelay = 0;
             _solvedCrank = CrankSpeed;
             BuildingState design = State.Clone();
             BuildingState? committed = HasPendingDesign ? Committed.Clone() : null;

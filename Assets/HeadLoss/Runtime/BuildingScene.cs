@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using HeadLoss.Game.Buildings;
+using HeadLoss.Game.Failures;
 using HeadLoss.Game.Session;
 using HeadLoss.Unity.Interaction;
 using HeadLoss.Unity.UI;
@@ -85,6 +86,25 @@ namespace HeadLoss.Unity
             return go.AddComponent<T>();
         }
 
+        /// <summary>
+        /// Dev only (F4): bursts a gas pipe on the floor in view, because normal play cannot force a leak before Phase 6's
+        /// boosters and the gate has to judge one. Returns false when the building has no built gas pipe.
+        /// </summary>
+        public bool StartDebugLeak()
+        {
+            BuildingSession s = Session;
+            DuctNetworkState net = s.Committed.Gas;
+            if (net.Segments.Count == 0) return false;
+            DuctSegment seg = net.Segments[net.Segments.Count - 1];
+            foreach (DuctSegment x in net.Segments)
+                if (BuildingFailures.MidTile(net, x).F == ViewState.Floor) { seg = x; break; }
+            List<string> edges = BuildingFailures.Edges(BuildingState.GasFluid, net, seg);
+            if (edges.Count == 0) return false;
+            s.Failures.AddLeak("burst", edges[0], BuildingFailures.MidTile(net, seg), s.Failures.SegmentArea(seg) * s.Data.Balancing.Gas.BurstLeakAreaFraction, s.Game.PlayTimeSeconds);
+            s.SolveNow();
+            return true;
+        }
+
         /// <summary>Input → interaction and hotkeys; then HUD and duct mesh refresh. Call after the game loop ticked.</summary>
         public void Update(float dt, float time)
         {
@@ -96,6 +116,7 @@ namespace HeadLoss.Unity
             for (int i = 0; i < _input.HeatmapKeys.Length; i++)
                 if (_input.HeatmapKeys[i].WasPressedThisFrame()) _heatmap.SetMode((HeatmapMode)(i + 1));
             if (_input.DebugOverlay.WasPressedThisFrame()) Hud.ToggleDebug();
+            if (Hud.DebugAvailable && _input.DebugLeak.WasPressedThisFrame()) StartDebugLeak();
             if (_input.RoomLayer.WasPressedThisFrame()) _heatmap.CycleLayer();
             if (_input.FloorUp.WasPressedThisFrame()) ViewState.StepFloor(1);
             if (_input.FloorDown.WasPressedThisFrame()) ViewState.StepFloor(-1);

@@ -35,3 +35,7 @@ Add `--no-banner` to every call. Run from the project root so the project is aut
 - In Git Bash, long `python - <<'EOF'` heredocs sometimes fail to parse; write the script to a file first.
 - `script eval` prints numbers in the Editor's culture (decimal commas).
 - If play mode runs but `GameRoot.Data` is null, a script recompile happened during play (check `Logs/Editor.log` for "Requested script compilation"): stop play mode, let it settle, start again. A changing define (Steamworks.NET's `STEAMWORKS_NET`) caused it once; it is now set in ProjectSettings.
+- PowerShell 5.1 strips double quotes from native arguments, so `script eval` code cannot contain string literals from PowerShell. Put the code in a static helper (`HeadLoss.Editor.Showcase`) and pass numbers.
+- `script eval` has its own timeout and the Editor keeps running the code after it fires. A long eval (minutes of simulated ticks) leaves the Editor busy, and a following `recompile` may time out at 30 s: wait, then retry.
+- `capture game_view --width 1920 --height 1080` renders at that size whatever the Game window's size is.
+- `camera.Render()` into a `RenderTexture` works from `script eval` in play mode (URP 2D), which gives a picture without the UI Toolkit HUD. `GL.Color` is not converted to the target's colour space: pass `.linear` colours in a linear project.
