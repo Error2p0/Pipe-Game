@@ -104,6 +104,10 @@ namespace HeadLoss.Game.Networks
         public HashSet<TilePos>? AutoClosed;
         /// <summary>Equipment knocked offline by a blast (see <see cref="Failures.FailureState.DamagedEquipment"/>).</summary>
         public HashSet<string>? Damaged;
+        /// <summary>Switched-off fans and pumps still slowing down: share of speed left, 0–1, by damage key. Null = all stopped (steady state).</summary>
+        public IReadOnlyDictionary<string, double>? RunDown;
+        /// <summary>Share of speed every powered device has left after the panel tripped, 0–1 (1 = not tripping).</summary>
+        public double PowerRunDown = 1;
     }
 
     /// <summary>
@@ -204,8 +208,10 @@ namespace HeadLoss.Game.Networks
                         continue;
                     }
                     int outside = g.AddFixed(0, Ceiling(n.Floor), $"outside-{n.AnchorId}");
+                    double left = SpeedLeft(o, Failures.DamageKeys.Opening(n.AnchorId), eq!.On, def!);
                     int fan = g.AddFan(outside, c.NodeIndex[n.Id], FanCurve.FromDef(def!), Units.MmToM(def!.ConnectionDiameterMm),
-                        DeviceSpeed(def, eq!, o.CrankSpeed, speedFactor), eq!.EquipmentId);
+                        DeviceSpeed(def, eq!, o.CrankSpeed, speedFactor, left), eq!.EquipmentId);
+                    SetRunDown(g.Links[fan], left);
                     if (IsDamaged(o, Failures.DamageKeys.Opening(n.AnchorId))) g.Links[fan].Speed = 0;
                     g.Links[fan].Temperature = o.AirTemperatureK;
                     c.FanLink[n.AnchorId] = fan;
@@ -232,8 +238,10 @@ namespace HeadLoss.Game.Networks
                 else if (device)
                 {
                     connection = g.AddJunction(z, $"connection-{n.AnchorId}");
+                    double left = SpeedLeft(o, Failures.DamageKeys.Opening(n.AnchorId), eq!.On, def!);
                     int pump = g.AddFan(city, connection, FanCurve.FromDef(def!), Units.MmToM(def!.ConnectionDiameterMm),
-                        DeviceSpeed(def, eq!, 0, speedFactor), eq!.EquipmentId);
+                        DeviceSpeed(def, eq!, 0, speedFactor, left), eq!.EquipmentId);
+                    SetRunDown(g.Links[pump], left);
                     if (damaged) g.Links[pump].Speed = 0;
                     g.Links[pump].Temperature = tWater;
                     c.FanLink[n.AnchorId] = pump;
@@ -262,8 +270,11 @@ namespace HeadLoss.Game.Networks
                 if (devDef != null && devDef.Curve.Count > 0)
                 {
                     bool variable = devDef.SpeedControl == "variable" || n.Vsd;
-                    double speed = (!n.On || IsDamaged(o, Failures.DamageKeys.Inline(fluid, n.Pos)) ? 0 : variable ? n.Speed : 1) * speedFactor;
+                    string key = Failures.DamageKeys.Inline(fluid, n.Pos);
+                    double left = SpeedLeft(o, key, n.On, devDef);
+                    double speed = (IsDamaged(o, key) ? 0 : left * (variable ? n.Speed : 1)) * speedFactor;
                     link = g.AddFan(from, to, FanCurve.FromDef(devDef), Units.MmToM(devDef.ConnectionDiameterMm), speed, $"{n.PartId}-n{n.Id}");
+                    SetRunDown(g.Links[link], left);
                     if (n.Vsd) c.DriveFactor[link] = DriveEfficiency(data, devDef.Category);
                 }
                 else if (devDef != null)
@@ -399,6 +410,7 @@ namespace HeadLoss.Game.Networks
             AssignFittings(net, data, c, segLink, water);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
             if (c.SupplyNode >= 0) MarkIsolated(net, c);
+            if (water && c.SupplyNode >= 0) LoadRunDown(c, gas ? o.GasPressurePa : o.WaterPressurePa);
             return c;
         }
 
@@ -467,6 +479,51 @@ namespace HeadLoss.Game.Networks
                 if (Isolated(g.Links[kv.Value.a].From) && Isolated(g.Links[kv.Value.b].From)) c.IsolatedSegments.Add(kv.Key);
         }
 
+        /// <summary>
+        /// Taps fed through a pump that is running down (<c>05-simulation.md</c> §2). A tap draws a fixed flow, which alone would
+        /// hold the flow up until the pump stops. So what only that pump can reach draws f × its design flow, and the pump's
+        /// loss is sized to take (1 − f²) of the upstream pressure at that flow: flow fades with f and pressure with f², as
+        /// through a closing valve. Taps with another way to the supply are not touched.
+        /// </summary>
+        /// <param name="upstreamPa">Connection pressure, Pa gauge.</param>
+        static void LoadRunDown(CompiledNetwork c, double upstreamPa)
+        {
+            NetworkGraph g = c.Graph;
+            double left = 0;
+            foreach (NetworkLink l in g.Links) if (RunsDown(l)) left = Math.Max(left, l.Opening);
+            if (left <= 0) return;
+
+            var seen = new bool[g.Nodes.Count];
+            var stack = new Stack<int>();
+            seen[c.SupplyNode] = true;
+            stack.Push(c.SupplyNode);
+            while (stack.Count > 0)
+            {
+                int u = stack.Pop();
+                foreach (NetworkLink l in g.Links)
+                {
+                    if (!l.IsOpen || RunsDown(l)) continue;
+                    int v = l.From == u ? l.To : l.To == u ? l.From : -1;
+                    if (v < 0 || seen[v] || g.Nodes[v].Kind == NodeKind.FixedPressure) continue;
+                    seen[v] = true;
+                    stack.Push(v);
+                }
+            }
+
+            double flow = 0;
+            for (int i = 0; i < g.Nodes.Count; i++)
+            {
+                if (seen[i] || g.Nodes[i].Kind != NodeKind.Demand) continue;
+                g.Nodes[i].Demand *= left;
+                flow += g.Nodes[i].Demand;
+            }
+            if (flow <= 0 || upstreamPa <= 0) return;
+            foreach (NetworkLink l in g.Links)
+                if (RunsDown(l)) l.RunDownLoss = (1 - l.Opening * l.Opening) * upstreamPa / (flow * flow);
+        }
+
+        static bool RunsDown(NetworkLink l) => l.Kind == LinkKind.Fan && l.Opening < 1 && l.IsOpen;
+
         /// <summary>Design flow of a pressure-measured outlet (taps), m³/s.</summary>
         public static double DesignFlow(DataRepository data, BuildingLayout layout, OutletPlacementDef placement)
         {
@@ -474,13 +531,26 @@ namespace HeadLoss.Game.Networks
             return def.Tiers.TryGetValue(layout.Tier.ToString(), out OutletRequirementDef? r) ? r.DesignFlowLps / 1000.0 : 0;
         }
 
-        /// <summary>Speed of a device at an opening: the crank's, its set speed with variable speed, else on/off; × the power factor.</summary>
-        static double DeviceSpeed(EquipmentDef def, EquipmentState eq, double crankSpeed, double powerSpeed)
+        /// <summary>Speed of a device at an opening: the crank's, its set speed with variable speed, else on/off; × the share left × the power factor.</summary>
+        static double DeviceSpeed(EquipmentDef def, EquipmentState eq, double crankSpeed, double powerSpeed, double left)
         {
             if (def.SpeedControl == "crank") return crankSpeed;
-            if (!eq.On) return 0;
             bool variable = def.SpeedControl == "variable" || eq.Vsd;
-            return (variable ? eq.Speed : 1) * (def.PowerModel == "none" ? 1 : powerSpeed);
+            return left * (variable ? eq.Speed : 1) * (def.PowerModel == "none" ? 1 : powerSpeed);
+        }
+
+        /// <summary>Share of its speed a device has now: 1 running, 0 stopped, in between while running down (<c>05-simulation.md</c> §2).</summary>
+        static double SpeedLeft(CompileOptions o, string key, bool on, EquipmentDef def)
+        {
+            if (def.SpeedControl == "crank") return 1;
+            double left = on ? 1 : o.RunDown != null && o.RunDown.TryGetValue(key, out double f) ? f : 0;
+            return def.PowerModel == "none" ? left : left * o.PowerRunDown;
+        }
+
+        /// <summary>Marks a link as running down so the solver loads it; a stopped link is out of the solve anyway.</summary>
+        static void SetRunDown(NetworkLink link, double left)
+        {
+            if (left > 0 && left < 1) link.Opening = left;
         }
 
         /// <summary>Efficiency multiplier of a variable-speed drive (<c>07-equipment.md</c>: costs 3% efficiency).</summary>

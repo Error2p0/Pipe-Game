@@ -74,11 +74,13 @@ namespace HeadLoss.Sim.Network
         public double Roughness;
         /// <summary>Pipes: ΣK of fittings; vents: grille K; valves: K fully open.</summary>
         public double SumK;
-        /// <summary>Valve opening θ ∈ (0, 1].</summary>
+        /// <summary>Valve opening θ ∈ (0, 1]. Fans and pumps: the share of speed left while running down (1 = not running down).</summary>
         public double Opening = 1;
         /// <summary>Closed valves are removed from the solve.</summary>
         public bool Closed;
         public FanCurve? Fan;
+        /// <summary>Fans and pumps running down: resistance set by the compiler, Pa per (m³/s)² (0 = the curve's own).</summary>
+        public double RunDownLoss;
         /// <summary>Fan speed fraction; 0 = off (treated as a closed valve).</summary>
         public double Speed = 1;
         /// <summary>Fluid temperature in the link, K.</summary>

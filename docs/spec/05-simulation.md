@@ -98,6 +98,7 @@ Per link: Q, v, Re, f, Δp (friction / fittings / elevation split), p at both en
 - Speed `s ∈ [0, 1]`: `Δp(Q, s) = s² · Δp_1(Q / s)`, `η(Q, s) ≈ η_1(Q / s)`. `s = 0` → device is a closed valve.
 - Pumps display head `H = Δp / (ρ g)` in m; fans display Pa.
 - Devices without a variable-speed drive run at `s = 1` when on, `s = 0` when off. With a VSD (or an EC fan / variable-speed pump set) the player sets `s` from 0.2 to 1.0 in 0.01 steps. The hand crank's `s` comes from cranking (`02-economy.md`).
+- **Running down** (D138, user request): a device switched off does not stop at once. Its share of speed `f` falls from 1 to 0 over `balancing.devices.runDownSeconds`; it runs at `s·f` and adds a loss `c·Q|Q|`, so it closes smoothly into the closed valve a stopped device is. By default `c = Δp₀/Q_max²·(1/f² − 1)`. Taps that only this device can reach draw `f ×` their design flow, and `c` is sized to take `(1 − f²)` of the connection pressure at that flow, so flow fades with `f` and pressure with `f²`. The network re-solves each time `balancing.devices.runDownResolveStep` of the speed has gone. A panel trip runs every powered device down the same way. Switching on is immediate. Not simulated offline or in previews, which are steady states. Blast damage stops a device at once.
 - Devices in series and parallel work naturally in the graph.
 - Shutoff head is the highest pressure the device can create: the burst model (`08-failures.md`) uses it when outlets are closed.
 
@@ -178,7 +179,7 @@ The CPU reference implementation lives in `Sim`; the Burst implementation in `Un
 Water's new mechanic includes water hammer ([doc], `06-fluids.md`). Model as transient pressure spikes:
 
 - Triggers: a shutoff valve closing, a pump starting or stopping, a panel trip, a power outage, a burst elsewhere on the same network, a check valve closing on reverse flow.
-- Joukowsky surge: `Δp_surge = ρ · a · Δv`, with wave speed `a` per material (steel/copper 1200 m/s, PVC 400 m/s). If the change takes longer than `2L/a` (L = distance to the nearest reflecting boundary: tank, source, open end), scale by `(2L/a) / t_change`. Manual valve closing takes 1 s; pump stop 0.5 s; burst 0.05 s.
+- Joukowsky surge: `Δp_surge = ρ · a · Δv`, with wave speed `a` per material (steel/copper 1200 m/s, PVC 400 m/s). If the change takes longer than `2L/a` (L = distance to the nearest reflecting boundary: tank, source, open end), scale by `(2L/a) / t_change`. Manual valve closing takes 1 s; pump stop 0.5 s (a sudden stop, such as blast damage; a pump running down (§2) changes its flow far more slowly, so its surge is small); burst 0.05 s.
 - The spike is applied to every segment of the affected network for `balancing.hammer.durationSeconds` (default 2 s) on top of steady pressure, and feeds the stress model (`08-failures.md`).
 - A pressure tank / accumulator on the network reduces surges on that network by its factor (default ×0.2).
 - The pressure heatmap flashes nothing: show the surge as a short ripple animation along the pipe and a hover note "Surge: +3.1 bar". Calm by default.

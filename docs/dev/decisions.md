@@ -148,6 +148,19 @@ Choices the spec did not make. `NEEDS CONFIRMATION` items are listed in the phas
 - **D130 · Background buildings run on Burst, spread over frames.** Found at phase end: with 40 buildings the frame budget held on average but froze for over 500 ms every 5 s, because every building stepped its room grid in the same frame on the managed reference stepper. Now each live session has its own Burst stepper, a background round's sub-steps are paid out one a frame, and sessions get a golden-ratio phase. No simulated time changes; a building's round still covers the same seconds. Costs about 300 KB of native memory per apartment block.
 - **D131 · F4 starts a leak, dev only.** Normal play cannot force a gas leak before Phase 6's boosters (gas pipes are rated far above the mains) and fitting leaks are rare, so the gate could not be judged at will. F3 and F4 work in development builds, or in any build started with `-headloss-dev`.
 
+## Phase 5.5
+
+- **D138 · Fans and pumps run down. NEEDS CONFIRMATION** on the choices below; the behaviour itself is the user's request (2026-11-04). A switched-off fan or pump slows to a stop over `devices.runDownSeconds`, and flow, pressure, power, money, heatmaps, particles, hum and the readout follow it (`05` §2). It is runtime only, so the save format is unchanged.
+  - **6 seconds, for every device.** My pick, one number in `balancing.json`.
+  - **Switching on is still instant,** also during a run-down. Only stopping was asked for; a spin-up would be a small addition.
+  - **Valves still close at once.** A shutoff valve is not a device that coasts, and alarms and isolation rely on it being closed.
+  - **Speed sliders and brownouts are unchanged.** They slow a running device rather than stop it, and a brownout's speed is computed from the draw, so a lag there would make it hunt.
+  - **A panel trip coasts too:** the rotors slow over the same time while the income stops at once, because the building is offline from the moment the panel trips. Automatic gas shutoffs still close at once on power loss.
+  - **Blast damage still stops a device dead.** It is broken, not switched off.
+  - **Offline, the shop's compare view and drawing previews see the stopped state.** They are steady states.
+  - **Pump hammer changes (`05` §6).** A pump stop used to count as a 0.5 s change. A pump coasting for 6 s changes its flow slowly, so it raises almost no surge. Only inline pumps are affected: at the connection the distance to the reflecting boundary is 0, so the formula already gave no surge there. Blast damage keeps the 0.5 s stop. Phase 6's outage hammer (task 5) has to decide which path it takes.
+  - **Taps during a pump's run-down.** A tap draws a fixed flow, which would hold the flow up until the pump stops. Taps only that pump can reach draw f × their design flow, and the pump's loss is sized to take (1 − f²) of the connection pressure at that flow, so flow fades with f and pressure with f². Near the end an upper floor can dip slightly below zero gauge (about −0.2 bar) because of its height; deliveries read 0 there.
+
 ## Phase 6
 
 - **D132 · Phase 6 goes into the Early Access launch. Confirmed by the user** at the Phase 5 gate (2026-11-04): roadmap items 1–8, in full (item 9 was dropped, D133). This answers item 6 of `00-index.md`. Phase 6 therefore comes before launch.

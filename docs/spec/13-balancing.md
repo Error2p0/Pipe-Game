@@ -46,6 +46,13 @@ Outlet type pay factor (× `basePay`): air supply vent 1.0, clean-air vent 1.5, 
 | `decaySeconds` (time constant) | 4 |
 | `holdClicksPerSecond` | 5 (holding the button/key counts as clicking) |
 
+## Devices (`balancing.devices`)
+
+| Key | Default |
+| --- | --- |
+| `runDownSeconds` | 6 (a switched-off fan or pump slows to a stop over this time, `05-simulation.md` §2) |
+| `runDownResolveStep` | 0.02 (share of speed between re-solves; below it the device has stopped) |
+
 ## Outlets (`outlets.json`) [impl, except the T3 example values which are doc]
 
 | Outlet type | Measured | T1 | T2 | T3 | T4 | T5 | Design flow | Code max reason |

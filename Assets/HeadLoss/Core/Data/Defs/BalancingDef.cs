@@ -14,6 +14,7 @@ namespace HeadLoss.Core.Data.Defs
         public CameraDef Camera = new CameraDef();
         public EconomyDef Economy = new EconomyDef();
         public CrankDef Crank = new CrankDef();
+        public DevicesDef Devices = new DevicesDef();
         public PricesDef Prices = new PricesDef();
         public SaveDef Save = new SaveDef();
         public OfflineDef Offline = new OfflineDef();
@@ -570,6 +571,18 @@ namespace HeadLoss.Core.Data.Defs
         public double HoldClicksPerSecond;
         /// <summary>The network re-solves when the crank speed has moved by this much since the last solve.</summary>
         public double ResolveSpeedStep;
+    }
+
+    /// <summary>Fans and pumps in operation (<c>05-simulation.md</c> §2).</summary>
+    public sealed class DevicesDef
+    {
+        /// <summary>A switched-off device takes this long to slow from its running speed to a stop, s.</summary>
+        public double RunDownSeconds;
+        /// <summary>
+        /// While a device runs down the network re-solves each time this share of its speed has gone; below it the device
+        /// counts as stopped (0–1).
+        /// </summary>
+        public double RunDownResolveStep;
     }
 
     /// <summary>Price rules (<c>13-balancing.md</c> §Prices). Item prices live in their own files.</summary>

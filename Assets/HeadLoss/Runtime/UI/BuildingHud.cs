@@ -1008,9 +1008,15 @@ namespace HeadLoss.Unity.UI
             EquipmentDef def = _data.EquipmentItem(e.EquipmentId);
             _readoutTitle.text = def.DisplayName;
             bool crank = def.SpeedControl == "crank";
-            if (!crank && !e.On) return Line(i, "Switched off");
-            if (crank) i = Line(i, $"Crank speed  {_s.CrankSpeed * 100:0} % · click or hold C (no electricity, nothing offline)");
-            else if (e.Vsd || def.SpeedControl == "variable") i = Line(i, $"Speed  {e.Speed * 100:0} %{(e.Vsd ? " · variable-speed drive" : "")}");
+            bool variable = e.Vsd || def.SpeedControl == "variable";
+            if (!crank && !e.On)
+            {
+                double left = _s.RunDownLeft(DamageKeys.Opening(openingId));
+                if (left <= 0) return Line(i, "Switched off");
+                i = Line(i, StoppingLine(left, variable, e.Speed));
+            }
+            else if (crank) i = Line(i, $"Crank speed  {_s.CrankSpeed * 100:0} % · click or hold C (no electricity, nothing offline)");
+            else if (variable) i = Line(i, $"Speed  {e.Speed * 100:0} %{(e.Vsd ? " · variable-speed drive" : "")}");
             FluidSolve? fs = snap?.Air;
             if (fs == null || !fs.Compiled.FanLink.TryGetValue(openingId, out int k)) return Line(i, "Solving…");
             return DeviceLines(fs, k, def, i);
@@ -1028,8 +1034,14 @@ namespace HeadLoss.Unity.UI
             FluidSolve? fs = snap?.Water;
             if (fs != null && fs.Compiled.SupplyNode >= 0) i = Line(i, $"Drawing  {Units.FormatWaterFlow(fs.Compiled.SupplyFlow(fs.Result))} from the main");
             if (!pump) return Line(i, "Free and fixed; weak on upper floors. Place a pump here for more head.");
-            if (!e!.On) return Line(i, "Switched off (closed to water)");
-            if (e.Vsd || def!.SpeedControl == "variable") i = Line(i, $"Speed  {e.Speed * 100:0} %{(e.Vsd ? " · variable-speed drive" : "")}");
+            bool variable = e!.Vsd || def!.SpeedControl == "variable";
+            if (!e.On)
+            {
+                double left = _s.RunDownLeft(DamageKeys.Opening(openingId));
+                if (left <= 0) return Line(i, "Switched off (closed to water)");
+                i = Line(i, StoppingLine(left, variable, e.Speed));
+            }
+            else if (variable) i = Line(i, $"Speed  {e.Speed * 100:0} %{(e.Vsd ? " · variable-speed drive" : "")}");
             if (fs == null || !fs.Compiled.FanLink.TryGetValue(openingId, out int k)) return Line(i, "Solving…");
             return DeviceLines(fs, k, def!, i);
         }
@@ -1066,6 +1078,10 @@ namespace HeadLoss.Unity.UI
             return i;
         }
 
+        /// <summary>The readout line of a switched-off device still slowing down.</summary>
+        static string StoppingLine(double left, bool variable, double setSpeed) =>
+            $"Slowing to a stop · speed  {left * (variable ? setSpeed : 1) * 100:0} %";
+
         int DeviceLines(FluidSolve fs, int k, EquipmentDef def, int i)
         {
             SolveResult r = fs.Result;
@@ -1098,7 +1114,12 @@ namespace HeadLoss.Unity.UI
             {
                 _readoutTitle.text = eq.DisplayName;
                 if (eq.Curve.Count == 0) return Line(i, $"Surges on this network × {_data.Balancing.Failure.AccumulatorSurgeFactor:0.0#}: pipes build less stress when valves close or pumps stop.");
-                if (!n.On) return Line(i, $"Switched off (closed to {FluidWord(fluid)})");
+                if (!n.On)
+                {
+                    double left = _s.RunDownLeft(DamageKeys.Inline(fluid, n.Pos));
+                    if (left <= 0) return Line(i, $"Switched off (closed to {FluidWord(fluid)})");
+                    i = Line(i, StoppingLine(left, n.Vsd || eq.SpeedControl == "variable", n.Speed));
+                }
                 if (!solved) return Line(i, "Solving…");
                 return DeviceLines(fs!, k, eq, i);
             }

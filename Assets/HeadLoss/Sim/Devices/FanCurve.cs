@@ -87,6 +87,15 @@ namespace HeadLoss.Sim.Devices
             return speed * speed * p1;
         }
 
+        /// <summary>
+        /// Resistance of a device running down, Pa per (m³/s)²: Δp₀/Q_max²·(1/f² − 1), the device's own scale. It is 0 at full
+        /// speed and grows without limit toward a stop, so flow fades into the closed valve a stopped device is, even with
+        /// mains pressure behind it (an unloaded curve would pass the mains flow right up to the last moment).
+        /// </summary>
+        /// <param name="left">Share of its speed the device still has, f ∈ (0, 1].</param>
+        public double RunDownResistance(double left) =>
+            left >= 1 || MaxFlow <= 0 ? 0 : ShutoffPressure / (MaxFlow * MaxFlow) * (1.0 / (left * left) - 1.0);
+
         /// <summary>Efficiency at the operating point (affinity: η₁(Q/s)); 0 for unpowered devices.</summary>
         public double Efficiency(double flow, double speed)
         {

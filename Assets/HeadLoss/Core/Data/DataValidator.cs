@@ -156,6 +156,9 @@ namespace HeadLoss.Core.Data
             Positive(f + " crank.holdClicksPerSecond", b.Crank.HoldClicksPerSecond, errors);
             Positive(f + " crank.resolveSpeedStep", b.Crank.ResolveSpeedStep, errors);
 
+            Positive(f + " devices.runDownSeconds", b.Devices.RunDownSeconds, errors);
+            Fraction(f + " devices.runDownResolveStep", b.Devices.RunDownResolveStep, errors);
+
             Positive(f + " prices.ductBasePerMetre", b.Prices.DuctBasePerMetre, errors);
             Positive(f + " prices.ductReferenceDiameterMm", b.Prices.DuctReferenceDiameterMm, errors);
             Positive(f + " prices.pipeBasePerMetre", b.Prices.PipeBasePerMetre, errors);

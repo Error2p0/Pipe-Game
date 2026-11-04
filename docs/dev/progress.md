@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **6 · Full content** (not started; next session starts at task 0) (`docs/spec/14-roadmap.md`).
+Current phase: **5.5 · Fixes and polish** (between Phases 5 and 6; the user sends the tasks one at a time). Phase 6 starts after it, at task 0 (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -102,6 +102,12 @@ Task list from `14-roadmap.md` §Phase 5:
 - [x] Carry-over from earlier phases: table density for MP mains (D21); concentration heatmap's species picker (D64); tier 3 buildings gain gas, replacing the air-and-water stopgap (D101); re-run the balancing report for tier 3 with gas in its cost, payback was 2.3 min against the 20 min target (D91).
 - [x] Phase end: all tests green, Windows build in `Builds/phase-5/`, `docs/dev/phase-5-report.md`.
 - [x] Gate playtest by the user: **passed 2026-11-04**, with D107, D108, D109, D110, D112, D117, D121 and D126 confirmed and Phase 6 in the Early Access launch (D132).
+
+## Phase 5.5 · Fixes and polish
+
+An intermediate phase the user added on 2026-11-04, before Phase 6 starts. It is not in `14-roadmap.md`: the user sends each task after the last one is done, and it has no gate of its own.
+
+- [x] 1. Switching off a fan or pump slows it to a stop instead of cutting it, and the values follow (D138).
 
 ## Phase 6 · Full content
 

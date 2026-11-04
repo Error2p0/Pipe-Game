@@ -586,7 +586,13 @@ namespace HeadLoss.Sim.Network
                 {
                     double rise = l.Fan!.PressureRise(flow, l.Speed, density, l.Area, out double d);
                     derivative = -d;
-                    return -rise + elevation;
+                    if (l.Opening >= 1) return -rise + elevation;
+                    // Running down: a loss on top of the slowing curve (05 §2).
+                    double c = l.RunDownLoss > 0 ? l.RunDownLoss : l.Fan.RunDownResistance(l.Opening);
+                    derivative += 2.0 * c * Math.Max(Math.Abs(flow), _s.ZeroFlowThreshold);
+                    double extra = Math.Abs(flow) < _s.ZeroFlowThreshold ? c * _s.ZeroFlowThreshold * flow : c * flow * Math.Abs(flow);
+                    loss.FittingsDp = extra;
+                    return extra - rise + elevation;
                 }
                 case LinkKind.Pipe:
                 {
@@ -663,6 +669,7 @@ namespace HeadLoss.Sim.Network
                     res.Efficiency[k] = l.Fan.Efficiency(q, l.Speed);
                     res.Power[k] = l.Fan.Power(q, rise, l.Speed);
                     res.Reynolds[k] = rho * Math.Abs(q) * l.Diameter / (l.Area * mu);
+                    res.DpFittings[k] = loss.FittingsDp;
                 }
                 else
                 {
