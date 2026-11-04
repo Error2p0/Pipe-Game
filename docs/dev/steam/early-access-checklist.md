@@ -25,10 +25,10 @@ To remake the capsules: enter play mode, set up a scene (`HeadLoss.Editor.Showca
 
 ## Decide before launch
 
-- [ ] **Which Phase 6 items must be in the launch?** See the Phase 5 report.
+- [x] **Which Phase 6 items must be in the launch?** All nine, in full (D132), so launch comes after Phase 6. Store text, capsules and screenshots get remade then.
 - [ ] **Achievements:** optional in the spec, none built. Steamworks.NET is there, so they would be a small job. Worth having: first building online, first burst repaired, first gas building, first new city.
-- [ ] **Demo cut-off:** tiers 1–2 with no gas leaves out the game's most tense part. Ending at tier 3 would show it, at the cost of giving more away.
-- [ ] **Mobile:** not part of this launch (Phase 6 task 9).
+- [x] **Demo cut-off:** tiers 1–2 with no gas. Confirmed (D126).
+- [ ] **Mobile:** the UI gets its readiness pass in Phase 6 (task 9), but no phone build is planned (D133).
 
 ## Not tested
 

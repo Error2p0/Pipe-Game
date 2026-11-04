@@ -98,9 +98,11 @@ The report's other off-target line is the next tier's cheapest item: 22.6 min ag
 
 ## Gate checklist (from `14-roadmap.md`)
 
-- [ ] The whole loop from crank to first prestige plays without dev tools.
-- [ ] Gas danger feels tense but fair and calm.
-- [ ] You agree it is ready for Early Access.
+- [x] The whole loop from crank to first prestige plays without dev tools.
+- [x] Gas danger feels tense but fair and calm.
+- [x] You agree it is ready for Early Access.
+
+**Gate passed 2026-11-04.** All nine items below go into the launch (D132).
 
 ## Question for this gate: what goes into the Early Access launch?
 

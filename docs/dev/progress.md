@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **5 · Gas and prestige** (not started) (`docs/spec/14-roadmap.md`).
+Current phase: **6 · Full content** (not started, order and gate to agree) (`docs/spec/14-roadmap.md`).
 
 ## Phase 1 · Physics core
 
@@ -101,4 +101,105 @@ Task list from `14-roadmap.md` §Phase 5:
 - [x] 8. Steam page assets (generated in-engine screenshots and a capsule rendered from the game), demo build configuration, Early Access checklist (achievements optional, store text draft for the user).
 - [x] Carry-over from earlier phases: table density for MP mains (D21); concentration heatmap's species picker (D64); tier 3 buildings gain gas, replacing the air-and-water stopgap (D101); re-run the balancing report for tier 3 with gas in its cost, payback was 2.3 min against the 20 min target (D91).
 - [x] Phase end: all tests green, Windows build in `Builds/phase-5/`, `docs/dev/phase-5-report.md`.
-- [ ] Gate playtest by the user. Checklist: the whole loop from crank to first prestige plays without dev tools; gas danger feels tense but fair and calm; the user agrees it is ready for Early Access. At this gate, ask the user which Phase 6 items must be in the Early Access launch.
+- [x] Gate playtest by the user: **passed 2026-11-04**, with D107, D108, D109, D110, D112, D117, D121 and D126 confirmed and all nine Phase 6 items in the Early Access launch (D132).
+
+## Phase 6 · Full content
+
+Scope, set by the user at the Phase 5 gate (2026-11-04): all nine roadmap items go into the Early Access launch, in full (D132). Task numbers below are the roadmap's. Sub-items come from the spec file named on each task. Spec files: `03`–`11`, `13`, `15`.
+
+Not started. Three things need the user's answer first: build order, the gate, and tier 3 radiators (see "To agree").
+
+### To agree before building
+
+- [ ] **Build order** (`14-roadmap.md`: "Order to agree with the user"). Proposed: 0 → 4 and 6 → 3 (shell, no heating yet) → 1 → 2 → 3 (finish, tier 4 opens) → 5 (without the lab branch) → 8 → 7 (with the lab branch, tier 5 opens) → 9 → balance and phase end. Heating and cooling need tier 4 rooms to be tested in, events need heating, cooling and basements to act on, and mobile goes last because the UI has settled by then. A playtest build after tier 4 opens and after events, neither of them a gate.
+- [ ] **The gate** (`14-roadmap.md` leaves it open). Proposed: from a new city, tiers 4 and 5 can be reached and brought online without dev tools; heating and cooling read clearly on the temperature heatmap; a power outage feels fair and each protection visibly helps; a special-gas leak feels different from natural gas; every tier and the prestige pace feel right; the user agrees it is ready for Early Access.
+- [ ] **Radiators in tier 3?** The spec disagrees: `03` lists tier 3 as air, water and gas, while `13` gives tier 3 radiator values and `06` and `07` put heating and boilers at tier 3. Proposed: yes, following `13` and `04`. This changes tier 3 balance and rebuilds tier 3 buildings in old saves, with a refund. Hot taps stay tier 4+, as `04` and `13` say, so the tier 3 water heater has no tier 3 outlet to feed.
+
+### Tasks
+
+- [ ] 0. Foundations for the new networks (`05` §1.5, §4; `01`; `12`)
+  - [ ] One graph per fluid system: air exhaust, hot water, heating loop, each special gas. Toolbox entries, fluid colours and line patterns (`06`).
+  - [ ] Coupling nodes and solve order: hot → cold demand, heat → gas demand, iterate twice.
+  - [ ] Thermal solve on all water networks, with loops iterating 3 times; `hot-water` and `heating-water` on the water tables.
+  - [ ] Outlets measured in watts (`02`), room loads at design temperature −5 °C and +32 °C (`13`).
+  - [ ] `events.json`, `inspections.json`, new balancing sections, definitions and validator rules.
+  - [ ] Diverging palette for temperature relative to setpoint (`11`, never built).
+  - [ ] Save version 5 and generator version 5, migration step and sample save test; what old saves do with changed buildings.
+- [ ] 1. Hot water and heating, tier 3–4 (`05` §4, `07`, `09`, `03`)
+  - [ ] `water-heater` (cold in, hot out at 60 °C), `electric-heater` (`07`; the roadmap does not list it).
+  - [ ] `hot-water-tap` outlets (bar and ≥ 55 °C) in bathrooms from tier 4.
+  - [ ] Circulation loops: return runs with `circulation-pump`, heat loss along them.
+  - [ ] Legionella code, with one passing and one failing test.
+  - [ ] District heating plant in use: `heating-main` family (80, 125, 200 mm, U 0.3), 6 bar and 90 °C, routing, temperature along mains, heating connection opening.
+  - [ ] `district-heat-exchanger` (ε-NTU), `gas-boiler` (flue on an exterior wall, gas demand from heat output).
+  - [ ] Radiators (ε formula, heat into the room, pay factor 1.5), generated in occupied rooms; heating loops with an expansion vessel.
+  - [ ] Boilers and heaters count as heat sources for gas separation (D122), boilers as ignition sources; boiler rooms need 1.0 ACH (`09`).
+  - [ ] Combustion CO₂ from gas appliances (D125).
+  - [ ] Condensation code: dew point from room humidity, cold water at 12 °C (D80), with tests.
+  - [ ] `cold-climate` heating demand ×1.5 (D125).
+- [ ] 2. Cooling, tier 4 (`05` §4, `07`)
+  - [ ] Air exhaust networks: exhaust and high-level grilles, room balance, fans on supply or exhaust.
+  - [ ] `aircon-split`: COP formula, outdoor unit on an exterior wall, refrigerant line ≤ 15 m with 1% loss per metre past 7.5 m.
+  - [ ] `heat-pump`, heating and cooling modes.
+  - [ ] `cooling-terminal` outlets (W, pay factor 1.8) in offices and wards.
+  - [ ] `heat-recovery-unit` and `hr-unit-high-eff`, with both networks running through them.
+  - [ ] `industrial-ahu` slots: filter, heat recovery, `heating-coil`, `cooling-coil`.
+- [ ] 3. Tier 4 (`04`, `07`, `13`)
+  - [ ] Warehouse and office: footprints, 1–6 floors, L and U shapes, 40% chance of a basement, room programs, codes, occupants and machines.
+  - [ ] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`).
+  - [ ] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it.
+  - [ ] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only.
+  - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
+  - [ ] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set`.
+  - [ ] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (`07`; D110 covers the fixed 25 mbar only).
+  - [ ] Tier 4 opens (D104 lifts): unlocks, tree, milestone and tests that assume tier 3 is the top.
+- [ ] 4. Indoor air quality code (`09`, `05` §3)
+  - [ ] 1 000 ppm room mean CO₂: every air outlet in that room pays 0, on the sheet and in the code list, with tests.
+  - [ ] Room-level CO₂ for background buildings and offline, so the code holds while the building is not open.
+- [ ] 5. Events (`10`, `12`, `11`)
+  - [ ] Scheduler at 1 Hz: mean 3 h, 45 min gap, one per district and two city-wide, seeded; only targets where it makes sense.
+  - [ ] Calm banner with "Show me", log of the last 20, "temporarily raised" tag on outlets.
+  - [ ] Heatwave, cold snap, plant maintenance, power outage, new tenant, city festival, with `10`'s durations, effects and rewards; `eventMultiplier` in income.
+  - [ ] Offline: events can start, bonuses apply analytically, every timer pauses, the away report lists them; catch-up gains its event stop.
+  - [ ] Outage, gas branch: background leak per fitting, combustion CO₂, safety window 600 s, then the normal escalation; passive vents and auto-shutoff help.
+  - [ ] Outage, flood branch: groundwater, `sump-pump` generated in basements, blue fill, 0.3 m floods a panel unless raised (+25%), "Flooded panel" until repaired even after power returns.
+  - [ ] Outage, lab branch: built in task 7 (tanks are tier 5).
+  - [ ] `backup-generator` 5, 20, 100 kW: 5 s start, `safetyCritical` first, fuel cost. Water hammer on outage (`05` §6).
+  - [ ] Cascade tests with every protection on and off; offline equivalence including events.
+- [ ] 6. Inspections (`10`)
+  - [ ] Random inspection: 0.08 per hour per online building, inspector icon, pass ×1.25 for 60 min, fail fine and 30 min deadline (pauses offline), second fine and offline if missed.
+  - [ ] Energy rating A–G from `P_actual / P_reference`, pay multipliers in income, recomputed on Commit, "Projected rating: B" in design mode, on the status line.
+- [ ] 7. Tier 5 (`03`, `04`, `06`, `07`, `08`, `09`, `10`)
+  - [ ] Factory, lab and hospital: footprints, 2–10 floors, basements, lab and ward programs; solvability over 200 seeds; tier 5 opens.
+  - [ ] Propane: fluid, `propane-outlet`, pools low, basement code. **The spec names no source for propane**; decide and log it when building.
+  - [ ] `gas-burner-outlet` (industrial, 100–300 mbar).
+  - [ ] Special gases: oxygen, nitrogen, CO₂ and hydrogen outlets, `special-gas-manifold`.
+  - [ ] Industrial gas depot in use: `special-gas-main` (25, 50 mm stainless), 10 bar, fines ×2, none within 2 tiles of residential plots.
+  - [ ] Purity: material −2% per segment, dead legs −0.5% per metre capped at −5%, missing check valve −10%; below requirement counts as below minimum.
+  - [ ] Hazards: oxygen enrichment as a leak with blast ×0.5, asphyxiation zones (O₂ < 19.5%), CO₂ toxicity (> 5 000 ppm), hydrogen's range; species picker complete (D124).
+  - [ ] Codes: propane, hydrogen high-level ventilation, backflow prevention, each with tests.
+  - [ ] `backflow-preventer`, `filter-basic`, `filter-hepa`, `clean-air-vent` outlets that need HEPA.
+  - [ ] Gas storage tanks and `lab-chiller`: warming, pressure from the tables, relief into the room unless a vent line runs outdoors. The outage's lab branch (`10`).
+  - [ ] Compressible correction for high-pressure lines (`05` §1.3).
+  - [ ] Blast energy from each gas's own heating value.
+- [ ] 8. City upgrades (`03`, `07`, `09`, `13`)
+  - [ ] Substation upgrades 2 → 5 → 12 MW.
+  - [ ] Booster stations on a main: water +3 bar, gas +2 bar, drawing from the nearest substation.
+  - [ ] HP gas mains in play (7 bar, tier 5; D107).
+  - [ ] Historic foundations code: routes already pay the fine and drilling already avoids it (`Game/City/Utilities.cs`). Still needed: a passing and a failing test (`15`), the city codes in `codes.json` (`09`), and a check of why the Phase 5 report calls it unreachable.
+- [ ] 9. Mobile readiness (`11`, D133)
+  - [ ] Touch action map: tap selects, drag pans or draws, pinch zooms; on-screen buttons for everything that only has a hotkey.
+  - [ ] Every hover has a tap equivalent; audit of 44 × 44 px hit targets; never colour alone.
+  - [ ] UI review at phone-sized screens and UI scales, including everything added in this phase.
+- [ ] Balance (`13`)
+  - [ ] Balancing report covers tiers 4 and 5: payback 40 and 80 min, electricity 10–25%.
+  - [ ] Base pay for T4 and T5: `balancing.json` still has `13`'s $30 and $180, a 40× jump from T3's confirmed $0.75 (D109). Re-cut them and log it.
+  - [ ] First prestige still 15–25 h now that T4 and T5 plots count toward the 60% (D108); measure and retune.
+  - [ ] T3 payback, still 3.5 min against 20 (D109), with heating in its cost if radiators go into tier 3.
+- [ ] Performance (`01`): budgets with tier 5 buildings and a full city. 10-floor room grid < 2 ms, 2 000 segments < 5 ms, city solve < 10 ms, 72 h catch-up with 100 buildings < 2 s, memory < 1.5 GB, frames under 8 ms. Up to 3% of frames were already over at the end of Phase 5, with smaller buildings.
+- [ ] Spec sweep: read every spec file against the game for anything named and still missing (this is what `14-roadmap.md` means by "everything in the spec"), and fix or report each one.
+- [ ] Early Access material: store text, capsules and screenshots remade to show the new content; checklist updated. The demo stays at tier 2 (D126).
+- [ ] Phase end: all tests green, 10-minute session clean, data validator clean, Windows build in `Builds/phase-6/`, `docs/dev/phase-6-report.md`.
+- [ ] Gate playtest by the user.
+
+Not in this phase: slow ageing stays off (`08`: "enable only if the user approves"); achievements and a trailer (optional or not in the spec, on the Early Access checklist).

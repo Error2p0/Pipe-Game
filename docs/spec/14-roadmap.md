@@ -111,7 +111,7 @@ Spec files: `03` (gas mains, prestige, modifiers), `06` (natural gas), `07` (gas
 
 ## Phase 6 · Full content [confirm]
 
-Everything in the spec that the doc's roadmap does not name. Order to agree with the user.
+Everything in the spec that the doc's roadmap does not name. Order to agree with the user. The user decided at the Phase 5 gate that all nine items below go into the Early Access launch, in full (D132).
 
 1. Hot water and heating: water heater, hot taps, circulation loops, legionella code, district heating plant and mains, heat exchanger, gas boiler, radiators, heating loops, condensation code (tier 3–4).
 2. Cooling: aircon split, heat pump, refrigerant lines, cooling terminals, heat recovery units, exhaust networks, industrial AHU with slots (tier 4).
@@ -121,4 +121,4 @@ Everything in the spec that the doc's roadmap does not name. Order to agree with
 6. Inspections: random inspection, energy rating A–G.
 7. Tier 5: factory, lab, hospital; propane (basement code), special gases (CO₂, nitrogen, oxygen, hydrogen), purity, oxygen enrichment, asphyxiation zones, hydrogen high-level ventilation, backflow prevention, industrial gas depot and its strict mains, gas storage tanks, air filters (basic, HEPA), clean-air vents.
 8. Substation upgrades, booster/compressor stations, HP gas mains, historic foundations code.
-9. Mobile readiness pass (touch action map, UI review) if the user wants it.
+9. Mobile readiness pass (touch action map, UI review).
