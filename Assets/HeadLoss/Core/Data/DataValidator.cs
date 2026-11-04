@@ -125,6 +125,7 @@ namespace HeadLoss.Core.Data
                 foreach (string c in kv.Value) Colour($"{f} heatmap.palettes.{kv.Key}", c, errors);
             }
             Fraction(f + " drawing.ghostOpacity", b.Drawing.GhostOpacity, errors);
+            Fraction(f + " drawing.otherNetworkOpacity", b.Drawing.OtherNetworkOpacity, errors);
             MaterialDef? mat = data.FindMaterial(b.Drawing.DefaultMaterial);
             if (mat == null) errors.Add($"{f} drawing.defaultMaterial '{b.Drawing.DefaultMaterial}' unknown");
             PipeFamilyDef? fam = data.FindPipeFamily(b.Drawing.DefaultDuctFamily);

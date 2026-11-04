@@ -33,10 +33,24 @@ namespace HeadLoss.Unity.View
             _material = material;
         }
 
-        /// <summary>Recreates the symbols when the equipment, part layout or floor changed.</summary>
-        public void Sync(BuildingLayout layout, BuildingState design, int floor)
+        /// <summary>Scales the opacity of a part on a network not in focus (its own mesh and any it carries).</summary>
+        void FadeIfOther(Component part, string fluid, string focus)
         {
-            string fp = Fingerprint(design, floor);
+            if (fluid.Length == 0 || fluid == focus) return;
+            float opacity = (float)_data.Balancing.Drawing.OtherNetworkOpacity;
+            foreach (MeshFilter f in part.GetComponentsInChildren<MeshFilter>())
+            {
+                Mesh mesh = f.sharedMesh;
+                Color[] colours = mesh.colors;
+                for (int i = 0; i < colours.Length; i++) colours[i].a *= opacity;
+                mesh.colors = colours;
+            }
+        }
+
+        /// <summary>Recreates the symbols when the equipment, part layout, floor or network in focus changed.</summary>
+        public void Sync(BuildingLayout layout, BuildingState design, int floor, string focus)
+        {
+            string fp = focus + "|" + Fingerprint(design, floor);
             if (fp == _builtFingerprint) return;
             _builtFingerprint = fp;
             foreach (Transform child in transform) Destroy(child.gameObject);
@@ -63,6 +77,7 @@ namespace HeadLoss.Unity.View
                     foreach (TilePos t in tiles) _footprints.Rect(t.X + 0.06f, t.Y + 0.06f, t.X + 0.94f, t.Y + 0.94f, 0, fill);
                 }
                 Vector2 c = DuctGeometry.Centre(BuildingLayout.PosOf(o));
+                string utility = BuildingState.UtilityFluid(o.Utility);
                 if (e.SparkFree) SparkFreeMark(c);
                 if (def.Category == "panel")
                 {
@@ -74,12 +89,14 @@ namespace HeadLoss.Unity.View
                 {
                     SymbolView reg = Child<SymbolView>("Regulator " + def.Id);
                     reg.Build(c, Vector2.right, SymbolKind.Regulator, _palette.Fluid(BuildingState.GasFluid), _palette, _material);
+                    FadeIfOther(reg, utility, focus);
                     continue;
                 }
                 if (def.Curve.Count == 0) continue;  // a plain mains connection
                 bool crank = def.SpeedControl == "crank";
                 FanView v = Child<FanView>("Intake " + e.EquipmentId);
                 v.Build(c, _palette, _material, def.Category == "water-mover" ? 0.34f : 0.42f, crankHandle: crank);
+                FadeIfOther(v, utility, focus);
                 _fans[e.OpeningId] = v;
             }
             foreach (SafetyDevice d in design.Safety)
@@ -103,6 +120,7 @@ namespace HeadLoss.Unity.View
                     {
                         FanView v = Child<FanView>("Inline " + eq.Id);
                         v.Build(c, _palette, _material, 0.32f, false, dir);
+                        FadeIfOther(v, net.FluidId, focus);
                         _inlineFans[key] = v;
                         continue;
                     }
@@ -110,6 +128,7 @@ namespace HeadLoss.Unity.View
                     {
                         SymbolView tank = Child<SymbolView>("Tank");
                         tank.Build(c, dir, SymbolKind.Tank, tint, _palette, _material);
+                        FadeIfOther(tank, net.FluidId, focus);
                         _valves[key] = tank;
                         continue;
                     }
@@ -119,6 +138,7 @@ namespace HeadLoss.Unity.View
                         DamperView d = Child<DamperView>(f.DisplayName);
                         d.Build(c, dir, _palette, _material);
                         d.SetOpening(n.Opening);
+                        FadeIfOther(d, net.FluidId, focus);
                         _dampers[key] = d;
                         continue;
                     }
@@ -132,6 +152,7 @@ namespace HeadLoss.Unity.View
                     SymbolView sv = Child<SymbolView>(f.DisplayName);
                     sv.Build(c, dir, kind, tint, _palette, _material);
                     sv.SetOpen(n.On);
+                    FadeIfOther(sv, net.FluidId, focus);
                     _valves[key] = sv;
                 }
             }

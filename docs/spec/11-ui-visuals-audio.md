@@ -36,6 +36,7 @@ Animated particles flow along pipes in every mode, speed matching velocity, so t
 [impl] Palette (light theme default, dark theme available):
 - Background paper `#F4F1EA`, grid lines `#E3DED2`, walls `#3E4A57`, room fills by type at 8% tint, text `#1F2730`.
 - Fluid line colours from `06-fluids.md`, plus line patterns per fluid so colour is never the only cue.
+- The network in focus is drawn solid. Other networks on the floor, their inline parts and connection devices included, are drawn at `drawing.otherNetworkOpacity` (25%, D142), and only the network in focus shows flow particles. Burst pipes keep the danger colour and surges keep their ripple on any network.
 - Heatmap ramps: viridis (default), cividis, magma; diverging (blue–white–red, colour-blind safe variant) for temperature relative to setpoint. Selectable in settings.
 - Warning colour: one muted amber `#C98A2E`; danger: muted red `#B5483A`. Used sparingly.
 - Ambient motion: slow drifting clouds' shadows over the city, online buildings breathe a soft glow (4 s cycle), particles in pipes.

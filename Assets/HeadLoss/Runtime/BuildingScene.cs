@@ -135,7 +135,7 @@ namespace HeadLoss.Unity
                 _building.ShowFloor(_shownFloor);
             }
             if (s.StateRevision != _stateRev) Interaction.Validate();
-            _equipment.Sync(s.Layout, s.State, ViewState.Floor);
+            _equipment.Sync(s.Layout, s.State, ViewState.Floor, ViewState.Fluid);
             UpdateHeatmapRange();
             _rooms.Refresh(s.Rooms, _heatmap, _palette, (float)s.Data.Balancing.Heatmap.RoomAlpha, ViewState.Floor - s.Layout.LowestFloor);
             RebuildDuctsIfNeeded();

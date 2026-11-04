@@ -489,6 +489,8 @@ namespace HeadLoss.Core.Data.Defs
     {
         /// <summary>Opacity of the pipes on the floors above and below the one on show, 0–1.</summary>
         public double GhostOpacity;
+        /// <summary>Opacity of the networks not in focus on the floor on show, their parts included, 0–1.</summary>
+        public double OtherNetworkOpacity;
         public string DefaultMaterial = "";
         public string DefaultDuctFamily = "";
         /// <summary>Duct size selected when the building opens, mm.</summary>

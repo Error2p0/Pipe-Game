@@ -67,7 +67,12 @@ namespace HeadLoss.Unity.View
             _time += dt;
             _matrices.Clear();
             foreach (NetworkView view in input.Views)
-                if (view.Solve != null) Add(view.Geometry, view.Solve, !ReduceMotion && input.Surging?.Invoke(view.Fluid) == true);
+            {
+                if (view.Solve == null) continue;
+                bool surge = !ReduceMotion && input.Surging?.Invoke(view.Fluid) == true;
+                // Only the network in focus moves; moving dots would make the others read as the one being worked on. A surge still shows.
+                if (view.Active || surge) Add(view.Geometry, view.Solve, surge);
+            }
             if (_matrices.Count > 0) Graphics.RenderMeshInstanced(_params, _disc, 0, _matrices);
         }
 

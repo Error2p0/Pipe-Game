@@ -163,10 +163,12 @@ Choices the spec did not make. `NEEDS CONFIRMATION` items are listed in the phas
   - **A panel reset ramps up too,** so a building's fans and pumps come back gradually.
   - **A newly placed or newly committed device is at full speed at once.** "Simulate before you buy" previews it that way, and a Commit should not make what you just saw drop to nothing and climb back. Only a switch or a panel reset ramps.
   - **Pump start surges shrink the same way as stops** (D138).
-  - **`tools/equipment/fan_curves.py` is out of date:** it has the new times, but running it would drop `gas-regulator`, `gas-detector` and `passive-vent-opening`, which were added to `equipment.json` by hand in Phase 5. Do not regenerate until it learns about them.
+  - **`tools/equipment/fan_curves.py` was out of date. Fixed at the user's request:** it now also writes `gas-regulator`, `gas-detector` and `passive-vent-opening`, which were added to `equipment.json` by hand in Phase 5, and writes UTF-8. Running it reproduces the data file.
 
 - **D140 · A click on a riser selects the riser.** Its end node sits on the same spot and used to win the click, and Delete does nothing for a node, so a riser could not be deleted. The fitting buttons of the node at a riser's end moved onto the riser's readout. Box selection now takes the risers on the floor on show as well. Deleting a riser removes its whole run between its two end nodes; a run that passes through several floors goes as one.
 - **D141 · Ghosts are fainter and complete. The opacity is NEEDS CONFIRMATION.** `04` said 20%; it is now `drawing.ghostOpacity`, 10%, at the user's request that other floors should be less noticeable. Long-radius elbows were missing from ghosts, which left a gap at each one. Lines now stop at the joints they meet, because overlapping see-through pieces added up to darker patches.
+
+- **D142 · The network not in focus is faint. The opacity is NEEDS CONFIRMATION.** It was a hard-coded 55%, which left ducts and pipes too alike when switching networks. It is now `drawing.otherNetworkOpacity`, 25%, between the focus (solid) and other floors (10%). The other network's inline parts and connection devices fade with it, because a solid fan on a faint duct still reads as the network being worked on, and its flow particles stop for the same reason. The panel belongs to no network and stays solid. Outlets stay solid too, since they are what the building asks for whichever network is in focus. Burst pipes keep the danger colour and a surge keeps its ripple, because warnings do not fade. A click on a faint pipe still selects it and brings its network into focus.
 
 ## Phase 6
 

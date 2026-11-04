@@ -103,7 +103,7 @@ namespace HeadLoss.Unity.View
             if (view.BurstSegments.Contains(segmentId)) return _palette.Danger;
             if (!view.Active)
             {
-                plain.a = 0.55f;
+                plain.a = (float)_drawing!.OtherNetworkOpacity;
                 return plain;
             }
             // Concentration colours the rooms only; the pipes keep their plain colour under it.
@@ -247,34 +247,46 @@ namespace HeadLoss.Unity.View
             m.Upload();
         }
 
-        /// <summary>
-        /// One floor's ghost. Lines stop at the edge of the caps they meet: where two see-through pieces overlap they add up,
-        /// and the darker patches at every joint would read as real pipework.
-        /// </summary>
+        /// <summary>One floor's ghost.</summary>
         void DrawGhost(MeshBuilder m, DuctGeometry g, Color ghost)
         {
-            _ghostCaps.Clear();
+            NoteCaps(g);
             foreach (DuctGeometry.Cap c in g.Caps)
             {
                 float h = c.Size * 0.5f;
-                _ghostCaps[c.Centre] = h;
                 m.Rect(c.Centre.x - h, c.Centre.y - h, c.Centre.x + h, c.Centre.y + h, ZGhost, ghost);
             }
             foreach (DuctGeometry.Segment s in g.Segments)
-            {
-                Vector2 a = s.A, b = s.B, dir = (b - a).normalized;
-                if (_ghostCaps.TryGetValue(s.A, out float ha)) a += dir * ha;
-                if (_ghostCaps.TryGetValue(s.B, out float hb)) b -= dir * hb;
-                if (Vector2.Dot(b - a, dir) > 0) m.Line(a, b, s.Width, ZGhost, ghost);
-            }
+                if (ClearOfCaps(s, out Vector2 a, out Vector2 b)) m.Line(a, b, s.Width, ZGhost, ghost);
             foreach (DuctGeometry.Arc a in g.Arcs) m.Arc(a.Centre, DuctGeometry.SmoothRadius, a.Width, a.A0, a.A1, 10, ZGhost, ghost);
         }
 
-        readonly Dictionary<Vector2, float> _ghostCaps = new Dictionary<Vector2, float>();
+        readonly Dictionary<Vector2, float> _capHalf = new Dictionary<Vector2, float>();
+
+        void NoteCaps(DuctGeometry g)
+        {
+            _capHalf.Clear();
+            foreach (DuctGeometry.Cap c in g.Caps) _capHalf[c.Centre] = c.Size * 0.5f;
+        }
+
+        /// <summary>
+        /// A segment's ends, stopped at the edge of the caps it meets: where two see-through pieces overlap they add up, and the
+        /// darker patch at every joint draws the eye. False when nothing is left between the caps.
+        /// </summary>
+        bool ClearOfCaps(DuctGeometry.Segment s, out Vector2 a, out Vector2 b)
+        {
+            a = s.A;
+            b = s.B;
+            Vector2 dir = (b - a).normalized;
+            if (_capHalf.TryGetValue(s.A, out float ha)) a += dir * ha;
+            if (_capHalf.TryGetValue(s.B, out float hb)) b -= dir * hb;
+            return Vector2.Dot(b - a, dir) > 0;
+        }
 
         void DrawNetwork(MeshBuilder m, DuctViewInput input, NetworkView v)
         {
             DuctGeometry g = v.Geometry;
+            NoteCaps(g);
             float fade = input.CeilingInFocus ? 1f : 0.45f;
             Color Col(int seg)
             {
@@ -285,12 +297,12 @@ namespace HeadLoss.Unity.View
             }
             foreach (DuctGeometry.Segment s in g.Segments)
             {
-                m.Line(s.A, s.B, s.Width, ZDuct, Col(s.Id));
+                if (ClearOfCaps(s, out Vector2 from, out Vector2 to)) m.Line(from, to, s.Width, ZDuct, Col(s.Id));
                 // Gas runs dotted, so colour is never the only cue (06-fluids.md).
                 if (v.Fluid != BuildingState.GasFluid) continue;
                 float length = Vector2.Distance(s.A, s.B);
                 Color dot = _palette!.Paper;
-                dot.a = 0.8f * fade;
+                dot.a = 0.8f * fade * (v.Active ? 1f : (float)_drawing!.OtherNetworkOpacity);
                 for (float d = 0.2f; d < length; d += 0.4f)
                     m.Disc(Vector2.Lerp(s.A, s.B, d / length), s.Width * 0.22f, 8, ZCap - 0.004f, dot);
             }

@@ -110,6 +110,8 @@ An intermediate phase the user added on 2026-11-04, before Phase 6 starts. It is
 - [x] 1. Switching off a fan or pump slows it to a stop instead of cutting it, and the values follow (D138). Each device has its own times, and switching on ramps up too (D139).
 - [x] 2. Risers can be selected and deleted (D140).
 - [x] 3. Ghost floors show long-radius fittings and are fainter, so they are not mistaken for the floor on show (D141).
+- [x] 4. Generator for `equipment.json` brought up to date (D139).
+- [x] 5. The network not in focus is faint, so ducts and pipes are not mistaken for each other (D142).
 
 ## Phase 6 · Full content
 

@@ -1,4 +1,4 @@
-"""Writes Assets/HeadLoss/Data/equipment.json: air movers, water movers, panels, add-ons and accessories.
+"""Writes Assets/HeadLoss/Data/equipment.json: air movers, water movers, panels, gas and safety gear, add-ons and accessories.
 
 07-equipment.md: curves are dp(Q) = dp0 (1 - (Q/Qmax)^2) sampled at 6 points,
 with an efficiency curve peaking at 55-65% of Qmax. Here the efficiency is
@@ -101,11 +101,20 @@ for fid, name, tier, kw, price, fp, notes in [
     ("panel-basic", "Basic panel", 1, 4, 0, (1, 1, "floor"), "Pre-placed in every building"),
     ("panel-standard", "Standard panel", 2, 12, 500, (1, 1, "floor"), ""),
     ("panel-large", "Large panel", 3, 40, 5000, (1, 1, "floor"), ""),
-    ("transformer-room", "Transformer room", 4, 250, 60000, (3, 3, "floor"), "Needs a 3x3 room on the ground floor or basement; industrial buildings only"),
 ]:
     items.append(plain(fid, name, tier, "panel", [], "intake", price, notes, fp=fp, ignition=True, panelLimitKW=kw))
+# Gas supply and safety gear (07 Gas, 08 Failures).
+items.append(plain("gas-regulator", "Gas regulator", 3, "gas-supply", ["natural-gas"], "intake", 150,
+                   "At the gas connection: fixed outlet pressure 25 mbar", setpointPa=2500, regulatorK=2.0))
+items.append(plain("gas-detector", "Gas detector", 3, "safety", ["natural-gas"], "room", 80,
+                   "Wall-mounted in one room: alarm at 20% of the lower flammable limit at its cell", fp=(1, 1, "none")))
+items.append(plain("passive-vent-opening", "Passive vent", 3, "safety", ["air"], "wall", 120,
+                   "Exterior-wall opening, high or low: power-free ventilation, about 1 air change an hour for a 30 m\u00b3 room, more or less with the wind",
+                   fp=(1, 1, "none")))
+items.append(plain("transformer-room", "Transformer room", 4, "panel", [], "intake", 60000,
+                   "Needs a 3x3 room on the ground floor or basement; industrial buildings only", fp=(3, 3, "floor"), ignition=True, panelLimitKW=250))
 
-with open(OUT, "w", newline="\n") as f:
+with open(OUT, "w", encoding="utf-8", newline="\n") as f:
     f.write("[\n")
     f.write(",\n".join("  " + json.dumps(i, ensure_ascii=False) for i in items))
     f.write("\n]\n")

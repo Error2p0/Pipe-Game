@@ -6,6 +6,7 @@ using HeadLoss.Game.Commands;
 using HeadLoss.Game.Session;
 using HeadLoss.Unity;
 using HeadLoss.Unity.Interaction;
+using HeadLoss.Unity.View;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -172,6 +173,51 @@ namespace HeadLoss.PlayMode.Tests
             Assert.Greater(mesh.vertexCount, sharp, "the long-radius elbow is drawn: an arc has more vertices than the cap it replaces");
             float opacity = (float)s.Data.Balancing.Drawing.GhostOpacity;
             foreach (Color c in mesh.colors) Assert.AreEqual(opacity, c.a, 1e-3f, "everything on this floor is ghost");
+        }
+
+        static int VerticesAt(Mesh mesh, float alpha)
+        {
+            int n = 0;
+            foreach (Color c in mesh.colors) if (Mathf.Abs(c.a - alpha) < 1e-3f) n++;
+            return n;
+        }
+
+        [UnityTest]
+        public IEnumerator NetworkNotInFocus_IsFaint_ItsPartsToo_AndFocusSwapsIt()
+        {
+            yield return StartWaterHouse();
+            var root = Object.FindAnyObjectByType<GameRoot>();
+            BuildingSession s = root.Session!;
+            Assert.IsTrue(s.Execute(new PlaceRunCommand(Run(0, (9, 1), (9, 3)), 22, "copper", false, "water")));
+            Assert.IsTrue(s.Execute(new PlaceRunCommand(Run(0, (0, 2), (3, 2)), 125, "galvanized-duct", false)));
+            Assert.IsTrue(s.Execute(new PlaceInlineCommand(new TilePos(2, 2), "inline-duct-fan")));
+            float other = (float)s.Data.Balancing.Drawing.OtherNetworkOpacity;
+            Assert.Less(other, 0.5f);
+            Mesh Ducts() => root.Ducts!.GetComponent<MeshFilter>().sharedMesh;
+            float PartAlpha()
+            {
+                float most = 0;
+                foreach (FanView fan in Object.FindObjectsByType<FanView>())
+                    foreach (MeshFilter f in fan.GetComponentsInChildren<MeshFilter>())
+                        foreach (Color c in f.sharedMesh.colors) most = Mathf.Max(most, c.a);
+                return most;
+            }
+
+            // Plain view: pipes in focus are fully solid, so the two states can be told apart.
+            root.Heatmap!.Mode = HeatmapMode.Plain;
+            root.Interaction!.SetFluid("air");
+            yield return null;
+            yield return null;
+            int waterFaint = VerticesAt(Ducts(), other);
+            Assert.Greater(waterFaint, 0, "water is faint while air is in focus");
+            Assert.AreEqual(1f, PartAlpha(), 1e-3f, "the inline fan is solid on the network in focus");
+
+            root.Interaction.SetFluid("water");
+            yield return null;
+            yield return null;
+            Assert.Greater(VerticesAt(Ducts(), other), 0, "air is faint while water is in focus");
+            Assert.AreNotEqual(waterFaint, VerticesAt(Ducts(), other), "it is the other network that is faint now");
+            Assert.AreEqual(other, PartAlpha(), 1e-3f, "and so is its inline fan");
         }
     }
 }
