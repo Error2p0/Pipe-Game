@@ -17,7 +17,7 @@ namespace HeadLoss.Unity.View
 
         public int Floor { get; private set; }
         public ViewLayer Layer { get; private set; } = ViewLayer.Ceiling;
-        /// <summary>Network the drawing tool, parts and heatmap work on (air, water).</summary>
+        /// <summary>Network the drawing tool, parts and heatmap work on (air, water, natural gas).</summary>
         public string Fluid { get; private set; } = "air";
         /// <summary>Wall cavity unlocked (tier 4): until then the layer button stays greyed out.</summary>
         public bool WallCavityAvailable { get; set; }
@@ -26,10 +26,11 @@ namespace HeadLoss.Unity.View
 
         public IReadOnlyList<string> Fluids => _fluids;
 
-        public BuildingViewState(BuildingLayout layout, bool hasWater)
+        public BuildingViewState(BuildingLayout layout, bool hasWater, bool hasGas = false)
         {
             _layout = layout;
             if (hasWater) _fluids.Add("water");
+            if (hasGas) _fluids.Add(BuildingState.GasFluid);
             Floor = 0 >= layout.LowestFloor && 0 <= layout.TopFloor ? 0 : layout.LowestFloor;
         }
 

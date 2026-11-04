@@ -18,6 +18,9 @@ namespace HeadLoss.Unity.UI
         readonly VisualElement _bar, _breakdown;
         readonly Label _wallet, _debt, _net;
         readonly Label _gross, _electricity, _fines, _premiums, _netLine, _cycle;
+        readonly Button? _prestige;
+        /// <summary>The Reputation and milestone button was pressed.</summary>
+        public bool PrestigeRequested;
         bool _pinned;
         float _nextRefresh;
 
@@ -38,6 +41,7 @@ namespace HeadLoss.Unity.UI
             net.Add(_net);
             net.RegisterCallback<PointerEnterEvent>(_ => Show(true));
             net.RegisterCallback<PointerLeaveEvent>(_ => Show(_pinned));
+            if (ctx.City != null) _prestige = ui.Button(_bar, "", () => PrestigeRequested = true);
 
             _breakdown = ui.Panel(parent, "hl-breakdown");
             _breakdown.style.backgroundColor = ui.P.Paper;
@@ -101,6 +105,11 @@ namespace HeadLoss.Unity.UI
             _fines.text = "Fines  −" + Units.FormatMoneyRate(fines, _symbol);
             _premiums.text = "Premiums  −" + Units.FormatMoneyRate(premiums, _symbol);
             _netLine.text = "Net  " + Units.FormatMoneyRate(net, _symbol);
+            if (_prestige != null)
+            {
+                Game.Progression.Milestone m = _ctx.Milestone();
+                _prestige.text = $"Reputation {g.Reputation} · {System.Math.Min(m.Share / System.Math.Max(0.01, m.ShareNeeded), m.Income / System.Math.Max(1, m.IncomeTarget)) * 100:0}% to a new city";
+            }
             double cycle = _ctx.Data.Balancing.Economy.IncomeCycleSeconds;
             _cycle.text = $"{Units.FormatMoney(net * cycle, _symbol)} per {cycle:0} s cycle";
         }

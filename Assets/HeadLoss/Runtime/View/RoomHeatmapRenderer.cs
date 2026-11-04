@@ -86,8 +86,17 @@ namespace HeadLoss.Unity.View
                 case HeatmapMode.Temperature:
                     return Pick(hm.Layer, s.T[c], s.T[n + c]);
                 case HeatmapMode.Density:
-                    float lo = RoomGridMath.Density(climate.Params, s.T[c], s.Co2[c]), up = RoomGridMath.Density(climate.Params, s.T[n + c], s.Co2[n + c]);
+                    float lo = RoomGridMath.Density(climate.Params, s.T[c], s.Co2[c], s.Gas[c]), up = RoomGridMath.Density(climate.Params, s.T[n + c], s.Co2[n + c], s.Gas[n + c]);
                     return Pick(hm.Layer, lo, up);
+                case HeatmapMode.Concentration:
+                    switch (hm.Species)
+                    {
+                        case RoomSpecies.NaturalGas: return Pick(hm.Layer, s.Gas[c] * 100, s.Gas[n + c] * 100);
+                        case RoomSpecies.Co2: return Pick(hm.Layer, s.Co2[c], s.Co2[n + c]);
+                        default:
+                            float fresh = climate.Inputs.OutdoorO2;
+                            return Pick(hm.Layer, Mathf.Max(0, fresh - s.O2[c]) * 100, Mathf.Max(0, fresh - s.O2[n + c]) * 100);
+                    }
                 default:
                     return 0;
             }

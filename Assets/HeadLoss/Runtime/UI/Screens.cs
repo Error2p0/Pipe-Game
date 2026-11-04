@@ -109,18 +109,29 @@ namespace HeadLoss.Unity.UI
 
     /// <summary>
     /// "While you were away" (<c>11-ui-visuals-audio.md</c> §Screens, <c>12-save-offline.md</c>): how long, what the
-    /// buildings earned and paid for electricity, the result in the wallet, unlocks, and that nothing broke (bursts,
-    /// events and timers arrive with later phases). Continue (Enter or Esc) closes it.
+    /// buildings earned and paid for electricity, the result in the wallet, unlocks, what broke, and first of all any
+    /// building waiting with a paused explosion timer. Continue (Enter or Esc) closes it.
     /// </summary>
     public sealed class AwayScreen
     {
         readonly VisualElement _panel;
 
-        public AwayScreen(VisualElement parent, UiKit ui, GameContext ctx, Game.Offline.OfflineReport r, Action onClose)
+        public AwayScreen(VisualElement parent, UiKit ui, GameContext ctx, Game.Offline.OfflineReport r, Action onClose, Action<string>? onGoThere = null)
         {
             string sym = ctx.Data.Game.CurrencySymbol;
             _panel = ui.Panel(parent, "hl-away");
             UiKit.Text(_panel, "While you were away", "hl-title");
+            // Buildings waiting with a paused explosion timer come first (08 §Offline rules for gas).
+            foreach (Game.Offline.PausedTimerLine t in r.PausedTimers)
+            {
+                VisualElement row = UiKit.Row(_panel);
+                row.style.alignItems = Align.Center;
+                Label l = UiKit.Text(row, $"{t.Name}: gas alarm · the timer waited for you · {Units.FormatDuration(t.SecondsLeft)} left", "hl-readout-line");
+                l.style.color = ui.P.Danger;
+                l.style.flexGrow = 1;
+                string id = t.BuildingId;
+                if (onGoThere != null) ui.Button(row, "Go there", () => onGoThere(id));
+            }
             string time = Duration(r.Seconds);
             UiKit.Text(_panel, r.Capped
                 ? $"You were away {Duration(r.AwaySeconds)}. Your buildings worked for the first {time} (the offline limit)."
@@ -132,6 +143,9 @@ namespace HeadLoss.Unity.UI
             if (r.Premiums > 0) UiKit.Text(_panel, $"Premiums  −{Units.FormatMoney(r.Premiums, sym)}", "hl-readout-line");
             if (r.Bursts > 0) UiKit.Text(_panel, $"Bursts  {r.Bursts} · income cut by 75% until repaired", "hl-readout-line");
             if (r.RepairsDone > 0) UiKit.Text(_panel, $"Repairs done  {r.RepairsDone}" + (r.RepairCosts > 0 ? $" · crews charged {Units.FormatMoney(r.RepairCosts, sym)}" : ""), "hl-readout-line");
+            if (r.Leaks > 0) UiKit.Text(_panel, $"Gas leaks  {r.Leaks}", "hl-readout-line");
+            if (r.Alarms > 0) UiKit.Text(_panel, $"Gas alarms  {r.Alarms} · evacuated, paying nothing, until the air is clear and the leak repaired", "hl-readout-line");
+            if (r.CertificatesExpired > 0) UiKit.Text(_panel, $"Gas certificates expired  {r.CertificatesExpired} · pay halved until renewed", "hl-readout-line");
             Label net = UiKit.Text(_panel, $"Net  {(r.Net >= 0 ? "+" : "")}{Units.FormatMoney(r.Net, sym)}", "hl-readout-line");
             net.style.unityFontStyleAndWeight = UnityEngine.FontStyle.Bold;
             net.style.color = r.Net >= 0 ? ui.P.Good : ui.P.Warning;
@@ -151,7 +165,7 @@ namespace HeadLoss.Unity.UI
                 if (r.Buildings.Count > 6) UiKit.Text(_panel, $"and {r.Buildings.Count - 6} more", "hl-subtitle");
             }
             foreach (int t in r.Unlocked) UiKit.Text(_panel, $"Tier {t} unlocked: new equipment, sizes and upgrades in the shop.", "hl-readout-line");
-            UiKit.Text(_panel, "Nothing broke while you were away.", "hl-subtitle");
+            if (r.Bursts == 0 && r.Leaks == 0 && r.Alarms == 0 && r.PausedTimers.Count == 0) UiKit.Text(_panel, "Nothing broke while you were away.", "hl-subtitle");
             ui.Button(_panel, "Continue", onClose).style.alignSelf = Align.FlexEnd;
         }
 

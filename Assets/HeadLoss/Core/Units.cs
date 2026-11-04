@@ -69,9 +69,9 @@ namespace HeadLoss.Core
         /// <param name="pa">Pa.</param>
         public static string FormatBar(double pa) => Number(pa / PaPerBar, 2) + " bar";
 
-        /// <summary>Pressure in mbar (gas).</summary>
+        /// <summary>Pressure in mbar (gas), or in bar from 1 bar up (a pipe's rating, MP mains).</summary>
         /// <param name="pa">Pa.</param>
-        public static string FormatMbar(double pa) => Number(pa / PaPerMbar, 1) + " mbar";
+        public static string FormatMbar(double pa) => Math.Abs(pa) >= PaPerBar ? FormatBar(pa) : Number(pa / PaPerMbar, 1) + " mbar";
 
         /// <summary>A pressure in the unit of a fluid: Pa for air, mbar for gas, bar for liquids.</summary>
         public static string FormatPressure(double pa, string fluid) => fluid == "air" ? FormatPa(pa) : fluid == "natural-gas" ? FormatMbar(pa) : FormatBar(pa);

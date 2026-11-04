@@ -51,7 +51,7 @@ namespace HeadLoss.Unity
             _palette = palette;
             _previousStepper = session.Rooms.Stepper;
             if (roomStepper != null) session.Rooms.Stepper = roomStepper;
-            ViewState = new BuildingViewState(session.Layout, session.HasWater)
+            ViewState = new BuildingViewState(session.Layout, session.HasWater, session.HasGas)
             {
                 WallCavityAvailable = session.Unlocked(session.Data.Balancing.Building.WallCavityTier) && session.Layout.Tier >= session.Data.Balancing.Building.WallCavityTier,
             };
@@ -224,6 +224,8 @@ namespace HeadLoss.Unity
             View.Surging ??= fluid => s.Failures.SurgePa(fluid) > 0;
             View.ViolationTiles.Clear();
             foreach (Game.Codes.Violation violation in s.DesignEvaluation.Violations) View.ViolationTiles.AddRange(violation.Tiles);
+            View.LeakTiles.Clear();
+            foreach (Game.Failures.LeakState leak in s.Record.Failures.Leaks) View.LeakTiles.Add(leak.Pos);
             Ducts.Rebuild(View);
         }
 
@@ -235,6 +237,7 @@ namespace HeadLoss.Unity
                 TargetKind.Intake => Session.Layout.FindOpening(t.Anchor) is { } o ? BuildingLayout.PosOf(o) : (TilePos?)null,
                 TargetKind.Outlet => Session.Layout.FindOutlet(t.Anchor) is { } v ? BuildingLayout.PosOf(v) : (TilePos?)null,
                 TargetKind.Inline => Session.State.Net(t.Fluid ?? "air").FindNode(t.Id)?.Pos,
+                TargetKind.Safety => t.Tile,
                 _ => null,
             };
             return tile.HasValue && tile.Value.F == ViewState.Floor ? tile : null;

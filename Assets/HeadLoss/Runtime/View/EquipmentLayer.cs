@@ -63,10 +63,17 @@ namespace HeadLoss.Unity.View
                     foreach (TilePos t in tiles) _footprints.Rect(t.X + 0.06f, t.Y + 0.06f, t.X + 0.94f, t.Y + 0.94f, 0, fill);
                 }
                 Vector2 c = DuctGeometry.Centre(BuildingLayout.PosOf(o));
+                if (e.SparkFree) SparkFreeMark(c);
                 if (def.Category == "panel")
                 {
                     SymbolView sv = Child<SymbolView>("Panel " + def.Id);
                     sv.Build(c, Vector2.right, SymbolKind.Panel, _palette.Walls, _palette, _material, 0.34f);
+                    continue;
+                }
+                if (def.Category == "gas-supply")
+                {
+                    SymbolView reg = Child<SymbolView>("Regulator " + def.Id);
+                    reg.Build(c, Vector2.right, SymbolKind.Regulator, _palette.Fluid(BuildingState.GasFluid), _palette, _material);
                     continue;
                 }
                 if (def.Curve.Count == 0) continue;  // a plain mains connection
@@ -75,6 +82,11 @@ namespace HeadLoss.Unity.View
                 v.Build(c, _palette, _material, def.Category == "water-mover" ? 0.34f : 0.42f, crankHandle: crank);
                 _fans[e.OpeningId] = v;
             }
+            foreach (SafetyDevice d in design.Safety)
+                if (d.Floor == floor) DrawSafety(d);
+            foreach (DuctNetworkState net in design.Networks)
+                foreach (DuctNode n in net.Nodes)
+                    if (n.Kind == DuctNodeKind.Inline && n.Floor == floor && n.SparkFree) SparkFreeMark(DuctGeometry.Centre(n.Pos));
             _footprints.Upload();
             RenderLayers.Attach(_footprintGo, _footprints.Mesh, _material, RenderLayers.Equipment - 1);
 
@@ -125,6 +137,36 @@ namespace HeadLoss.Unity.View
             }
         }
 
+        /// <summary>A small green ring: this item is the spark-free variant.</summary>
+        void SparkFreeMark(Vector2 c) => _footprints!.Arc(c + new Vector2(0.3f, 0.3f), 0.09f, 0.05f, 0, 2 * Mathf.PI, 14, -0.02f, _palette.Good);
+
+        /// <summary>A detector: a small round sensor with a dot. A passive vent: slats against the outside wall, high or low.</summary>
+        void DrawSafety(SafetyDevice d)
+        {
+            MeshBuilder m = _footprints!;
+            Vector2 c = DuctGeometry.Centre(d.Pos);
+            Color gas = _palette.Fluid(BuildingState.GasFluid);
+            if (d.EquipmentId == Game.Failures.GasSafetyIds.Detector)
+            {
+                m.Disc(c, 0.2f, 16, -0.01f, _palette.Paper);
+                m.Arc(c, 0.2f, 0.05f, 0, 2 * Mathf.PI, 16, -0.015f, _palette.Walls);
+                m.Disc(c, 0.07f, 10, -0.02f, gas);
+                return;
+            }
+            (int ix, int iy) = EquipmentFits.Inward(d.Facing);
+            Color slat = _palette.Walls;
+            Vector2 wall = c - new Vector2(ix, iy) * 0.42f;
+            for (int i = -1; i <= 1; i++)
+            {
+                Vector2 along = new Vector2(iy, ix) * (i * 0.2f);
+                m.Line(wall + along, wall + along + new Vector2(ix, iy) * 0.22f, 0.06f, -0.01f, slat);
+            }
+            // An arrow up the wall for a high vent, down for a low one.
+            float s = d.High ? 0.2f : -0.2f;
+            m.Line(c + new Vector2(-0.1f, -s * 0.5f), c + new Vector2(0, s * 0.5f), 0.05f, -0.015f, _palette.Good);
+            m.Line(c + new Vector2(0.1f, -s * 0.5f), c + new Vector2(0, s * 0.5f), 0.05f, -0.015f, _palette.Good);
+        }
+
         T Child<T>(string name) where T : Component
         {
             var go = new GameObject(name);
@@ -136,10 +178,11 @@ namespace HeadLoss.Unity.View
         {
             var sb = new System.Text.StringBuilder();
             sb.Append(floor).Append('|');
-            foreach (EquipmentState e in s.Equipment) sb.Append(e.OpeningId).Append(':').Append(e.EquipmentId).Append(';');
+            foreach (EquipmentState e in s.Equipment) sb.Append(e.OpeningId).Append(':').Append(e.EquipmentId).Append(e.SparkFree).Append(';');
+            foreach (SafetyDevice d in s.Safety) sb.Append(d.EquipmentId).Append(d.X).Append(',').Append(d.Y).Append(',').Append(d.Floor).Append(d.High).Append(';');
             foreach (DuctNetworkState net in s.Networks)
                 foreach (DuctNode n in net.Nodes)
-                    if (n.Kind == DuctNodeKind.Inline) sb.Append(net.FluidId).Append(n.X).Append(',').Append(n.Y).Append(',').Append(n.Floor).Append(n.PartId).Append(n.DirX).Append(n.DirY).Append(';');
+                    if (n.Kind == DuctNodeKind.Inline) sb.Append(net.FluidId).Append(n.X).Append(',').Append(n.Y).Append(',').Append(n.Floor).Append(n.PartId).Append(n.DirX).Append(n.DirY).Append(n.SparkFree).Append(';');
             return sb.ToString();
         }
 

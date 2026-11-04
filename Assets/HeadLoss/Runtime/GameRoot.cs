@@ -60,6 +60,9 @@ namespace HeadLoss.Unity
         Jobs.BurstRoomGridStepper? _burstRooms;
         ShopScreen? _shop;
         AwayScreen? _away;
+        PrestigeScreen? _prestige;
+        readonly System.Collections.Generic.List<CityRing> _rings = new System.Collections.Generic.List<CityRing>();
+        float _sinceAlarmChime;
         Notice? _notice;
         readonly System.Collections.Generic.HashSet<BuildingSession> _online = new System.Collections.Generic.HashSet<BuildingSession>();
         readonly Materials _materials = new Materials();
@@ -85,6 +88,7 @@ namespace HeadLoss.Unity
         /// <summary>The settings in force.</summary>
         public PlayerSettings Settings => _settings;
         public AwayScreen? Away => _away;
+        public PrestigeScreen? Prestige => _prestige;
 
         void Awake()
         {
@@ -108,7 +112,7 @@ namespace HeadLoss.Unity
             _settings = _settingsStore.Load(_data);
             _palette = new ViewPalette(_data, _settings.Theme);
             _ui = new UiKit(_palette);
-            _heatmap = new HeatmapState(_data.Balancing.Heatmap);
+            _heatmap = new HeatmapState(_data.Balancing.Heatmap) { GasLflPercent = (float)(_data.Fluid(Game.Buildings.BuildingState.GasFluid).FlammableLower * 100) };
 
             Material Layer(int layer, string name)
             {
@@ -275,6 +279,11 @@ namespace HeadLoss.Unity
             _saving = saving;
             _sinceSave = 0;
             _ctx = new GameContext(_data!, game);
+#if HEADLOSS_DEMO
+            _ctx.Demo = true;
+#endif
+            _ctx.Exploded += OnExploded;
+            _rings.Clear();
             foreach (string note in _ctx.Notes) Debug.Log("Save: " + note);
             if (!_ctx.StarterSolvable) Debug.LogWarning("Head Loss: no solvable starter house in this city (dev report).");
             _loop = new GameLoop(_ctx);
@@ -296,6 +305,11 @@ namespace HeadLoss.Unity
             s.Commands.Executed += OnCommand;
             s.Failures.Alert += text => _notice?.Show($"{s.Layout.DisplayName}: {text}", Time.unscaledTime);
             s.PanelTrippedEvent += () => _notice?.Show($"{s.Layout.DisplayName}: panel tripped · reduce the load and reset it", Time.unscaledTime);
+            s.GasSafety.AlarmRaised += () =>
+            {
+                _sinceAlarmChime = 0;
+                _audio?.PlayAlarm();
+            };
             if (s.CommittedEvaluation.Online) _online.Add(s);
         }
 
@@ -311,9 +325,12 @@ namespace HeadLoss.Unity
             _audio.ClearFans();
             _screen = ScreenKind.City;
             _audio.SetWater(0);
-            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, _heatmap!, () => _settings.ReduceMotion);
+            _city = new CityScene(_ctx, _materials, _palette!, _ui!, _camera!, _input!, _uiRoot!, _heatmap!, () => _settings.ReduceMotion, _rings);
             _topBar!.BringToFront();
         }
+
+        /// <summary>Shows the city view (tools and tests that change the game from outside the screens).</summary>
+        public void ShowCityView() => ShowCity();
 
         /// <summary>The hand-made building list (test fixtures without a city only, D34).</summary>
         void ShowList()
@@ -367,6 +384,7 @@ namespace HeadLoss.Unity
             _city = null;
             CloseShop();
             CloseAway();
+            ClosePrestige();
             _notice?.Root.RemoveFromHierarchy();
             _notice = null;
             _topBar?.Root.RemoveFromHierarchy();
@@ -409,7 +427,11 @@ namespace HeadLoss.Unity
             Debug.Log($"Head Loss: away {FormatDuration(report.AwaySeconds)}, credited {FormatDuration(report.Seconds)}, net {Units.FormatMoney(report.Net, _data!.Game.CurrencySymbol)} ({report.ComputeMilliseconds:0} ms).");
             SaveNow();
             if (report.AwaySeconds < _data!.Balancing.Offline.ReportMinimumSeconds) return;
-            _away = new AwayScreen(_uiRoot!, _ui!, _ctx, report, CloseAway);
+            _away = new AwayScreen(_uiRoot!, _ui!, _ctx, report, CloseAway, id =>
+            {
+                CloseAway();
+                OpenBuilding(id);
+            });
             _topBar?.BringToFront();
         }
 
@@ -417,6 +439,45 @@ namespace HeadLoss.Unity
         {
             _away?.Dispose();
             _away = null;
+        }
+
+        // ---------- prestige ----------
+
+        void OpenPrestige()
+        {
+            ClosePrestige();
+            _prestige = new PrestigeScreen(_uiRoot!, _ui!, _ctx!, ClosePrestige, FoundNewCity);
+            _topBar?.BringToFront();
+        }
+
+        void ClosePrestige()
+        {
+            _prestige?.Dispose();
+            _prestige = null;
+        }
+
+        /// <summary>Founds a new city (<c>03-city.md</c> §Prestige): a typed seed, or a random one when the text is empty.</summary>
+        public void FoundNewCity(string seedText)
+        {
+            if (_ctx == null) return;
+            string typed = seedText.Trim();
+            ulong seed = typed.Length == 0 ? NewCitySeed() : ulong.TryParse(typed, out ulong n) ? n : Core.Seeds.Derive(0x5EED_C17EUL, typed);
+            GameState? next = _ctx.FoundNewCity(seed);
+            if (next == null) return;
+            bool saving = _saving;
+            ClosePrestige();
+            CloseGame(save: false);
+            StartGame(next, saving);
+        }
+
+        /// <summary>A building exploded: the soft ring, the muffled thump and one calm line. If it was open, back to the city.</summary>
+        void OnExploded(ExplosionReport r)
+        {
+            _audio?.PlayThump();
+            Game.City.Plot? plot = _ctx?.City?.FindPlot(r.PlotId);
+            if (plot != null) _rings.Add(new CityRing { Centre = new Vector2((float)plot.CentreX, (float)plot.CentreY), RadiusMetres = (float)r.RadiusMetres, Start = Time.unscaledTime });
+            string neighbours = r.Neighbours.Count > 0 ? $" · {r.Neighbours.Count} neighbour{(r.Neighbours.Count == 1 ? "" : "s")} damaged" : "";
+            _notice?.Show($"A building exploded · fines {Units.FormatMoney(r.Fine, _data!.Game.CurrencySymbol)}{neighbours}", Time.unscaledTime);
         }
 
         // ---------- shop and notices ----------
@@ -490,6 +551,18 @@ namespace HeadLoss.Unity
             DateTime now = DateTime.Now;
             _ctx.Climate.LocalHour = now.Hour + now.Minute / 60.0 + now.Second / 3600.0;
             _loop.Tick(dt);
+            // The open building may be a ruin now.
+            if (_scene != null && _ctx.FindSession(_scene.Session.Record.BuildingId) == null)
+            {
+                if (_ctx.City != null) ShowCity();
+                else ShowList();
+            }
+            TickAlarmChime(dt);
+            if (_topBar != null && _topBar.PrestigeRequested)
+            {
+                _topBar.PrestigeRequested = false;
+                OpenPrestige();
+            }
             if (_saving)
             {
                 _sinceSave += dt;
@@ -506,6 +579,13 @@ namespace HeadLoss.Unity
             if (_away != null)
             {
                 if (_input!.Cancel.WasPressedThisFrame() || _input.Commit.WasPressedThisFrame()) CloseAway();
+                _topBar?.Update(Time.unscaledTime);
+                return;
+            }
+            if (_prestige != null)
+            {
+                if (_input!.Cancel.WasPressedThisFrame()) ClosePrestige();
+                _prestige?.Update(Time.unscaledTime);
                 _topBar?.Update(Time.unscaledTime);
                 return;
             }
@@ -568,10 +648,28 @@ namespace HeadLoss.Unity
                     OpenSettings();
                     return;
                 }
+                if (_city.Hud.PrestigeRequested)
+                {
+                    _city.Hud.PrestigeRequested = false;
+                    OpenPrestige();
+                    return;
+                }
             }
             ChimeWhenOnline();
             _list?.Update(Time.unscaledTime);
             _topBar?.Update(Time.unscaledTime);
+        }
+
+        /// <summary>While any explosion timer runs: the soft two-tone chime every 4 s (<c>11-ui-visuals-audio.md</c>).</summary>
+        void TickAlarmChime(float dt)
+        {
+            bool any = false;
+            foreach (BuildingSession s in _ctx!.Sessions) any |= s.GasSafety.TimerRunning;
+            if (!any) return;
+            _sinceAlarmChime += dt;
+            if (_sinceAlarmChime < 4f) return;
+            _sinceAlarmChime = 0;
+            _audio?.PlayAlarm();
         }
 
         /// <summary>A quiet chime whenever a building comes online (<c>11-ui-visuals-audio.md</c> §Procedural audio).</summary>

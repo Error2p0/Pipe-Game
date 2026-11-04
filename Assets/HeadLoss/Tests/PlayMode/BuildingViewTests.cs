@@ -223,7 +223,7 @@ namespace HeadLoss.PlayMode.Tests
             Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode);
             Press(_keyboard.digit6Key);
             yield return null;
-            Assert.AreEqual(HeatmapMode.Plain, root.Heatmap.Mode, "unbuilt modes (concentration, Phase 5) stay greyed out");
+            Assert.AreEqual(HeatmapMode.Concentration, root.Heatmap.Mode, "concentration is built");
             Release(_keyboard.digit6Key);
             yield return null;
             Press(_keyboard.digit7Key);

@@ -31,6 +31,7 @@ namespace HeadLoss.Unity.View
         public int Floor;
         public readonly NetworkView Air = new NetworkView { Fluid = "air" };
         public readonly NetworkView Water = new NetworkView { Fluid = "water" };
+        public readonly NetworkView Gas = new NetworkView { Fluid = BuildingState.GasFluid };
         /// <summary>The whole snapshot shown (particles read it).</summary>
         public NetworkSnapshot? Snapshot;
         /// <summary>Invalid run being drawn (tile centres), drawn in the warning colour.</summary>
@@ -54,18 +55,21 @@ namespace HeadLoss.Unity.View
         public System.Func<string, int, double>? Stress;
         /// <summary>Tiles in code violation (outlined in the danger colour, <c>09-codes.md</c>).</summary>
         public readonly List<TilePos> ViolationTiles = new List<TilePos>();
+        /// <summary>Tiles of gas leaks (a ring in the danger colour; the leak list says the rest).</summary>
+        public readonly List<TilePos> LeakTiles = new List<TilePos>();
         /// <summary>A surge rides on this network now (the ripple along its pipes).</summary>
         public System.Func<string, bool>? Surging;
         /// <summary>The ceiling layer is in focus (else pipes are drawn faded under the floor layer).</summary>
         public bool CeilingInFocus = true;
 
-        public NetworkView View(string fluid) => fluid == "air" ? Air : Water;
+        public NetworkView View(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : Gas;
         public IEnumerable<NetworkView> Views
         {
             get
             {
                 yield return Air;
                 yield return Water;
+                yield return Gas;
             }
         }
     }
@@ -102,7 +106,8 @@ namespace HeadLoss.Unity.View
                 plain.a = 0.55f;
                 return plain;
             }
-            if (_heatmap!.Mode == HeatmapMode.Plain) return plain;
+            // Concentration colours the rooms only; the pipes keep their plain colour under it.
+            if (_heatmap!.Mode == HeatmapMode.Plain || _heatmap.Mode == HeatmapMode.Concentration) return plain;
             if (_heatmap.Mode == HeatmapMode.Stress)
             {
                 double s = input.Stress?.Invoke(view.Fluid, segmentId) ?? 0;
@@ -118,16 +123,16 @@ namespace HeadLoss.Unity.View
             return _palette.Ramp(_heatmap.Palette, _heatmap.Normalise(Value(_heatmap.Mode, solve, link)));
         }
 
-        /// <summary>A link's value for a heatmap mode in display units: m/s, Pa or bar, m³/h or L/s, °C, kg/m³.</summary>
+        /// <summary>A link's value for a heatmap mode in display units: m/s, Pa, mbar or bar, m³/h or L/s, °C, kg/m³.</summary>
         public static double Value(HeatmapMode mode, FluidSolve solve, int link)
         {
             var r = solve.Result;
             var g = solve.Compiled.Graph;
-            bool air = solve.Fluid == "air";
+            bool air = solve.Fluid == "air", gas = solve.Fluid == BuildingState.GasFluid;
             return mode switch
             {
-                HeatmapMode.Pressure => 0.5 * (r.PressureFrom(g, link) + r.PressureTo(g, link)) / (air ? 1 : Core.Units.PaPerBar),
-                HeatmapMode.Flow => air ? System.Math.Abs(Core.Units.M3sToM3h(r.Flow[link])) : System.Math.Abs(r.Flow[link]) * 1000,
+                HeatmapMode.Pressure => 0.5 * (r.PressureFrom(g, link) + r.PressureTo(g, link)) / (air ? 1 : gas ? Core.Units.PaPerMbar : Core.Units.PaPerBar),
+                HeatmapMode.Flow => air || gas ? System.Math.Abs(Core.Units.M3sToM3h(r.Flow[link])) : System.Math.Abs(r.Flow[link]) * 1000,
                 HeatmapMode.Temperature => Core.Units.KToC(g.Links[link].Temperature),
                 HeatmapMode.Density => r.Density[link],
                 _ => System.Math.Abs(r.Velocity[link]),
@@ -211,6 +216,8 @@ namespace HeadLoss.Unity.View
             violation.a = 0.8f;
             foreach (TilePos t in input.ViolationTiles)
                 if (t.F == input.Floor) TileOutline(m, t, violation);
+            foreach (TilePos t in input.LeakTiles)
+                if (t.F == input.Floor) m.Arc(DuctGeometry.Centre(t), 0.34f, 0.07f, 0, 2 * Mathf.PI, 20, ZCap - 0.02f, p.Danger);
             if (input.HoverTile is TilePos ht && ht != input.SelectedTile)
                 TileOutline(m, ht, hover);
             if (input.SelectedTile is TilePos st)
@@ -259,7 +266,17 @@ namespace HeadLoss.Unity.View
                 c.a *= fade;
                 return c;
             }
-            foreach (DuctGeometry.Segment s in g.Segments) m.Line(s.A, s.B, s.Width, ZDuct, Col(s.Id));
+            foreach (DuctGeometry.Segment s in g.Segments)
+            {
+                m.Line(s.A, s.B, s.Width, ZDuct, Col(s.Id));
+                // Gas runs dotted, so colour is never the only cue (06-fluids.md).
+                if (v.Fluid != BuildingState.GasFluid) continue;
+                float length = Vector2.Distance(s.A, s.B);
+                Color dot = _palette!.Paper;
+                dot.a = 0.8f * fade;
+                for (float d = 0.2f; d < length; d += 0.4f)
+                    m.Disc(Vector2.Lerp(s.A, s.B, d / length), s.Width * 0.22f, 8, ZCap - 0.004f, dot);
+            }
             foreach (DuctGeometry.Arc a in g.Arcs) m.Arc(a.Centre, DuctGeometry.SmoothRadius, a.Width, a.A0, a.A1, 10, ZDuct, Col(a.SegmentId));
             foreach (DuctGeometry.Cap c in g.Caps)
             {

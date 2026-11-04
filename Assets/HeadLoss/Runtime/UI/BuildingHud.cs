@@ -56,6 +56,11 @@ namespace HeadLoss.Unity.UI
         Button _layerFloor = null!, _layerCeiling = null!, _layerCavity = null!;
         Label _ductHeader = null!, _partsHeader = null!, _protectHeader = null!;
         Button _sensors = null!, _contract = null!, _crewChoice = null!;
+        readonly List<(string id, Button button)> _safetyButtons = new List<(string, Button)>();
+        VisualElement _leaks = null!, _leakRows = null!, _speciesRow = null!;
+        Label _leakHead = null!, _legendNote = null!;
+        readonly List<(RoomSpecies species, Button button)> _speciesButtons = new List<(RoomSpecies, Button)>();
+        string _shownLeaks = "";
         string _shownFluid = "";
         int _viewRev = -1;
         VisualElement _violations = null!, _violationRows = null!, _stressTrack = null!, _stressFill = null!;
@@ -195,6 +200,20 @@ namespace HeadLoss.Unity.UI
             _legendMid = UiKit.Text(_legendTicks, "", "hl-subtitle");
             _legendMax = UiKit.Text(_legendTicks, "", "hl-subtitle");
             legend.Add(_legendTicks);
+            _legendNote = UiKit.Text(legend, "", "hl-subtitle");
+            _legendNote.style.whiteSpace = WhiteSpace.Normal;
+            _speciesRow = UiKit.Row(legend);
+            foreach (RoomSpecies species in new[] { RoomSpecies.NaturalGas, RoomSpecies.Co2, RoomSpecies.O2Deficit })
+            {
+                RoomSpecies s = species;
+                _speciesButtons.Add((s, _ui.Button(_speciesRow, HeatmapState.SpeciesName(s), () => _hm.SetSpecies(s))));
+            }
+            foreach (string later in new[] { "Propane", "Hydrogen", "O₂ excess" })
+            {
+                Button off = _ui.Button(_speciesRow, later, () => { });
+                off.SetEnabled(false);
+                off.tooltip = "Arrives with that gas";
+            }
 
             var right = new VisualElement { pickingMode = PickingMode.Ignore };
             right.AddToClassList("hl-rightcolumn");
@@ -206,6 +225,12 @@ namespace HeadLoss.Unity.UI
             _violationRows = new VisualElement();
             _violations.Add(_violationRows);
             _violations.style.display = DisplayStyle.None;
+            _leaks = _ui.Panel(right, "hl-violations");
+            _leakHead = UiKit.Text(_leaks, "", "hl-section");
+            _leakHead.style.color = _p.Danger;
+            _leakRows = new VisualElement();
+            _leaks.Add(_leakRows);
+            _leaks.style.display = DisplayStyle.None;
             _readout = _ui.Panel(right, "hl-readout");
             _readoutTitle = UiKit.Text(_readout, "", "hl-readout-title");
             // Long readouts scroll inside the panel: the right column never runs over the legend.
@@ -327,6 +352,11 @@ namespace HeadLoss.Unity.UI
             _sensors = _ui.Button(tools, "", () => _s.BuyLeakSensors(View.Fluid));
             _contract = _ui.Button(tools, "", () => _s.SetMaintenanceContract(!_s.Record.Failures.MaintenanceContract, _s.Record.Failures.PreferEmergency));
             _crewChoice = _ui.Button(tools, "", () => _s.SetMaintenanceContract(_s.Record.Failures.MaintenanceContract, !_s.Record.Failures.PreferEmergency));
+            foreach (string id in _data.Game.Toolbox.Safety)
+            {
+                string part = id;
+                _safetyButtons.Add((id, _ui.Button(tools, PartLabel(id), () => _ix.SetPlaceTool(part))));
+            }
 
             _crankBox = new VisualElement();
             tools.Add(_crankBox);
@@ -395,7 +425,7 @@ namespace HeadLoss.Unity.UI
             var matChoices = new List<string>();
             foreach (MaterialDef m in _data.Materials)
             {
-                if (!m.Fluids.Contains(fluid) || !_s.Unlocked(m.Tier)) continue;
+                if (!m.Fluids.Contains(fluid) || !_s.ItemUnlocked(m.Id)) continue;
                 _materials.Add(m.Id);
                 matChoices.Add(m.DisplayName);
             }
@@ -497,6 +527,7 @@ namespace HeadLoss.Unity.UI
                 _nextMoneyRefresh = time + 0.1f;
                 RefreshDesignBar();
                 RefreshStatus();
+                RefreshLeaks();
             }
             _crankFill.style.width = Length.Percent((float)(_s.CrankSpeed * 100));
             PositionLabels();
@@ -517,13 +548,22 @@ namespace HeadLoss.Unity.UI
                 if (!smoothOk) _ix.DrawSmoothElbows = false;
                 _ductHeader.text = air ? "Duct" : "Pipe";
                 _partsHeader.text = air ? "Parts (click a straight duct)" : "Parts (click a straight pipe)";
+                foreach ((string id, Button b) in _safetyButtons)
+                {
+                    int t = Tech.ItemTier(_data, id);
+                    bool unlocked = _s.ItemUnlocked(id);
+                    b.style.display = _s.HasGas ? DisplayStyle.Flex : DisplayStyle.None;
+                    b.SetEnabled(unlocked);
+                    b.text = unlocked ? PartLabel(id) : $"{PartLabel(id)} · tier {t}";
+                }
                 foreach ((string id, Button b) in _partButtons)
                 {
                     int t = Tech.ItemTier(_data, id);
-                    bool here = EquipmentFits.InlinePart(_data, id, View.Fluid) && t <= tier + 1;
+                    bool unlocked = _s.ItemUnlocked(id);
+                    bool here = EquipmentFits.InlinePart(_data, id, View.Fluid) && (t <= tier + 1 || unlocked);
                     b.style.display = here ? DisplayStyle.Flex : DisplayStyle.None;
-                    b.SetEnabled(_s.Unlocked(t));
-                    b.text = _s.Unlocked(t) ? PartLabel(id) : $"{PartLabel(id)} · tier {t}";
+                    b.SetEnabled(unlocked);
+                    b.text = unlocked ? PartLabel(id) : $"{PartLabel(id)} · tier {t}";
                 }
                 _shownActionsKey = "";
             }
@@ -555,6 +595,8 @@ namespace HeadLoss.Unity.UI
             StyleButton(_sharp, !_ix.DrawSmoothElbows);
             StyleButton(_smooth, _ix.DrawSmoothElbows);
             foreach ((string id, Button b) in _partButtons) StyleButton(b, _ix.PlaceTool == id);
+            foreach ((string id, Button b) in _safetyButtons) StyleButton(b, _ix.PlaceTool == id);
+            foreach ((RoomSpecies s, Button b) in _speciesButtons) StyleButton(b, _hm.Species == s);
             for (int i = 0; i < 8; i++) StyleButton(_modeButtons[i], (int)_hm.Mode == i);
             _crankBox.style.display = _s.HasCrank ? DisplayStyle.Flex : DisplayStyle.None;
         }
@@ -564,8 +606,18 @@ namespace HeadLoss.Unity.UI
         void RefreshStatus()
         {
             BuildingEvaluation ev = _s.CommittedEvaluation;
-            bool anyBuilt = _s.Committed.Air.Segments.Count > 0 || _s.Committed.Water.Segments.Count > 0;
+            bool anyBuilt = _s.Committed.Air.Segments.Count > 0 || _s.Committed.Water.Segments.Count > 0 || _s.Committed.Gas.Segments.Count > 0;
             string settle = _s.Settling ? " · network still settling" : "";
+            GasSafety gas = _s.GasSafety;
+            if (gas.Evacuated)
+            {
+                int left = (int)System.Math.Ceiling(gas.TimerLeft);
+                _status.text = gas.TimerRunning
+                    ? $"Evacuated · gas alarm · {left / 60}:{left % 60:00} until it can ignite · close the supply, send a crew, let the air clear"
+                    : _s.Record.Failures.Leaks.Count > 0 ? "Evacuated · the gas is stopped · send a crew to repair the leak" : "Evacuated · repaired · waiting for the air to clear";
+                _status.style.color = _p.Danger;
+                return;
+            }
             if (_s.Record.PanelTripped)
             {
                 _status.text = $"Offline · panel tripped: {Units.FormatPower(_s.RequestedPowerW)} of {_s.PanelLimitKW:0.#} kW · reduce the load and reset it at the power connection";
@@ -584,7 +636,8 @@ namespace HeadLoss.Unity.UI
             }
             else if (!anyBuilt && !_s.Record.EverOnline)
             {
-                _status.text = _s.HasWater ? "Not built yet · ducts to every vent, pipes to every tap, then Commit" : "Not built yet · draw ducts from the intake to every vent, then Commit";
+                _status.text = _s.HasGas ? "Not built yet · ducts to every vent, pipes to every tap and stove, then Commit"
+                    : _s.HasWater ? "Not built yet · ducts to every vent, pipes to every tap, then Commit" : "Not built yet · draw ducts from the intake to every vent, then Commit";
                 _status.style.color = _p.Text;
             }
             else if (ev.BlockingViolations > 0 && ev.BelowMinimum == 0)
@@ -597,6 +650,11 @@ namespace HeadLoss.Unity.UI
                 _status.text = "Offline · no city water: route a water main to this plot in the city view";
                 _status.style.color = _p.Warning;
             }
+            else if (_s.HasGas && !_s.GasSupply.Connected && _s.Game.City != null)
+            {
+                _status.text = "Offline · no city gas: route a gas main to this plot in the city view";
+                _status.style.color = _p.Warning;
+            }
             else
             {
                 string power = ev.PowerW > 0 ? $" · equipment still drawing {Units.FormatPower(ev.PowerW)}" : "";
@@ -604,6 +662,8 @@ namespace HeadLoss.Unity.UI
                 _status.text = $"Offline · {ev.BelowMinimum} of {ev.Outlets.Count} outlets below minimum{power}{crank}{settle}";
                 _status.style.color = _p.Warning;
             }
+            if (ev.CertificateExpired) _status.text += " · gas certificate expired: pay halved";
+            if (_s.Record.Failures.Leaks.Count > 0) _status.text += " · gas leak";
         }
 
         void RefreshDesignBar()
@@ -611,7 +671,7 @@ namespace HeadLoss.Unity.UI
             BuildingEvaluation projected = _s.DesignEvaluation;
             if (_s.HasPendingDesign)
             {
-                double net = _s.PendingCost.Net;
+                double net = _s.NetCommitCost();
                 string cost = net >= 0 ? $"cost {Units.FormatMoney(net, _symbol)}" : $"refund {Units.FormatMoney(-net, _symbol)}";
                 string online = projected.Online ? "" : " (offline)";
                 _designText.text = $"Design · not committed · {cost} · projected income {Units.FormatMoneyRate(projected.Net, _symbol)}{online}";
@@ -639,6 +699,8 @@ namespace HeadLoss.Unity.UI
                 _legendBar.style.backgroundColor = _p.Fluid(View.Fluid);
                 _legendTicks.style.display = DisplayStyle.None;
                 _lock.style.display = DisplayStyle.None;
+                _speciesRow.style.display = DisplayStyle.None;
+                _legendNote.style.display = DisplayStyle.None;
                 return;
             }
             if (_legendTexture == null || _legendPalette != _hm.Palette)
@@ -648,23 +710,28 @@ namespace HeadLoss.Unity.UI
                 _legendTexture.Apply();
                 _legendPalette = _hm.Palette;
             }
-            string unit = HeatmapState.Unit(_hm.Mode, View.Fluid);
+            string unit = _hm.UnitNow;
             string pipes = View.Fluid == "air" ? "ducts" : "pipes";
             string layer = _hm.RoomsColoured && _hm.Mode != HeatmapMode.Velocity
-                ? $" · rooms: {(_hm.Layer == RoomLayer.Max ? "warmer layer" : _hm.Layer == RoomLayer.Upper ? "upper layer" : "lower layer")} (H)" : "";
+                ? $" · rooms: {(_hm.Layer == RoomLayer.Max ? (_hm.Mode == HeatmapMode.Concentration ? "higher layer" : "warmer layer") : _hm.Layer == RoomLayer.Upper ? "upper layer" : "lower layer")} (H)" : "";
+            _speciesRow.style.display = _hm.Mode == HeatmapMode.Concentration ? DisplayStyle.Flex : DisplayStyle.None;
+            _legendNote.style.display = _hm.Mode == HeatmapMode.Concentration ? DisplayStyle.Flex : DisplayStyle.None;
+            _legendNote.text = (_hm.Species == RoomSpecies.NaturalGas ? "The top of the scale is the lower flammable limit" : "Room air") + $" ·{layer.Replace(" ·", "")}";
             _legendTitle.text = _hm.Mode switch
             {
                 HeatmapMode.Velocity => _hm.RoomsColoured ? $"Velocity (m/s) · rooms 0–{Units.Number(_hm.RoomMax, 1)} m/s" : "Velocity in pipes (m/s)",
                 HeatmapMode.Pressure => $"Pressure in {pipes} ({unit})",
                 HeatmapMode.Flow => $"Flow rate in {pipes} ({unit})",
                 HeatmapMode.Stress => _s.Game.City?.Utilities.EngineeringSoftware == true && _s.HasPendingDesign ? $"Stress after {_data.Balancing.Failure.ForecastHours:0} h (forecast)" : "Stress (amber from 1)",
+                HeatmapMode.Concentration => $"{HeatmapState.SpeciesName(_hm.Species)} in the air ({unit})",
                 _ => $"{HeatmapState.DisplayName(_hm.Mode)} ({unit}){layer}",
             };
             _legendBar.style.backgroundColor = StyleKeyword.None;
             _legendBar.style.backgroundImage = new StyleBackground(_legendTexture);
             _legendTicks.style.display = DisplayStyle.Flex;
             _lock.style.display = DisplayStyle.Flex;
-            int digits = _hm.Mode == HeatmapMode.Density ? 3 : _hm.Mode == HeatmapMode.Stress ? 1 : (_hm.Mode == HeatmapMode.Flow || _hm.Mode == HeatmapMode.Pressure) && View.Fluid == "air" ? 0 : 1;
+            int digits = _hm.Mode == HeatmapMode.Density ? 3 : _hm.Mode == HeatmapMode.Stress ? 1 : (_hm.Mode == HeatmapMode.Flow || _hm.Mode == HeatmapMode.Pressure) && View.Fluid == "air" ? 0
+                : _hm.Mode == HeatmapMode.Concentration && _hm.Species == RoomSpecies.Co2 ? 0 : 1;
             _legendMin.text = Units.Number(_hm.RangeMin, digits);
             _legendMid.text = Units.Number((_hm.RangeMin + _hm.RangeMax) / 2, digits);
             _legendMax.text = Units.Number(_hm.RangeMax, digits) + " " + unit;
@@ -685,6 +752,13 @@ namespace HeadLoss.Unity.UI
             }
             if (hint.Length == 0 && View.Fluid == "water" && _s.State.Water.Segments.Count == 0)
                 hint = _s.Layout.Floors > 1 ? "Drag from the water connection to a tap · a riser goes between floors in a shaft" : "Drag from the water connection to a tap to draw a pipe";
+            if (hint.Length == 0 && View.Fluid == BuildingState.GasFluid && !_s.ItemUnlocked("copper"))
+            {
+                hint = $"Requires natural gas (tier {_data.Material("copper").Tier})";
+                warn = true;
+            }
+            if (hint.Length == 0 && View.Fluid == BuildingState.GasFluid && _s.State.Gas.Segments.Count == 0)
+                hint = "Click the gas connection to place a regulator, then drag from it to a stove · keep gas pipes clear of the panel";
             bool airEmpty = View.Fluid == "air" && _s.State.Air.Segments.Count == 0;
             bool intakeHasFan = _s.Layout.OpeningFor("air") is EntryOpeningDef intake && _s.State.EquipmentAt(intake.Id) != null;
             if (hint.Length == 0 && airEmpty)
@@ -722,6 +796,7 @@ namespace HeadLoss.Unity.UI
                 case TargetKind.Intake: lines = OpeningReadout(t.Anchor, snap, lines); break;
                 case TargetKind.Outlet: lines = OutletReadout(t.Anchor, lines); break;
                 case TargetKind.Inline: lines = InlineReadout(fluid, t.Id, snap, lines); break;
+                case TargetKind.Safety: lines = SafetyReadout(t, lines); break;
             }
             bool room = false;
             if (t.Kind == TargetKind.None && !_ix.PointerOverUi && _s.Layout.RoomOf(_ix.PointerTile) is RoomDef r)
@@ -767,11 +842,14 @@ namespace HeadLoss.Unity.UI
                     if (net.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(net.Degree(n.Id));
                     break;
                 case TargetKind.Intake:
-                    if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On).Append(e.Vsd);
-                    _sb.Append(_s.Record.PanelTripped);
+                    if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On).Append(e.Vsd).Append(e.SparkFree);
+                    _sb.Append(_s.Record.PanelTripped).Append(_s.Record.Failures.Certificate.CheckLeft > 0);
                     break;
                 case TargetKind.Inline:
-                    if (net.FindNode(t.Id) is DuctNode p) _sb.Append(p.PartId).Append(p.On).Append(p.Vsd);
+                    if (net.FindNode(t.Id) is DuctNode p) _sb.Append(p.PartId).Append(p.On).Append(p.Vsd).Append(p.SparkFree);
+                    break;
+                case TargetKind.Safety:
+                    _sb.Append(t.Tile.X).Append(',').Append(t.Tile.Y).Append(',').Append(t.Tile.F).Append(_s.State.Safety.Find(d => d.Pos == t.Tile && d.EquipmentId == t.Anchor)?.High);
                     break;
             }
             _sb.Append('/').Append(_shownTier);
@@ -832,6 +910,13 @@ namespace HeadLoss.Unity.UI
                 i = Line(i, $"{_data.Sealing(seg.Sealing).DisplayName} · leaking {Units.FormatAirFlow(r.Flow[leaks.a] + r.Flow[leaks.b])}{ins}");
             }
             i = Line(i, $"Temperature  {Units.FormatTemperatureK(l.Temperature)}");
+            if (r.MachWarning[k]) i = Line(i, "Above 0.3 × the speed of sound: the gas is compressible here. Use a larger pipe.");
+            if (fluid == BuildingState.GasFluid)
+                foreach (LeakState leak in _s.Record.Failures.Leaks)
+                {
+                    if (!DuctEditor.Tiles(net, seg).Contains(leak.Pos)) continue;
+                    i = Line(i, $"Leaking  {Units.FormatAirFlow(_s.GasSafety.LeakFlow(leak))} into the room · see the leak list");
+                }
             return StressLines(fluid, net, seg, fs, i);
         }
 
@@ -912,6 +997,7 @@ namespace HeadLoss.Unity.UI
             EntryOpeningDef? o = _s.Layout.FindOpening(openingId);
             if (o == null) return i;
             if (o.Utility == "water") return WaterConnectionReadout(openingId, snap, i);
+            if (o.Utility == "gas") return GasConnectionReadout(openingId, snap, i);
             if (o.Utility == "power") return PowerConnectionReadout(openingId, i);
             EquipmentState? e = _s.State.EquipmentAt(openingId);
             if (e == null)
@@ -946,6 +1032,26 @@ namespace HeadLoss.Unity.UI
             if (e.Vsd || def!.SpeedControl == "variable") i = Line(i, $"Speed  {e.Speed * 100:0} %{(e.Vsd ? " · variable-speed drive" : "")}");
             if (fs == null || !fs.Compiled.FanLink.TryGetValue(openingId, out int k)) return Line(i, "Solving…");
             return DeviceLines(fs, k, def!, i);
+        }
+
+        int GasConnectionReadout(string openingId, NetworkSnapshot? snap, int i)
+        {
+            EquipmentState? e = _s.State.EquipmentAt(openingId);
+            EquipmentDef? def = e != null ? _data.FindEquipment(e.EquipmentId) : null;
+            _readoutTitle.text = def?.DisplayName ?? "Gas connection · no regulator";
+            i = Line(i, _s.GasSupply.Connected
+                ? $"City gas  {Units.FormatMbar(_s.GasSupply.PressurePa)} at the connection"
+                : _s.Game.City != null ? "No city gas yet · route a gas main to this plot in the city view" : "No city gas");
+            if (def != null) i = Line(i, $"Holds the building at {Units.FormatMbar(def.SetpointPa)}");
+            else i = Line(i, "Without a regulator the stoves see the full main pressure, above their limit. Place one here.");
+            FluidSolve? fs = snap?.Gas;
+            if (fs != null && fs.Compiled.SupplyNode >= 0) i = Line(i, $"Drawing  {Units.FormatAirFlow(fs.Compiled.SupplyFlow(fs.Result))} from the main");
+            GasCertificateState c = _s.Record.Failures.Certificate;
+            if (!c.Issued) return Line(i, "A gas safety certificate comes with the first gas pipe you build.");
+            if (c.CheckLeft > 0) i = Line(i, $"Certificate check running · {Units.FormatDuration(c.CheckLeft)} left");
+            i = Line(i, _s.GasSafety.CertificateExpired ? "Gas safety certificate expired: pay is halved until it is renewed" : $"Gas safety certificate  {Units.FormatDuration(c.SecondsLeft)} left");
+            if (c.LastFailure.Length > 0) i = Line(i, $"Last check failed: {c.LastFailure}");
+            return i;
         }
 
         int PowerConnectionReadout(string openingId, int i)
@@ -992,7 +1098,7 @@ namespace HeadLoss.Unity.UI
             {
                 _readoutTitle.text = eq.DisplayName;
                 if (eq.Curve.Count == 0) return Line(i, $"Surges on this network × {_data.Balancing.Failure.AccumulatorSurgeFactor:0.0#}: pipes build less stress when valves close or pumps stop.");
-                if (!n.On) return Line(i, $"Switched off (closed to {(fluid == "air" ? "air" : "water")})");
+                if (!n.On) return Line(i, $"Switched off (closed to {FluidWord(fluid)})");
                 if (!solved) return Line(i, "Solving…");
                 return DeviceLines(fs!, k, eq, i);
             }
@@ -1029,6 +1135,7 @@ namespace HeadLoss.Unity.UI
             if (valve.Model == "fixed") i = Line(i, $"K {valve.K:0.0#}");
             else if (valve.MinOpening >= 1)
             {
+                if (valve.AutoShutoff) i = Line(i, _s.GasSafety.AutoClosedTiles().Contains(n.Pos) ? "Closed by itself: the alarm or a power loss" : "Closes by itself at a gas alarm and on power loss");
                 i = Line(i, n.On ? $"Open · K {valve.K:0.0#}" : "Closed");
                 if (!n.On) return Line(i, "The branch behind it is isolated: its outlets pay nothing but do not keep the building offline, and a burst there no longer cuts the income.");
             }
@@ -1038,8 +1145,28 @@ namespace HeadLoss.Unity.UI
             i = Line(i, $"Flow  {Units.FormatFlow(System.Math.Abs(r.Flow[k]), fluid)}");
             i = Line(i, $"Pressure lost  {Units.FormatPressure(System.Math.Abs(r.DpFittings[k]), fluid)}");
             if (valve.Model == "valve" && valve.MinOpening < 1)
-                i = Line(i, $"Drag the Open slider to send {(fluid == "air" ? "air" : "water")} to other branches. Changing the opening is free and works at once, no Commit needed. To put it somewhere else, Remove it and place a new one.");
+                i = Line(i, $"Drag the Open slider to send {FluidWord(fluid)} to other branches. Changing the opening is free and works at once, no Commit needed. To put it somewhere else, Remove it and place a new one.");
             return i;
+        }
+
+        static string FluidWord(string fluid) => fluid == "air" ? "air" : fluid == "water" ? "water" : "gas";
+
+        /// <summary>A detector with what it reads, or a passive vent with the air it lets in.</summary>
+        int SafetyReadout(Target t, int i)
+        {
+            EquipmentDef def = _data.EquipmentItem(t.Anchor);
+            SafetyDevice? d = _s.State.Safety.Find(x => x.Pos == t.Tile && x.EquipmentId == t.Anchor);
+            if (d == null) return i;
+            _readoutTitle.text = def.DisplayName;
+            if (t.Anchor == GasSafetyIds.Detector)
+            {
+                i = Line(i, $"Alarms at {_data.Balancing.Gas.AlarmDetectorFraction * 100:0}% of the lower flammable limit at this spot.");
+                int c = _s.Rooms.Grid.Index(d.Floor - _s.Layout.LowestFloor, d.X * 2, d.Y * 2), n = _s.Rooms.Grid.Cells;
+                double share = System.Math.Max(_s.Rooms.State.Gas[c], _s.Rooms.State.Gas[n + c]);
+                return Line(i, $"Reads {share * 100:0.00}% gas · {share / _s.GasSafety.Lfl * 100:0}% of the limit");
+            }
+            i = Line(i, $"{(d.High ? "High" : "Low")} in the {d.Facing} wall: {_data.Balancing.Gas.PassiveVentFlowM3h * _s.Climate.WindFactor:0} m³/h of fresh air now, by the wind, without power.");
+            return Line(i, d.High ? "Light gas like natural gas collects high: this clears it best." : "Low vents suit gases heavier than air.");
         }
 
         /// <summary>The room under the pointer: its air from the room grid (<c>05-simulation.md</c> §3.2).</summary>
@@ -1057,6 +1184,7 @@ namespace HeadLoss.Unity.UI
             Sim.Rooms.RoomSummary sum = _s.Rooms.Rooms[index];
             i = Line(i, $"Air  {sum.MeanTemperature:0.0} °C · outside {_s.Climate.OutsideTemperatureC:0.0} °C");
             i = Line(i, $"CO₂  {sum.Co2Ppm:0} ppm · {sum.AirChangesPerHour:0.0} air changes per hour");
+            if (sum.GasMax > 1e-5f) i = Line(i, $"Gas  up to {sum.GasMax * 100:0.00}% · {sum.GasMax / _s.GasSafety.Lfl * 100:0}% of the lower flammable limit");
             if (r.Occupants > 0) i = Line(i, $"{r.Occupants:0.#} {(r.Occupants == 1 ? "person" : "people")} · {r.Occupants * _data.Balancing.Climate.OccupantSensibleW + r.MachinesW:0} W of heat");
             return i;
         }
@@ -1071,10 +1199,10 @@ namespace HeadLoss.Unity.UI
             else if (st.Zone == OutletZone.Isolated) i = Line(i, "Isolated by a closed shutoff: it pays nothing, but does not keep the building offline.");
             else
             {
-                string flow = def.Measured == "pressure" ? $" while drawing {Units.FormatWaterFlow(NetworkCompiler.DesignFlow(_data, _s.Layout, o))}" : "";
+                string flow = def.Measured == "pressure" ? $" while drawing {Units.FormatFlow(NetworkCompiler.DesignFlow(_data, _s.Layout, o), def.Fluid)}" : "";
                 i = Line(i, $"Delivery  {UiKit.FormatDelivery(def, st.Delivery)}{flow}");
                 i = Line(i, $"Zone  {UiKit.ZoneWord(st.Zone)} · ×{st.Multiplier:0.00} · {Units.FormatMoneyRate(st.BaseRate * st.Multiplier, _symbol)}");
-                if (st.Zone == OutletZone.AboveCodeMax) i = Line(i, $"Above code maximum: {def.CodeMaxReason.ToLowerInvariant()}. It pays nothing until the delivery comes down{(def.Measured == "pressure" ? ": a pressure regulator on the branch does it." : ".")}");
+                if (st.Zone == OutletZone.AboveCodeMax) i = Line(i, $"Above code maximum: {def.CodeMaxReason.ToLowerInvariant()}. It pays nothing until the delivery comes down{(def.Fluid == BuildingState.GasFluid ? ": place a regulator at the gas connection." : def.Measured == "pressure" ? ": a pressure regulator on the branch does it." : ".")}");
                 if (_s.Current != null && _s.Current.Compiled.OutletLink.TryGetValue(outletId, out int k) && _s.Current.Result.Flow[k] < 0)
                     i = Line(i, "Air is flowing backwards into the duct here.");
             }
@@ -1109,7 +1237,7 @@ namespace HeadLoss.Unity.UI
             }
             var mats = new List<(string, string)>();
             foreach (MaterialDef m in _data.Materials)
-                if (m.Fluids.Contains(fluid) && _s.Unlocked(m.Tier))
+                if (m.Fluids.Contains(fluid) && _s.ItemUnlocked(m.Id))
                     mats.Add((m.Id, $"{m.DisplayName} · {Units.FormatMoney(Pricing.PerMetre(_data, m.Id, first.DiameterMm), _symbol)}/m · rated {Units.FormatPressure(m.RatedPressure(first.DiameterMm), fluid)}"));
             Picker("Material", mats, first.MaterialId, id => new SetSegmentSpecCommand(ids, materialId: id, fluid: fluid));
             if (fluid == "air")
@@ -1174,7 +1302,7 @@ namespace HeadLoss.Unity.UI
             if (DuctEditor.IsRiser(built, seg)) metres *= _data.Balancing.Building.FloorHeight;
             var options = new List<(string id, string name)> { ("", "Repair as it was") };
             foreach (MaterialDef m in _data.Materials)
-                if (m.Id != seg.MaterialId && m.Fluids.Contains(fluid) && _s.Unlocked(m.Tier)) options.Add((m.Id, $"Fit {m.DisplayName.ToLowerInvariant()} · rated {Units.FormatPressure(m.RatedPressure(seg.DiameterMm), fluid)}"));
+                if (m.Id != seg.MaterialId && m.Fluids.Contains(fluid) && _s.ItemUnlocked(m.Id)) options.Add((m.Id, $"Fit {m.DisplayName.ToLowerInvariant()} · rated {Units.FormatPressure(m.RatedPressure(seg.DiameterMm), fluid)}"));
             string upgrade = "";
             if (options.Count > 1)
             {
@@ -1239,7 +1367,7 @@ namespace HeadLoss.Unity.UI
                     if (ids.Count == 1 && DuctEditor.ValidateInline(net, tile) == DrawError.None)
                         foreach (string part in _data.Game.Toolbox.Parts)
                         {
-                            if (!EquipmentFits.InlinePart(_data, part, fluid) || !_s.Unlocked(Tech.ItemTier(_data, part))) continue;
+                            if (!EquipmentFits.InlinePart(_data, part, fluid) || !_s.ItemUnlocked(part)) continue;
                             string p = part;
                             _ui.Button(_readoutActions, "Add " + PartLabel(part).ToLowerInvariant(), () => _s.Execute(new PlaceInlineCommand(tile, p, false, fluid)));
                         }
@@ -1265,7 +1393,35 @@ namespace HeadLoss.Unity.UI
                 case TargetKind.Inline:
                     InlineActions(fluid, t.Id);
                     break;
+                case TargetKind.Safety:
+                    SafetyActions(t);
+                    break;
             }
+        }
+
+        void SafetyActions(Target t)
+        {
+            TilePos tile = t.Tile;
+            string id = t.Anchor;
+            SafetyDevice? d = _s.State.Safety.Find(x => x.Pos == tile && x.EquipmentId == id);
+            if (d == null) return;
+            if (id == GasSafetyIds.PassiveVent)
+            {
+                bool high = d.High;
+                StyleButton(_ui.Button(_readoutActions, "High", () => _s.Execute(new SetVentHeightCommand(tile, true))), high);
+                StyleButton(_ui.Button(_readoutActions, "Low", () => _s.Execute(new SetVentHeightCommand(tile, false))), !high);
+            }
+            _ui.Button(_readoutActions, "Remove", _ix.DeleteSelection);
+        }
+
+        /// <summary>Spark-free variant of an electrical item: not an ignition source, for half its price again.</summary>
+        void AddSparkFree(EquipmentDef def, bool on, System.Action<bool> set)
+        {
+            if (!def.IsIgnitionSource || !_s.HasGas) return;
+            bool ok = _s.Unlocked(_data.Balancing.Gas.SparkFreeTier);
+            Button b = _ui.Button(_readoutActions, on ? "Spark-free · back to standard" : ok ? $"Make spark-free · +{Units.FormatMoney(Pricing.SparkFreePrice(_data, def.Price), _symbol)}" : $"Spark-free · tier {_data.Balancing.Gas.SparkFreeTier}", () => set(!on));
+            StyleButton(b, on);
+            b.SetEnabled(on || ok);
         }
 
         void OpeningActions(string opening)
@@ -1275,6 +1431,12 @@ namespace HeadLoss.Unity.UI
             EquipmentState? e = _s.State.EquipmentAt(opening);
             if (o.Utility == "water")
                 StyleButton(_ui.Button(_readoutActions, "Mains pressure only · free", () => _s.Execute(new SetIntakeEquipmentCommand(opening, ""))), e == null);
+            if (o.Utility == "gas" && _s.Record.Failures.Certificate.Issued)
+            {
+                GasCertificateState c = _s.Record.Failures.Certificate;
+                Button renew = _ui.Button(_readoutActions, c.CheckLeft > 0 ? "Certificate check running" : $"Renew certificate · {Units.FormatMoney(_s.GasSafety.RenewalPrice, _symbol)}", () => _s.GasSafety.RenewCertificate());
+                renew.SetEnabled(c.CheckLeft <= 0);
+            }
             foreach (EquipmentDef def in Catalogue.OpeningEquipment(_data, o.Utility))
             {
                 string eqId = def.Id;
@@ -1282,7 +1444,7 @@ namespace HeadLoss.Unity.UI
                 bool preplaced = false;
                 foreach (EquipmentPlacementDef p in _s.Layout.InitialEquipment)
                     if (p.OpeningId == opening && p.EquipmentId == eqId) preplaced = true;
-                bool unlocked = _s.Unlocked(def.Tier);
+                bool unlocked = _s.ItemUnlocked(def.Id);
                 if (!unlocked && def.Tier > Tech.UnlockedTier(_s.Game) + 1) continue;
                 bool fits = EquipmentFits.Footprint(_data, _s.Layout, _s.State, o, def) != null;
                 string price = preplaced ? "free" : Units.FormatMoney(def.Price, _symbol);
@@ -1295,11 +1457,18 @@ namespace HeadLoss.Unity.UI
             if (o.Utility == "power")
             {
                 if (_s.Record.PanelTripped) _ui.Button(_readoutActions, "Reset panel", () => _s.ResetPanel());
+                if (e != null) AddSparkFree(_data.EquipmentItem(e.EquipmentId), e.SparkFree, on => _s.Execute(new SetSparkFreeCommand(opening, on)));
                 return;
             }
             if (e == null) return;
             EquipmentDef placed = _data.EquipmentItem(e.EquipmentId);
+            if (placed.Category == "gas-supply")
+            {
+                _ui.Button(_readoutActions, "Remove", () => _s.Execute(new SetIntakeEquipmentCommand(opening, "")));
+                return;
+            }
             if (placed.Curve.Count == 0) return;
+            AddSparkFree(placed, e.SparkFree, on => _s.Execute(new SetSparkFreeCommand(opening, on)));
             if (placed.SpeedControl != "crank")
                 _ui.Button(_readoutActions, e.On ? "Switch off" : "Switch on", () => _s.Execute(new SetEquipmentOnCommand(opening, !e.On)));
             if (placed.SpeedControl == "on-off") AddDriveButton(placed.Category, e.Vsd, () => _s.Execute(new SetVsdCommand(opening, !e.Vsd)));
@@ -1322,6 +1491,7 @@ namespace HeadLoss.Unity.UI
                 _ui.Button(_readoutActions, "Turn around (R)", () => _s.Execute(new FlipInlineCommand(id, fluid)));
                 if (eq.SpeedControl == "on-off") AddDriveButton(eq.Category, vsd, () => _s.Execute(new SetVsdCommand(tile, !vsd, fluid)));
                 if (vsd) AddSpeedSlider(n.Speed, v => _s.Execute(new SetInlineSpeedCommand(tile, v, fluid)));
+                AddSparkFree(eq, n.SparkFree, sf => _s.Execute(new SetSparkFreeCommand(tile, fluid, sf)));
             }
             else if (eq == null)
             {
@@ -1360,6 +1530,69 @@ namespace HeadLoss.Unity.UI
                 }
             }
             _ui.Button(_readoutActions, "Remove", () => _s.Execute(new RemoveInlineCommand(id, fluid)));
+        }
+
+        // ---------- gas leaks and damage ----------
+
+        /// <summary>The list of leaks and parts knocked offline, each with its crews (rebuilt only when something on it changes).</summary>
+        void RefreshLeaks()
+        {
+            FailureState f = _s.Record.Failures;
+            _sb.Clear();
+            foreach (LeakState l in f.Leaks) _sb.Append(l.Key).Append(Units.FormatAirFlow(_s.GasSafety.LeakFlow(l))).Append(_s.Failures.JobFor(BuildingState.GasFluid, l.Key)?.Started).Append(';');
+            foreach (string d in f.DamagedEquipment) _sb.Append(d).Append(_s.Failures.JobFor("equipment", d)?.Started).Append(';');
+            foreach (RepairJob j in f.Repairs) if (j.Started) _sb.Append(Units.FormatDuration(j.Remaining));
+            string key = _sb.ToString();
+            if (key == _shownLeaks) return;
+            _shownLeaks = key;
+            _leakRows.Clear();
+            int total = f.Leaks.Count + f.DamagedEquipment.Count;
+            _leaks.style.display = total > 0 ? DisplayStyle.Flex : DisplayStyle.None;
+            _leakHead.text = f.Leaks.Count > 0 ? $"Gas leaks · {f.Leaks.Count}" : $"Damaged · {total}";
+            foreach (LeakState l in f.Leaks)
+            {
+                TilePos at = l.Pos;
+                string cause = l.Cause == "burst" ? "a burst pipe" : l.Cause == "weep" ? "a weeping pipe" : l.Cause == "damage" ? "blast damage" : "a fitting";
+                Label row = UiKit.Text(_leakRows, $"{BuildingViewState.FloorName(l.Floor)}: {cause}, {Units.FormatAirFlow(_s.GasSafety.LeakFlow(l))}", "hl-readout-line");
+                row.RegisterCallback<ClickEvent>(_ =>
+                {
+                    View.SetFloor(at.F);
+                    _cam.CentreOn(DuctGeometry.Centre(at));
+                });
+                string k = l.Key;
+                CrewButtons(_s.Failures.JobFor(BuildingState.GasFluid, k), em => _s.Failures.LeakRepairPrice(l, _s.Committed, em), em => _s.RepairLeak(k, em));
+            }
+            foreach (string d in f.DamagedEquipment)
+            {
+                string key2 = d;
+                UiKit.Text(_leakRows, $"Knocked offline: {DamagedName(d)}", "hl-readout-line");
+                CrewButtons(_s.Failures.JobFor("equipment", key2), em => _s.Failures.EquipmentRepairPrice(key2, em), em => _s.RepairEquipment(key2, em));
+            }
+        }
+
+        string DamagedName(string key)
+        {
+            if (key.StartsWith("opening:", System.StringComparison.Ordinal))
+            {
+                EquipmentState? e = _s.Committed.EquipmentAt(key.Substring(8));
+                return e != null ? _data.EquipmentItem(e.EquipmentId).DisplayName : key.Substring(8);
+            }
+            return "an inline part";
+        }
+
+        void CrewButtons(RepairJob? job, System.Func<bool, double> price, System.Func<bool, bool> book)
+        {
+            if (job != null)
+            {
+                UiKit.Text(_leakRows, job.Started ? $"Crew on site · {Units.FormatDuration(job.Remaining)} left" : "A crew is booked and waiting for the one ahead", "hl-subtitle");
+                return;
+            }
+            VisualElement row = UiKit.Row(_leakRows);
+            foreach (bool emergency in new[] { true, false })
+            {
+                bool em = emergency;
+                _ui.Button(row, $"{(em ? "Emergency" : "Standard")} · {Units.FormatDuration(_s.Failures.RepairSeconds(em))} · {Units.FormatMoney(price(em), _symbol)}", () => book(em));
+            }
         }
 
         // ---------- code violations ----------

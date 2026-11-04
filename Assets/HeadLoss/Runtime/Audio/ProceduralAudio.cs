@@ -27,7 +27,7 @@ namespace HeadLoss.Unity.Audio
         volatile float _master;
         volatile float _ambience = 1, _ui = 1;
         readonly float[] _fanSpeed = new float[MaxFans];
-        int _clickRequests, _tockRequests, _chimeRequests;
+        int _clickRequests, _tockRequests, _chimeRequests, _alarmRequests, _thumpRequests;
 
         // Audio thread state.
         uint _rng = 0x9E3779B9u;
@@ -36,7 +36,10 @@ namespace HeadLoss.Unity.Audio
         int _swellLeft;
         readonly double[] _fanPhase = new double[MaxFans];
         readonly float[] _fanSmooth = new float[MaxFans];
-        int _clickDone, _tockDone, _chimeDone;
+        int _clickDone, _tockDone, _chimeDone, _alarmDone, _thumpDone;
+        float _alarmEnv1, _alarmEnv2, _thumpEnv, _thumpLp;
+        double _alarmPhase1, _alarmPhase2;
+        int _alarmDelay;
         float _clickEnv, _tockEnv, _chimeEnv1, _chimeEnv2;
         double _clickPhase, _tockPhase, _chimePhase1, _chimePhase2;
         int _chimeDelay;
@@ -90,6 +93,10 @@ namespace HeadLoss.Unity.Audio
         public void PlayClick() => Interlocked.Increment(ref _clickRequests);
         public void PlayTock() => Interlocked.Increment(ref _tockRequests);
         public void PlayChime() => Interlocked.Increment(ref _chimeRequests);
+        /// <summary>The gas alarm: a soft, slow two-tone chime, never harsh.</summary>
+        public void PlayAlarm() => Interlocked.Increment(ref _alarmRequests);
+        /// <summary>An explosion: a muffled low thump, filtered noise over about 0.6 s.</summary>
+        public void PlayThump() => Interlocked.Increment(ref _thumpRequests);
 
         float Noise()
         {
@@ -108,6 +115,10 @@ namespace HeadLoss.Unity.Audio
             if (click != _clickDone) { _clickDone = click; _clickEnv = 1; _clickPhase = 0; }
             if (tock != _tockDone) { _tockDone = tock; _tockEnv = 1; _tockPhase = 0; }
             if (chime != _chimeDone) { _chimeDone = chime; _chimeEnv1 = 1; _chimePhase1 = 0; _chimeDelay = (int)(0.14f * sr); }
+            int alarm = Volatile.Read(ref _alarmRequests), thump = Volatile.Read(ref _thumpRequests);
+            if (alarm != _alarmDone) { _alarmDone = alarm; _alarmEnv1 = 1; _alarmPhase1 = 0; _alarmDelay = (int)(0.55f * sr); }
+            if (thump != _thumpDone) { _thumpDone = thump; _thumpEnv = 1; _thumpLp = 0; }
+            float alarmDecay = Mathf.Exp(-dt / 0.5f), thumpDecay = Mathf.Exp(-dt / 0.16f), thumpA = 1f - Mathf.Exp(-2f * Mathf.PI * 90f * dt);
 
             float airTarget = _airLevel;
             float clickDecay = Mathf.Exp(-dt / 0.008f), tockDecay = Mathf.Exp(-dt / 0.03f), chimeDecay = Mathf.Exp(-dt / 0.45f);
@@ -185,6 +196,25 @@ namespace HeadLoss.Unity.Audio
                     _chimePhase2 += 880.0 * dt;
                     s += (float)Math.Sin(_chimePhase2 * 2 * Math.PI) * _chimeEnv2 * (float)_def.ClickGain * 0.7f;
                     _chimeEnv2 *= chimeDecay;
+                }
+
+                // Gas alarm: two low soft notes, a falling third.
+                if (_alarmEnv1 > 1e-4f || _alarmEnv2 > 1e-4f || _alarmDelay > 0)
+                {
+                    _alarmPhase1 += 523.25 * dt;
+                    s += (float)Math.Sin(_alarmPhase1 * 2 * Math.PI) * _alarmEnv1 * (float)_def.ClickGain * 0.6f;
+                    _alarmEnv1 *= alarmDecay;
+                    if (_alarmDelay > 0 && --_alarmDelay == 0) { _alarmEnv2 = 1; _alarmPhase2 = 0; }
+                    _alarmPhase2 += 440.0 * dt;
+                    s += (float)Math.Sin(_alarmPhase2 * 2 * Math.PI) * _alarmEnv2 * (float)_def.ClickGain * 0.6f;
+                    _alarmEnv2 *= alarmDecay;
+                }
+                // Explosion: noise through a low-pass at 90 Hz, decaying fast. Muffled, not loud.
+                if (_thumpEnv > 1e-4f)
+                {
+                    _thumpLp += (w - _thumpLp) * thumpA;
+                    s += _thumpLp * _thumpEnv * (float)_def.ClickGain * 6f;
+                    _thumpEnv *= thumpDecay;
                 }
 
                 // Soft limiter.

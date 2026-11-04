@@ -8,7 +8,7 @@ using UnityEngine;
 
 namespace HeadLoss.Unity.Interaction
 {
-    public enum TargetKind { None, Segment, Node, Intake, Outlet, Inline }
+    public enum TargetKind { None, Segment, Node, Intake, Outlet, Inline, Safety }
 
     /// <summary>Something under the pointer or selected.</summary>
     public struct Target
@@ -20,9 +20,11 @@ namespace HeadLoss.Unity.Interaction
         public string Anchor;
         /// <summary>Network of a segment, node or inline part (air, water).</summary>
         public string Fluid;
+        /// <summary>Tile of a safety device (Anchor is then its equipment id).</summary>
+        public TilePos Tile;
 
         public static Target None => new Target { Kind = TargetKind.None, Anchor = "", Fluid = "air" };
-        public bool Same(Target o) => Kind == o.Kind && Id == o.Id && Anchor == o.Anchor && Fluid == o.Fluid;
+        public bool Same(Target o) => Kind == o.Kind && Id == o.Id && Anchor == o.Anchor && Fluid == o.Fluid && Tile == o.Tile;
     }
 
     /// <summary>
@@ -113,6 +115,7 @@ namespace HeadLoss.Unity.Interaction
             _drawing = session.Data.Balancing.Drawing;
             _drawChoice["air"] = (_drawing.DefaultDuctSizeMm, _drawing.DefaultMaterial);
             _drawChoice["water"] = (22, "pvc");
+            _drawChoice[BuildingState.GasFluid] = (22, "copper");
         }
 
         TilePos TileAt(Vector2 world) => new TilePos(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y), View.Floor);
@@ -271,8 +274,40 @@ namespace HeadLoss.Unity.Interaction
             }
         }
 
+        /// <summary>Placing safety gear: a detector on any room tile, a passive vent on an outside wall.</summary>
+        void UpdatePlacingSafety(bool pointerOverUi, Vector2 world, EquipmentDef def)
+        {
+            SetHover(Target.None);
+            TilePos tile = TileAt(world);
+            bool hovering = !pointerOverUi && _session.Layout.InFootprint(tile);
+            bool wall = def.Placement == "wall";
+            bool fits = _session.Layout.IsInside(tile) && !_session.State.Safety.Exists(d => d.Pos == tile && d.EquipmentId == def.Id);
+            if (fits && wall)
+            {
+                fits = false;
+                foreach (string side in new[] { "north", "south", "east", "west" }) fits |= _session.Layout.HasOutsideWall(tile, side);
+            }
+            bool valid = hovering && fits;
+            if (hovering != PlaceHovering || tile != PlaceTile || valid != PlaceValid)
+            {
+                PlaceHovering = hovering;
+                PlaceTile = tile;
+                PlaceValid = valid;
+                Revision++;
+            }
+            Hint = hovering && !fits
+                ? wall ? "Passive vents go on an outside wall" : "Pick a free room tile"
+                : wall ? "Click a tile along an outside wall to place a passive vent · Esc to stop" : "Click a tile in the room to watch · Esc to stop";
+            if (valid && _input.Primary.WasPressedThisFrame()) _session.Execute(new PlaceSafetyCommand(def.Id, tile));
+        }
+
         void UpdatePlacing(bool pointerOverUi, Vector2 world)
         {
+            if (_session.Data.FindEquipment(PlaceTool) is EquipmentDef safety && (safety.Placement == "room" || safety.Placement == "wall"))
+            {
+                UpdatePlacingSafety(pointerOverUi, world, safety);
+                return;
+            }
             SetHover(Target.None);
             TilePos tile = TileAt(world);
             bool hovering = !pointerOverUi && _session.Layout.InFootprint(tile);
@@ -442,6 +477,12 @@ namespace HeadLoss.Unity.Interaction
 
         public void DeleteSelection()
         {
+            if (Selected.Kind == TargetKind.Safety)
+            {
+                _session.Execute(new RemoveSafetyCommand(Selected.Anchor, Selected.Tile));
+                ClearSelection();
+                return;
+            }
             if (Selected.Kind == TargetKind.Inline)
             {
                 _session.Execute(new RemoveInlineCommand(Selected.Id, Selected.Fluid));
@@ -461,6 +502,8 @@ namespace HeadLoss.Unity.Interaction
             SelectedSegments.RemoveWhere(id => net.FindSegment(id) == null);
             if (Selected.Kind == TargetKind.Segment && SelectedSegments.Count == 0 && before > 0) Selected = Target.None;
             if ((Selected.Kind == TargetKind.Node || Selected.Kind == TargetKind.Inline) && !NodeIs(net, Selected)) Selected = Target.None;
+            Target sel = Selected;
+            if (sel.Kind == TargetKind.Safety && !_session.State.Safety.Exists(d => d.Pos == sel.Tile && d.EquipmentId == sel.Anchor)) Selected = Target.None;
             DuctNetworkState hnet = _session.State.Net(Hover.Fluid ?? "air");
             if (Hover.Kind == TargetKind.Segment && hnet.FindSegment(Hover.Id) == null) Hover = Target.None;
             if ((Hover.Kind == TargetKind.Node || Hover.Kind == TargetKind.Inline) && !NodeIs(hnet, Hover)) Hover = Target.None;
@@ -485,7 +528,13 @@ namespace HeadLoss.Unity.Interaction
                     return new Target { Kind = TargetKind.Outlet, Anchor = o.Id, Fluid = BuildingState.OutletFluid(o.Type) };
             foreach (EntryOpeningDef o in _session.Layout.EntryOpenings)
                 if (BuildingLayout.PosOf(o) == tile && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.45f)
-                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id, Fluid = o.Utility == "power" ? View.Fluid : o.Utility };
+                {
+                    string utility = BuildingState.UtilityFluid(o.Utility);
+                    return new Target { Kind = TargetKind.Intake, Anchor = o.Id, Fluid = utility.Length > 0 ? utility : View.Fluid };
+                }
+            foreach (SafetyDevice d in _session.State.Safety)
+                if (d.Pos == tile && Vector2.Distance(world, DuctGeometry.Centre(tile)) < 0.4f)
+                    return new Target { Kind = TargetKind.Safety, Anchor = d.EquipmentId, Fluid = View.Fluid, Tile = d.Pos };
             if (!PipesInFocus) return Target.None;
             Target t = PickIn(View.Fluid, world);
             if (t.Kind != TargetKind.None) return t;

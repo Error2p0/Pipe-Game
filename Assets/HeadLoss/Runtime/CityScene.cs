@@ -43,8 +43,9 @@ namespace HeadLoss.Unity
         int _starter;
 
         public CityScene(GameContext ctx, Materials materials, ViewPalette palette, UiKit ui, CameraController camera, BuildingInput input,
-            VisualElement uiRoot, HeatmapState heatmap, System.Func<bool> reduceMotion)
+            VisualElement uiRoot, HeatmapState heatmap, System.Func<bool> reduceMotion, List<CityRing>? rings = null)
         {
+            _overlay.Rings = rings;
             _ctx = ctx;
             _heatmap = heatmap;
             _overlay.Palette = palette;
@@ -129,8 +130,8 @@ namespace HeadLoss.Unity
                     int main = 0;
                     if (Hovered < 0)
                     {
-                        if (Hud.Filter != "power") main = Utilities.MainAt(u, "water", tile.x, tile.y);
-                        if (main == 0 && Hud.Filter != "water") main = Utilities.MainAt(u, "power", tile.x, tile.y);
+                        foreach (string utility in new[] { "water", "gas", "power" })
+                            if (main == 0 && (Hud.Filter.Length == 0 || Hud.Filter == utility)) main = Utilities.MainAt(u, utility, tile.x, tile.y);
                     }
                     Hud.SelectedMain = main;
                 }
@@ -174,7 +175,7 @@ namespace HeadLoss.Unity
             if (_input.Primary.IsPressed()) return;
 
             // Released: lay it if it can be laid.
-            RouteQuote result = _ctx.LayMain(Hud.Utility, Hud.DiameterMm, Hud.CapacityKW, route, Hud.Drilled);
+            RouteQuote result = _ctx.LayMain(Hud.Utility, Hud.DiameterMm, Hud.CapacityKW, route, Hud.Drilled, Hud.PressureClass);
             if (result.Valid)
             {
                 Hud.Laid = true;
@@ -206,13 +207,13 @@ namespace HeadLoss.Unity
         void Requote()
         {
             UtilityState u = _ctx.Game.City!.Utilities;
-            _quote = Utilities.Quote(_ctx.Data, _city, u, Hud.Utility, Hud.DiameterMm, Hud.CapacityKW, _overlay.Route, Hud.Drilled);
+            _quote = Utilities.Quote(_ctx.Data, _city, u, Hud.Utility, Hud.DiameterMm, Hud.CapacityKW, _overlay.Route, Hud.Drilled, 1, Hud.PressureClass);
             // One tile is not a route yet: judge the start alone, so a bad press says why at once.
             if (_overlay.Route.Count == 1)
             {
                 (int x, int y) s = _overlay.Route[0];
                 bool onFacility = _city.Facilities.Exists(f => f.Utility == Hud.Utility && s.x >= f.X && s.y >= f.Y && s.x < f.X + f.Width && s.y < f.Y + f.Height);
-                bool onMain = Utilities.MainAt(u, Hud.Utility, s.x, s.y) != 0;
+                bool onMain = Utilities.MainAt(u, Hud.Utility, s.x, s.y, Hud.PressureClass) != 0;
                 _overlay.RouteValid = onFacility || onMain;
                 _overlay.RouteViolations = null;
                 Hud.ShowRoute(_overlay.RouteValid ? _quote : QuoteError(Hud.Utility == "power" ? "Start at a substation or an existing cable" : "Start at the facility or an existing main"), null);
@@ -220,7 +221,8 @@ namespace HeadLoss.Unity
             }
             _overlay.RouteValid = _quote.Valid;
             _overlay.RouteViolations = _quote.Violations;
-            WaterConnection? w = Hud.Utility == "water" ? _ctx.PreviewWater(Hud.DiameterMm, _overlay.Route, Hud.Drilled, _quote) : null;
+            WaterConnection? w = Hud.Utility == "water" ? _ctx.PreviewWater(Hud.DiameterMm, _overlay.Route, Hud.Drilled, _quote)
+                : Hud.Utility == "gas" ? _ctx.PreviewGas(Hud.DiameterMm, Hud.PressureClass, _overlay.Route, Hud.Drilled, _quote) : null;
             Hud.ShowRoute(_quote, w);
         }
 
@@ -247,9 +249,10 @@ namespace HeadLoss.Unity
             {
                 Plot p = _city.Plots[i];
                 BuildingSession? s = _ctx.FindSession(p.Id);
-                _looks[i] = !_ctx.CityBuildings!.Available(p) ? PlotLook.Locked : s != null && s.CommittedEvaluation.Online ? PlotLook.Online : PlotLook.Offline;
+                _looks[i] = _ctx.IsRuin(p.Id) ? PlotLook.Ruin : !_ctx.CityBuildings!.Available(p) ? PlotLook.Locked : s != null && s.CommittedEvaluation.Online ? PlotLook.Online : PlotLook.Offline;
             }
             Hud.PositionStartHere();
+            Hud.PositionAlarms();
             bool still = _reduceMotion();
             FillOverlay();
             _renderer.DrawPlots(_looks, Hovered, Selected, _starter, time, still, _palette.Walls, _overlay);
@@ -269,6 +272,9 @@ namespace HeadLoss.Unity
             o.Violations = _ctx.CityViolations;
             o.RouteUtility = Hud.Utility;
             o.RouteDiameterMm = Hud.DiameterMm;
+            o.Time = UnityEngine.Time.unscaledTime;
+            o.ReduceMotion = _reduceMotion();
+            o.Rings?.RemoveAll(r => o.Time - r.Start > CityRenderer.RingSeconds);
             o.Icons.Clear();
             foreach (Plot p in _city.Plots)
             {
@@ -279,7 +285,12 @@ namespace HeadLoss.Unity
 
         RoofIcon IconOf(BuildingSession s)
         {
-            if (s.Record.Failures.Bursts.Count > 0) return s.Record.Failures.Repairs.Count > 0 ? RoofIcon.Crew : RoofIcon.Burst;
+            Game.Failures.GasSafety gas = s.GasSafety;
+            if (gas.TimerRunning) return RoofIcon.Alarm;
+            if (gas.Evacuated) return RoofIcon.Evacuated;
+            if (s.Record.Failures.Leaks.Count > 0) return s.Record.Failures.Repairs.Count > 0 ? RoofIcon.Crew : RoofIcon.Leak;
+            if (gas.CertificateExpired || (s.Record.Failures.Certificate.Issued && s.Record.Failures.Certificate.Reminded)) return RoofIcon.Certificate;
+            if (s.Record.Failures.Bursts.Count > 0 || s.Record.Failures.DamagedEquipment.Count > 0) return s.Record.Failures.Repairs.Count > 0 ? RoofIcon.Crew : RoofIcon.Burst;
             if (s.Record.PanelTripped) return RoofIcon.PanelTripped;
             // Only what leak sensors can see floats over the roof; otherwise weeping shows on the stress heatmap.
             foreach (var kv in s.Record.Failures.Stress)

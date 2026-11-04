@@ -45,8 +45,10 @@ namespace HeadLoss.Game.Balancing
         {
             var r = new Result();
             Starter(data, r, starterCities);
+            var meanNet = new Dictionary<int, double>();
             for (int tier = 1; tier <= 5; tier++)
-                if (data.BuildingTier(tier).Available) Tier(data, r, tier, perTier);
+                if (data.BuildingTier(tier).Available) meanNet[tier] = Tier(data, r, tier, perTier);
+            FirstPrestige(data, r, meanNet);
             return r;
         }
 
@@ -90,14 +92,67 @@ namespace HeadLoss.Game.Balancing
 
         // ---------- generated buildings per tier ----------
 
-        static void Tier(DataRepository data, Result r, int tier, int count)
+        /// <summary>
+        /// How long the first prestige takes (<c>13-balancing.md</c> §Targets): a player brings <c>buildingsPerHour</c> buildings online, the
+        /// unlock counts of each tier first and then the best-paying ones, each earning its tier's mean net from then on. The
+        /// estimate ends when both the share of plots and the income target are met.
+        /// </summary>
+        static void FirstPrestige(DataRepository data, Result r, Dictionary<int, double> meanNet)
+        {
+            string sym = data.Game.CurrencySymbol;
+            TargetsDef t = data.Balancing.Targets;
+            PrestigeBalancingDef pb = data.Balancing.Prestige;
+            var hours = new List<double>();
+            for (ulong seed = 1; seed <= 3; seed++)
+            {
+                CityLayout city = CityGenerator.Generate(data, seed, 1);
+                var left = new Dictionary<int, int>();
+                int plots = 0;
+                foreach (Plot p in city.Plots)
+                {
+                    if (!data.BuildingTier(p.Tier).Available) continue;
+                    left[p.Tier] = (left.TryGetValue(p.Tier, out int c) ? c : 0) + 1;
+                    plots++;
+                }
+                int needed = (int)Math.Ceiling(pb.ShareOnline * plots);
+                var order = new List<int>();
+                foreach (int tier in new List<int>(meanNet.Keys))
+                {
+                    int count = Math.Min(left.TryGetValue(tier, out int c) ? c : 0, data.Balancing.Progression.UnlockOnline[tier - 1]);
+                    for (int i = 0; i < count; i++) order.Add(tier);
+                    if (left.ContainsKey(tier)) left[tier] -= count;
+                }
+                for (int tier = 5; tier >= 1; tier--)
+                    if (left.TryGetValue(tier, out int c) && meanNet.ContainsKey(tier))
+                        for (int i = 0; i < c; i++) order.Add(tier);
+                double income = 0, earning = 0, stepHours = 1 / t.BuildingsPerHour, hour = 0;
+                int online = 0;
+                foreach (int tier in order)
+                {
+                    if (online >= needed && income >= pb.IncomeTargetFirst) break;
+                    earning += meanNet[tier];
+                    online++;
+                    income += earning * stepHours * 3600;
+                    hour += stepHours;
+                }
+                if (income < pb.IncomeTargetFirst && earning > 0) hour += (pb.IncomeTargetFirst - income) / earning / 3600;
+                hours.Add(hour);
+                r.Lines.Add($"  city {seed}: {plots} plots with buildings, needs {needed} online and {Units.FormatMoney(pb.IncomeTargetFirst, sym)} · about {hour:0.0} h at {t.BuildingsPerHour:0.#} buildings an hour · earning {Units.FormatMoneyRate(earning, sym)} by then");
+            }
+            double mean = Mean(hours);
+            Check(r, "First prestige", "Hours until both parts of the milestone are met (estimate)", $"{mean:0.0} h", $"{t.FirstPrestigeHours[0]:0}–{t.FirstPrestigeHours[1]:0} h", mean >= t.FirstPrestigeHours[0] && mean <= t.FirstPrestigeHours[1]);
+            r.Lines.Add("");
+        }
+
+        /// <returns>The tier's mean net income per building, $/s.</returns>
+        static double Tier(DataRepository data, Result r, int tier, int count)
         {
             string sym = data.Game.CurrencySymbol;
             TargetsDef t = data.Balancing.Targets;
             var types = new List<BuildingTypeDef>();
             foreach (BuildingTypeDef bt in data.Buildings.Types)
                 if (bt.Tier == tier && bt.Districts.Count > 0) types.Add(bt);
-            if (types.Count == 0) return;
+            if (types.Count == 0) return 0;
             r.Lines.Add($"Tier {tier}: {count} generated buildings ({string.Join(", ", types.ConvertAll(x => x.DisplayName.ToLowerInvariant()))})");
             var rows = new List<Row>();
             int unsolvable = 0;
@@ -128,12 +183,15 @@ namespace HeadLoss.Game.Balancing
             }
             string who = $"Tier {tier}";
             Check(r, who, "Reference solvable", $"{rows.Count - unsolvable} of {rows.Count}", "all", unsolvable == 0 && rows.Count > 0);
-            // A first water building also pays for its main (03 §City utility network).
+            // A first water building also pays for its main, and a first gas building for its gas main (03 §City utility network).
             double mainCost = 0;
             PipeFamilyDef? main = Utilities.FamilyFor(data, "water");
             if (tier >= 2 && main != null) mainCost = t.ReferenceMainTiles * Utilities.PricePerTile(data, main, main.Sizes[0].DiameterMm, 0);
+            PipeFamilyDef? gasMain = Utilities.FamilyFor(data, "gas");
+            if (data.BuildingTier(tier).Fluids.Contains(BuildingState.GasFluid) && gasMain != null)
+                mainCost += t.ReferenceMainTiles * Utilities.PricePerTile(data, gasMain, gasMain.Sizes[0].DiameterMm, 0, "lp");
             double payback = Mean(rows.ConvertAll(x => x.Net > 0 ? (x.Cost + mainCost) / x.Net / 60 : double.PositiveInfinity)), target = t.PaybackMinutes[tier - 1];
-            string withMain = mainCost > 0 ? $" with a {t.ReferenceMainTiles}-tile main ({Units.FormatMoney(mainCost, sym)})" : "";
+            string withMain = mainCost > 0 ? $" with {t.ReferenceMainTiles}-tile mains ({Units.FormatMoney(mainCost, sym)})" : "";
             Check(r, who, $"Payback of the reference build{withMain} (mean)", $"{payback:0.0} min", $"≈ {target:0} min", payback >= target * 0.5 && payback <= target * 1.5);
             double share = Mean(rows.ConvertAll(Share));
             Check(r, who, "Electricity share of gross (mean)", $"{share:P0}", $"{t.ElectricityShare[0]:P0}–{t.ElectricityShare[1]:P0}",
@@ -141,7 +199,7 @@ namespace HeadLoss.Game.Balancing
             int lower = rows.FindAll(x => x.DoubledNet < x.Net).Count;
             Check(r, who, "Doubling flow by speed earns less", $"{lower} of {rows.Count}", "all", lower == rows.Count);
             (string id, double price) = CheapestNextTier(data, tier);
-            if (id.Length > 0)
+            if (id.Length > 0 && tier < 5 && data.BuildingTier(tier + 1).Available)
             {
                 double net = Mean(rows.ConvertAll(x => x.Net));
                 double minutes = net > 0 ? price / net / 60 : double.PositiveInfinity;
@@ -149,6 +207,7 @@ namespace HeadLoss.Game.Balancing
             }
             r.Lines.Add($"  mean cost {Units.FormatMoney(Mean(rows.ConvertAll(x => x.Cost)), sym)} · mean net {Units.FormatMoneyRate(Mean(rows.ConvertAll(x => x.Net)), sym)}");
             r.Lines.Add("");
+            return Mean(rows.ConvertAll(x => x.Net));
         }
 
         /// <summary>The reference with its fan at twice the speed (a drive on every fan, affinity laws).</summary>

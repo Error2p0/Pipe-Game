@@ -362,6 +362,10 @@ namespace HeadLoss.Core.Data.Defs
         public List<double> PaybackMinutes = new List<double>();
         /// <summary>Electricity share of gross at the reference layout [low, high].</summary>
         public List<double> ElectricityShare = new List<double>();
+        /// <summary>First prestige available, hours of play including offline [low, high].</summary>
+        public List<double> FirstPrestigeHours = new List<double>();
+        /// <summary>The balancing report's pacing estimate: buildings a player brings online per hour of the time away and in game.</summary>
+        public double BuildingsPerHour;
     }
 
     /// <summary>Physical constants (SI).</summary>

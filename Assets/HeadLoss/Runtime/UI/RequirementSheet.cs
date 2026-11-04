@@ -37,7 +37,7 @@ namespace HeadLoss.Unity.UI
             UiKit.Text(scroll, $"Requirement sheet · {l.DisplayName}", "hl-title");
             UiKit.Text(scroll, $"Tier {l.Tier} · {l.Floors} floor{(l.Floors == 1 ? "" : "s")} · {l.Width} × {l.Height} m · {l.Rooms.Count} room{(l.Rooms.Count == 1 ? "" : "s")}", "hl-subtitle");
             Line(scroll, "The building earns only while every outlet gets at least its minimum. Between minimum and ideal an outlet pays its base rate; above the ideal it pays more, up to "
-                + $"{data.Balancing.Economy.CapMultiplier:0.#}× at the code maximum. Above the code maximum it pays nothing.");
+                + $"{data.Balancing.Economy.CapMultiplier:0.#}× at the code maximum ({data.Balancing.Economy.CapMultiplierRisky:0.#}× for risky fluids like natural gas). Above the code maximum it pays nothing.");
 
             // Outlets grouped by fluid.
             var byFluid = new Dictionary<string, List<OutletPlacementDef>>();
@@ -68,7 +68,7 @@ namespace HeadLoss.Unity.UI
             {
                 EquipmentPlacementDef? pre = null;
                 foreach (EquipmentPlacementDef e in l.InitialEquipment) if (e.OpeningId == o.Id) pre = e;
-                string empty = o.Utility == "air" ? " · empty: place a fan here" : o.Utility == "water" ? " · route a water main here in the city view; mains pressure only, or place a pump" : "";
+                string empty = o.Utility == "air" ? " · empty: place a fan here" : o.Utility == "water" ? " · route a water main here in the city view; mains pressure only, or place a pump" : o.Utility == "gas" ? " · route a gas main here in the city view, and place a regulator" : "";
                 string eq = pre != null ? $" · {data.EquipmentItem(pre.EquipmentId).DisplayName.ToLowerInvariant()} already in place" : empty;
                 Line(scroll, $"{OutletList.NiceName(o.Id)} · {o.Utility} · {o.Facing} wall{eq}");
             }

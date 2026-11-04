@@ -16,6 +16,9 @@ namespace HeadLoss.Unity.View
         Stress = 7,
     }
 
+    /// <summary>What the concentration heatmap shows (<c>11-ui-visuals-audio.md</c> §Heatmap modes; propane, hydrogen and O₂ excess arrive with their gases).</summary>
+    public enum RoomSpecies { NaturalGas, Co2, O2Deficit }
+
     /// <summary>Which layer of the two-layer room fields a room heatmap shows (hotkey H).</summary>
     public enum RoomLayer { Max, Upper, Lower }
 
@@ -32,6 +35,10 @@ namespace HeadLoss.Unity.View
         public string Palette;
         public bool Locked;
         public RoomLayer Layer = RoomLayer.Max;
+        /// <summary>Species on the concentration heatmap.</summary>
+        public RoomSpecies Species { get; private set; } = RoomSpecies.NaturalGas;
+        /// <summary>Lower flammable limit of natural gas, % by volume (the top of its scale; set from the fluid data).</summary>
+        public float GasLflPercent = 5;
         /// <summary>Scale of the current mode (velocity: ducts; <see cref="RoomMax"/> for rooms).</summary>
         public float RangeMin, RangeMax;
         /// <summary>Room velocity scale upper end, m/s.</summary>
@@ -65,22 +72,42 @@ namespace HeadLoss.Unity.View
         public static string Unit(HeatmapMode m, string fluid = "air") => m switch
         {
             HeatmapMode.Velocity => "m/s",
-            HeatmapMode.Pressure => fluid == "air" ? "Pa" : "bar",
-            HeatmapMode.Flow => fluid == "air" ? "m³/h" : "L/s",
+            HeatmapMode.Pressure => fluid == "air" ? "Pa" : fluid == Game.Buildings.BuildingState.GasFluid ? "mbar" : "bar",
+            HeatmapMode.Flow => fluid == "air" || fluid == Game.Buildings.BuildingState.GasFluid ? "m³/h" : "L/s",
             HeatmapMode.Temperature => "°C",
             HeatmapMode.Density => "kg/m³",
             HeatmapMode.Stress => "",
             _ => "",
         };
 
-        /// <summary>Modes built so far. Concentration (gases, Phase 5) shows greyed out.</summary>
-        public static bool IsAvailable(HeatmapMode m) => m != HeatmapMode.Concentration;
+        /// <summary>The unit of the current mode on the legend (the concentration species sets its own).</summary>
+        public string UnitNow => Mode != HeatmapMode.Concentration ? Unit(Mode, Fluid) : Species == RoomSpecies.Co2 ? "ppm" : "%";
 
-        /// <summary>Modes that also colour the rooms (pressure, flow and stress colour pipes only).</summary>
-        public static bool ColoursRooms(HeatmapMode m) => m == HeatmapMode.Velocity || m == HeatmapMode.Temperature || m == HeatmapMode.Density;
+        /// <summary>A species' display name on the picker.</summary>
+        public static string SpeciesName(RoomSpecies s) => s switch
+        {
+            RoomSpecies.NaturalGas => "Natural gas",
+            RoomSpecies.Co2 => "CO₂",
+            _ => "O₂ deficit",
+        };
 
-        /// <summary>The rooms take the heatmap only while the air network is in focus (the room grid is air).</summary>
-        public bool RoomsColoured => Fluid == "air" && ColoursRooms(Mode);
+        /// <summary>Every mode is built now.</summary>
+        public static bool IsAvailable(HeatmapMode m) => true;
+
+        /// <summary>Modes that also colour the rooms (pressure, flow and stress colour pipes only; concentration only rooms).</summary>
+        public static bool ColoursRooms(HeatmapMode m) => m == HeatmapMode.Velocity || m == HeatmapMode.Temperature || m == HeatmapMode.Density || m == HeatmapMode.Concentration;
+
+        /// <summary>The rooms take the heatmap while the air network is in focus (the room grid is air), and concentration whatever is in focus.</summary>
+        public bool RoomsColoured => ColoursRooms(Mode) && (Fluid == "air" || Mode == HeatmapMode.Concentration);
+
+        /// <summary>Picks what the concentration heatmap shows.</summary>
+        public void SetSpecies(RoomSpecies species)
+        {
+            if (Species == species) return;
+            Species = species;
+            if (!Locked) ResetRange();
+            Revision++;
+        }
 
         /// <summary>Switches the network the heatmap colours (its anchors and units).</summary>
         public void SetFluid(string fluid)
@@ -121,15 +148,21 @@ namespace HeadLoss.Unity.View
 
         void ResetRange()
         {
-            bool air = Fluid == "air";
+            bool air = Fluid == "air", gas = Fluid == Game.Buildings.BuildingState.GasFluid;
             (RangeMin, RangeMax) = Mode switch
             {
-                HeatmapMode.Pressure => (0f, (float)(air ? _def.PressureAnchorMaxAirPa : _def.PressureAnchorMaxWaterBar)),
-                HeatmapMode.Flow => (0f, (float)(air ? _def.FlowAnchorMaxM3h : _def.FlowAnchorMaxWaterLps)),
+                HeatmapMode.Pressure => (0f, (float)(air ? _def.PressureAnchorMaxAirPa : gas ? _def.PressureAnchorMaxGasMbar : _def.PressureAnchorMaxWaterBar)),
+                HeatmapMode.Flow => (0f, (float)(air ? _def.FlowAnchorMaxM3h : gas ? _def.FlowAnchorMaxGasM3h : _def.FlowAnchorMaxWaterLps)),
                 HeatmapMode.Temperature => ((float)_def.TemperatureAnchorC[0], (float)_def.TemperatureAnchorC[1]),
-                HeatmapMode.Density => air ? ((float)_def.DensityAnchor[0], (float)_def.DensityAnchor[1]) : ((float)_def.DensityAnchorWater[0], (float)_def.DensityAnchorWater[1]),
+                HeatmapMode.Density => air ? ((float)_def.DensityAnchor[0], (float)_def.DensityAnchor[1]) : gas ? ((float)_def.DensityAnchorGas[0], (float)_def.DensityAnchorGas[1]) : ((float)_def.DensityAnchorWater[0], (float)_def.DensityAnchorWater[1]),
                 HeatmapMode.Stress => (0f, 1f),
-                _ => (0f, (float)(air ? _def.VelocityAnchorMaxAir : _def.VelocityAnchorMaxWater)),
+                HeatmapMode.Concentration => Species switch
+                {
+                    RoomSpecies.NaturalGas => (0f, GasLflPercent * (float)_def.ConcentrationAnchorFractionOfLfl),
+                    RoomSpecies.Co2 => ((float)_def.Co2AnchorPpm[0], (float)_def.Co2AnchorPpm[1]),
+                    _ => ((float)_def.O2DeficitAnchor[0] * 100, (float)_def.O2DeficitAnchor[1] * 100),
+                },
+                _ => (0f, (float)(air ? _def.VelocityAnchorMaxAir : gas ? _def.VelocityAnchorMaxGas : _def.VelocityAnchorMaxWater)),
             };
             RoomMax = (float)_def.RoomVelocityAnchorMax;
         }
@@ -144,24 +177,31 @@ namespace HeadLoss.Unity.View
         {
             if (Locked || Mode == HeatmapMode.Plain) return;
             float lo = RangeMin, hi = RangeMax, room = RoomMax;
-            bool air = Fluid == "air";
+            bool air = Fluid == "air", gas = Fluid == Game.Buildings.BuildingState.GasFluid;
             switch (Mode)
             {
+                case HeatmapMode.Concentration:
+                    // Fixed scales: the top of the gas scale is the lower flammable limit, whatever the building holds.
+                    return;
                 case HeatmapMode.Velocity:
-                    hi = Extend(max, (float)(air ? _def.VelocityAnchorMaxAir : _def.VelocityAnchorMaxWater), (float)_def.AutoRangeStep);
+                    hi = Extend(max, (float)(air ? _def.VelocityAnchorMaxAir : gas ? _def.VelocityAnchorMaxGas : _def.VelocityAnchorMaxWater), (float)_def.AutoRangeStep);
                     room = Extend(roomMax, (float)_def.RoomVelocityAnchorMax, 0.5f);
                     break;
                 case HeatmapMode.Pressure:
-                    hi = air ? Extend(max, (float)_def.PressureAnchorMaxAirPa, (float)_def.PressureStepPa) : Extend(max, (float)_def.PressureAnchorMaxWaterBar, (float)_def.PressureStepWaterBar);
+                    hi = air ? Extend(max, (float)_def.PressureAnchorMaxAirPa, (float)_def.PressureStepPa)
+                        : gas ? Extend(max, (float)_def.PressureAnchorMaxGasMbar, (float)_def.PressureStepGasMbar)
+                        : Extend(max, (float)_def.PressureAnchorMaxWaterBar, (float)_def.PressureStepWaterBar);
                     break;
                 case HeatmapMode.Flow:
-                    hi = air ? Extend(max, (float)_def.FlowAnchorMaxM3h, (float)_def.FlowStepM3h) : Extend(max, (float)_def.FlowAnchorMaxWaterLps, (float)_def.FlowStepWaterLps);
+                    hi = air ? Extend(max, (float)_def.FlowAnchorMaxM3h, (float)_def.FlowStepM3h)
+                        : gas ? Extend(max, (float)_def.FlowAnchorMaxGasM3h, (float)_def.FlowStepGasM3h)
+                        : Extend(max, (float)_def.FlowAnchorMaxWaterLps, (float)_def.FlowStepWaterLps);
                     break;
                 case HeatmapMode.Temperature:
                     (lo, hi) = Widen(min, max, _def.TemperatureAnchorC, (float)_def.TemperatureStepK);
                     break;
                 case HeatmapMode.Density:
-                    (lo, hi) = Widen(min, max, air ? _def.DensityAnchor : _def.DensityAnchorWater, air ? (float)_def.DensityStep : 1f);
+                    (lo, hi) = Widen(min, max, air ? _def.DensityAnchor : gas ? _def.DensityAnchorGas : _def.DensityAnchorWater, air || gas ? (float)_def.DensityStep : 1f);
                     break;
                 case HeatmapMode.Stress:
                     // Stress 0 → 1 with anything at or above 1 in the warning colour (11 §Heatmap modes); the scale never moves.

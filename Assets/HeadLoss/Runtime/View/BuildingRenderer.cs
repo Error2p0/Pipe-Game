@@ -82,7 +82,9 @@ namespace HeadLoss.Unity.View
             foreach (OutletPlacementDef o in layout.Outlets)
             {
                 if (o.Floor != floor) continue;
-                if (BuildingState.OutletFluid(o.Type) == "water") DrawTap(_overlay, o, palette);
+                string fluid = BuildingState.OutletFluid(o.Type);
+                if (fluid == "water") DrawTap(_overlay, o, palette);
+                else if (fluid == BuildingState.GasFluid) DrawStove(_overlay, o, palette);
                 else DrawVent(_overlay, o, palette);
             }
             _overlay.Upload();
@@ -198,7 +200,7 @@ namespace HeadLoss.Unity.View
         static void DrawOpening(MeshBuilder m, EntryOpeningDef o, ViewPalette p)
         {
             float t = WallThickness;
-            Color slat = o.Utility == "air" ? p.Walls : p.Fluid(o.Utility == "water" ? "water" : "air");
+            Color slat = o.Utility == "air" ? p.Walls : p.Fluid(o.Utility == "water" ? "water" : o.Utility == "gas" ? BuildingState.GasFluid : "air");
             if (o.Utility == "power") slat = p.Warning;
             slat.a = 0.75f;
             (float x0, float y0, float x1, float y1) = o.Facing switch
@@ -237,6 +239,23 @@ namespace HeadLoss.Unity.View
             {
                 float y = y0 + (y1 - y0) * i / 4f;
                 m.Rect(x0 + 0.08f, y - 0.02f, x1 - 0.08f, y + 0.02f, 0.85f, bar);
+            }
+        }
+
+        /// <summary>A gas stove: a square hob with a ring burner, in the gas colour.</summary>
+        static void DrawStove(MeshBuilder m, OutletPlacementDef o, ViewPalette p)
+        {
+            float x0 = o.X + 0.14f, y0 = o.Y + 0.14f, x1 = o.X + 0.86f, y1 = o.Y + 0.86f;
+            m.Rect(x0, y0, x1, y1, 0.9f, p.Paper);
+            m.Outline(x0, y0, x1, y1, 0.05f, 0.85f, p.Walls);
+            var c = new Vector2(o.X + 0.5f, o.Y + 0.5f);
+            Color gas = p.Fluid(BuildingState.GasFluid);
+            m.Arc(c, 0.2f, 0.07f, 0, 2 * Mathf.PI, 18, 0.84f, gas);
+            for (int i = 0; i < 4; i++)
+            {
+                float a = i * Mathf.PI / 2 + Mathf.PI / 4;
+                var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                m.Line(c + d * 0.25f, c + d * 0.31f, 0.04f, 0.84f, gas);
             }
         }
 

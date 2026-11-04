@@ -14,10 +14,23 @@ namespace HeadLoss.Unity.View
         Offline,
         /// <summary>Online: lit, with a soft breathing glow.</summary>
         Online,
+        /// <summary>Exploded: a dark broken outline (<c>08-failures.md</c>).</summary>
+        Ruin,
+    }
+
+    /// <summary>A soft expanding ring where a building exploded (no flash, no shake).</summary>
+    public sealed class CityRing
+    {
+        /// <summary>Plot centre, city tiles.</summary>
+        public Vector2 Centre;
+        /// <summary>Blast radius, m.</summary>
+        public float RadiusMetres;
+        /// <summary>When it started, unscaled seconds.</summary>
+        public float Start;
     }
 
     /// <summary>Roof icons (<c>11-ui-visuals-audio.md</c> §Screens): a shape each, never colour alone.</summary>
-    public enum RoofIcon { None, Burst, Weeping, Crew, PanelTripped }
+    public enum RoofIcon { None, Burst, Weeping, Crew, PanelTripped, Leak, Alarm, Evacuated, Certificate }
 
     /// <summary>What the map draws over the plots: mains and cables, corridors, the route being dragged, violations and roof icons.</summary>
     public sealed class CityOverlay
@@ -39,6 +52,11 @@ namespace HeadLoss.Unity.View
         public double RouteDiameterMm;
         public List<CityViolation>? RouteViolations;
         public readonly List<RoofIcon> Icons = new List<RoofIcon>();
+        /// <summary>Explosion rings still expanding.</summary>
+        public List<CityRing>? Rings;
+        /// <summary>Now, unscaled seconds (the rings' age).</summary>
+        public float Time;
+        public bool ReduceMotion;
         public ViewPalette Palette = null!;
     }
 
@@ -223,6 +241,13 @@ namespace HeadLoss.Unity.View
                 float x0 = p.X * t + inset, y0 = p.Y * t + inset, x1 = (p.X + p.Width) * t - inset, y1 = (p.Y + p.Height) * t - inset;
                 float height = 1.2f + p.Tier * 0.7f;
                 PlotLook look = looks[i];
+                if (look == PlotLook.Ruin)
+                {
+                    DrawRuin(m, x0, y0, x1, y1, outline, i, offline);
+                    if (i == selected) m.Outline(x0 - 0.9f, y0 - 0.9f, x1 + 0.9f, y1 + 0.9f, 0.7f, 3.8f, outline);
+                    else if (i == hovered) m.Outline(x0 - 0.6f, y0 - 0.6f, x1 + 0.6f, y1 + 0.6f, 0.35f, 3.8f, outline);
+                    continue;
+                }
                 if (look == PlotLook.Online)
                 {
                     Color g = glow;
@@ -243,19 +268,42 @@ namespace HeadLoss.Unity.View
             m.Upload();
         }
 
+        /// <summary>A ruin: rubble on the ground and a dark outline with gaps (the gaps vary by plot).</summary>
+        static void DrawRuin(MeshBuilder m, float x0, float y0, float x1, float y1, Color walls, int seed, Color rubble)
+        {
+            Color floor = rubble;
+            floor.a = 0.35f;
+            m.Rect(x0, y0, x1, y1, 3.92f, floor);
+            Color dark = walls;
+            dark.a = 0.9f;
+            float w = 0.7f, gap = 1.6f + seed % 3 * 0.6f;
+            float mx = (x0 + x1) * 0.5f + (seed % 5 - 2) * 0.6f, my = (y0 + y1) * 0.5f + (seed % 7 - 3) * 0.4f;
+            m.Line(new Vector2(x0, y0), new Vector2(mx - gap, y0), w, 3.88f, dark);
+            m.Line(new Vector2(mx + gap, y0), new Vector2(x1, y0), w, 3.88f, dark);
+            m.Line(new Vector2(x1, y0), new Vector2(x1, my - gap), w, 3.88f, dark);
+            m.Line(new Vector2(x1, my + gap), new Vector2(x1, y1), w, 3.88f, dark);
+            m.Line(new Vector2(x0, y1), new Vector2(mx + gap, y1), w, 3.88f, dark);
+            m.Line(new Vector2(x0, y0), new Vector2(x0, my + gap), w, 3.88f, dark);
+        }
+
         const float ZLines = 3.7f, ZIcons = 3.6f;
 
         /// <summary>Line width of a main by diameter, or of a cable by capacity, m.</summary>
         static float WidthOf(MainState main) => main.Utility == "power" ? 1.0f : Mathf.Clamp((float)main.DiameterMm / 100f, 0.8f, 3.2f);
 
         /// <summary>Lines sharing a tile sit apart: water on one side, power on the other.</summary>
-        static Vector2 OffsetOf(string utility) => utility == "power" ? new Vector2(1.4f, 1.4f) : new Vector2(-1.4f, -1.4f);
+        static Vector2 OffsetOf(string utility) => utility == "power" ? new Vector2(1.4f, 1.4f) : utility == "gas" ? new Vector2(1.4f, -1.4f) : new Vector2(-1.4f, -1.4f);
 
         Vector2 TileCentre(int x, int y) => new Vector2((x + 0.5f) * T, (y + 0.5f) * T);
 
-        /// <summary>Power runs dashed, water solid (colour is never the only cue).</summary>
+        /// <summary>Power runs dashed, gas dotted, water solid (colour is never the only cue).</summary>
         static void Stroke(MeshBuilder m, Vector2 a, Vector2 b, float width, string utility, float z, Color c)
         {
+            if (utility == "gas")
+            {
+                for (int k = 0; k < 4; k++) m.Disc(Vector2.Lerp(a, b, (k + 0.5f) / 4f), width * 0.7f, 8, z, c);
+                return;
+            }
             if (utility != "power")
             {
                 m.Line(a, b, width, z, c);
@@ -268,7 +316,7 @@ namespace HeadLoss.Unity.View
         Color UtilityColour(CityOverlay o, string utility)
         {
             if (utility == "power") return C(_theme.Facilities.TryGetValue("power", out string? hex) ? hex : _theme.PlotOffline);
-            return o.Palette.Fluid(utility);
+            return o.Palette.Fluid(utility == "gas" ? Game.Buildings.BuildingState.GasFluid : utility);
         }
 
         void DrawOverlay(MeshBuilder m, CityOverlay o)
@@ -320,7 +368,19 @@ namespace HeadLoss.Unity.View
 
             for (int i = 0; i < o.Icons.Count && i < _city.Plots.Count; i++)
                 if (o.Icons[i] != RoofIcon.None) RoofIconAt(m, _city.Plots[i], o.Icons[i], p);
+            if (o.Rings != null)
+                foreach (CityRing ring in o.Rings)
+                {
+                    float age = Mathf.Clamp01((o.Time - ring.Start) / RingSeconds);
+                    float radius = Mathf.Max(ring.RadiusMetres, t * 1.5f) * (o.ReduceMotion ? 1 : Mathf.SmoothStep(0.15f, 1, age));
+                    Color c = p.Walls;
+                    c.a = 0.55f * (1 - age);
+                    m.Arc(ring.Centre * t, radius, 0.9f, 0, 2 * Mathf.PI, 48, ZIcons - 0.05f, c);
+                }
         }
+
+        /// <summary>How long an explosion ring takes to fade, s.</summary>
+        public const float RingSeconds = 3.5f;
 
         void ViolationTile(MeshBuilder m, int x, int y, Color c, float alpha)
         {
@@ -335,7 +395,7 @@ namespace HeadLoss.Unity.View
             float t = T;
             var c = new Vector2((plot.X + plot.Width * 0.5f) * t, (plot.Y + plot.Height) * t + 1.5f);
             const float r = 3.2f;
-            Color back = icon == RoofIcon.Burst ? p.Danger : icon == RoofIcon.Crew ? p.Good : p.Warning;
+            Color back = icon == RoofIcon.Burst || icon == RoofIcon.Alarm || icon == RoofIcon.Leak ? p.Danger : icon == RoofIcon.Crew ? p.Good : p.Warning;
             m.Disc(c, r, 20, ZIcons, back);
             Color g = new Color(1, 1, 1, 0.95f);
             const float z = ZIcons - 0.02f;
@@ -355,6 +415,29 @@ namespace HeadLoss.Unity.View
                     // A cross of tools.
                     m.Line(c + new Vector2(-r * 0.5f, -r * 0.5f), c + new Vector2(r * 0.5f, r * 0.5f), 0.6f, z, g);
                     m.Line(c + new Vector2(-r * 0.5f, r * 0.5f), c + new Vector2(r * 0.5f, -r * 0.5f), 0.6f, z, g);
+                    break;
+                case RoofIcon.Leak:
+                    // A wavy rise of gas.
+                    m.Line(c + new Vector2(-r * 0.35f, -r * 0.55f), c + new Vector2(0, -r * 0.1f), 0.5f, z, g);
+                    m.Line(c + new Vector2(0, -r * 0.1f), c + new Vector2(-r * 0.2f, r * 0.25f), 0.5f, z, g);
+                    m.Line(c + new Vector2(-r * 0.2f, r * 0.25f), c + new Vector2(r * 0.2f, r * 0.6f), 0.5f, z, g);
+                    break;
+                case RoofIcon.Alarm:
+                    // A bell.
+                    m.Quad(new Vector3(c.x - r * 0.5f, c.y - r * 0.3f, z), new Vector3(c.x + r * 0.5f, c.y - r * 0.3f, z), new Vector3(c.x + r * 0.25f, c.y + r * 0.5f, z), new Vector3(c.x - r * 0.25f, c.y + r * 0.5f, z), g);
+                    m.Disc(c + Vector2.down * r * 0.5f, r * 0.14f, 10, z, g);
+                    break;
+                case RoofIcon.Evacuated:
+                    // An arrow out of a door.
+                    m.Line(c + new Vector2(-r * 0.5f, 0), c + new Vector2(r * 0.45f, 0), 0.55f, z, g);
+                    m.Line(c + new Vector2(r * 0.45f, 0), c + new Vector2(r * 0.1f, r * 0.35f), 0.55f, z, g);
+                    m.Line(c + new Vector2(r * 0.45f, 0), c + new Vector2(r * 0.1f, -r * 0.35f), 0.55f, z, g);
+                    break;
+                case RoofIcon.Certificate:
+                    // A sheet with lines.
+                    m.Outline(c.x - r * 0.4f, c.y - r * 0.55f, c.x + r * 0.4f, c.y + r * 0.55f, 0.3f, z, g);
+                    m.Line(c + new Vector2(-r * 0.2f, r * 0.15f), c + new Vector2(r * 0.2f, r * 0.15f), 0.28f, z, g);
+                    m.Line(c + new Vector2(-r * 0.2f, -r * 0.15f), c + new Vector2(r * 0.2f, -r * 0.15f), 0.28f, z, g);
                     break;
                 case RoofIcon.PanelTripped:
                     // A bolt.

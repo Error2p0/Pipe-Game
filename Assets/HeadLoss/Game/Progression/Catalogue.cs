@@ -6,7 +6,7 @@ using HeadLoss.Game.Economy;
 
 namespace HeadLoss.Game.Progression
 {
-    public enum ShopCategory { AirMovers, WaterMovers, Controls, Panels, DuctSizes, DuctMaterials, PipeSizes, PipeMaterials, Fittings, Upgrades, Services }
+    public enum ShopCategory { AirMovers, WaterMovers, GasAndSafety, Controls, Panels, DuctSizes, DuctMaterials, PipeSizes, PipeMaterials, Fittings, Upgrades, Services }
 
     /// <summary>One line of the upgrade shop (<c>03-city.md</c> §Progression: price, stats, compare with placed).</summary>
     public sealed class ShopItem
@@ -30,6 +30,7 @@ namespace HeadLoss.Game.Progression
         {
             ShopCategory.AirMovers => "Air movers",
             ShopCategory.WaterMovers => "Water movers",
+            ShopCategory.GasAndSafety => "Gas and safety",
             ShopCategory.Controls => "Controls",
             ShopCategory.Panels => "Electrical panels",
             ShopCategory.DuctSizes => "Duct sizes",
@@ -51,6 +52,12 @@ namespace HeadLoss.Game.Progression
                 if (e.Category == "panel")
                 {
                     list.Add(new ShopItem { Id = e.Id, Name = e.DisplayName, Category = ShopCategory.Panels, Tier = e.Tier, Price = Units.FormatMoney(e.Price, sym), Stats = $"Limit {e.PanelLimitKW:0} kW · at the power connection" });
+                    continue;
+                }
+                if (e.Category == "gas-supply" || e.Category == "safety")
+                {
+                    string gs = e.Category == "gas-supply" ? $"Holds the gas at {Units.FormatMbar(e.SetpointPa)} · at the gas connection" : e.Notes;
+                    list.Add(new ShopItem { Id = e.Id, Name = e.DisplayName, Category = ShopCategory.GasAndSafety, Tier = e.Tier, Price = Units.FormatMoney(e.Price, sym), Stats = gs });
                     continue;
                 }
                 if (e.Category == "water-accessory")
@@ -102,11 +109,17 @@ namespace HeadLoss.Game.Progression
                 list.Add(new ShopItem
                 {
                     Id = f.Id, Name = f.DisplayName, Category = ShopCategory.Controls, Tier = f.Tier, Price = "from " + Units.FormatMoney(f.Price, sym),
-                    Stats = f.Model == "regulator" ? "Caps the pressure downstream; setpoint adjustable" : f.Model == "relief" ? "Vents above its set pressure" : f.Model == "check" ? "Blocks reverse flow"
+                    Stats = f.AutoShutoff ? "Closes by itself at a gas alarm and on power loss: the explosion timer never starts" : f.Model == "regulator" ? "Caps the pressure downstream; setpoint adjustable" : f.Model == "relief" ? "Vents above its set pressure" : f.Model == "check" ? "Blocks reverse flow"
                         : f.Model == "valve" && f.MinOpening >= 1 ? $"K {f.K:0.0#} open; closed, it isolates the branch behind it"
                         : f.Model == "valve" ? $"K {f.K:0.0#} open, K/θ² when closing to {f.MinOpening * 100:0}%" : $"K {f.K:0.0#}",
                 });
             }
+            GasDef gasDef = data.Balancing.Gas;
+            list.Add(new ShopItem
+            {
+                Id = "spark-free", Name = "Spark-free variant", Category = ShopCategory.GasAndSafety, Tier = gasDef.SparkFreeTier,
+                Price = $"× {gasDef.SparkFreeFactor:0.0#} of the item's price", Stats = "Any electrical item, chosen where it is placed: it stops being an ignition source",
+            });
             string material = data.Balancing.Drawing.DefaultMaterial;
             foreach (PipeFamilyDef fam in data.PipeFamilies)
             {
@@ -191,7 +204,7 @@ namespace HeadLoss.Game.Progression
             string category = Buildings.EquipmentFits.CategoryFor(utility);
             var list = new List<EquipmentDef>();
             foreach (EquipmentDef e in data.Equipment)
-                if (e.Placement == "intake" && e.Category == category && (category == "panel" || e.Curve.Count > 0)) list.Add(e);
+                if (e.Placement == "intake" && e.Category == category && (category == "panel" || category == "gas-supply" || e.Curve.Count > 0)) list.Add(e);
             list.Sort((a, b) => a.Tier != b.Tier ? a.Tier.CompareTo(b.Tier) : a.Price.CompareTo(b.Price));
             return list;
         }
