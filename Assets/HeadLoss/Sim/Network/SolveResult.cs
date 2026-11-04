@@ -6,6 +6,8 @@ namespace HeadLoss.Sim.Network
         public bool Converged;
         /// <summary>Not converged within the iteration limit ("Network still settling").</summary>
         public bool Unstable;
+        /// <summary>The numbers stopped being finite even after a cold restart; flows are zero and the caller keeps its last good solve.</summary>
+        public bool NonFinite;
         public int Iterations;
         /// <summary>Final Σ|ΔQ| / Σ|Q|.</summary>
         public double Residual;

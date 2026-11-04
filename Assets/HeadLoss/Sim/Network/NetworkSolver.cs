@@ -87,7 +87,15 @@ namespace HeadLoss.Sim.Network
                 rho[k] = fluid.Density(_s.AtmosphericPressure, l.Temperature);
                 mu[k] = fluid.Viscosity(_s.AtmosphericPressure, l.Temperature);
                 if (!res.LinkActive[k]) continue;
-                q[k] = warm ? initialFlows![k] : InitialFlow(l);
+                q[k] = warm && IsFinite(initialFlows![k]) ? initialFlows[k] : InitialFlow(l);
+            }
+
+            for (int k = 0; k < linkCount; k++)
+            {
+                if (IsFinite(rho[k]) && IsFinite(mu[k])) continue;
+                // A property that is not a number (a bad temperature upstream) has no answer to iterate towards.
+                GiveUp(graph, res);
+                return res;
             }
 
             EnsureStructure(graph, res);
@@ -120,6 +128,7 @@ namespace HeadLoss.Sim.Network
             double prevResidual = double.PositiveInfinity;
             int growing = 0;
             int statusChangesLeft = 4 * controlLinks + 4;
+            bool restarted = false;
             res.Residual = double.PositiveInfinity;
 
             for (int iter = 1; iter <= _s.MaxIterations; iter++)
@@ -223,6 +232,31 @@ namespace HeadLoss.Sim.Network
                     sumQ += Math.Abs(need);
                 }
 
+                // A wild iterate can leave real numbers behind: start again once from the cold guess, more gently, then give up.
+                if (!IsFinite(sumDq) || !IsFinite(sumQ))
+                {
+                    if (restarted)
+                    {
+                        GiveUp(graph, res);
+                        return res;
+                    }
+                    restarted = true;
+                    relax = _s.Relaxation;
+                    prevResidual = double.PositiveInfinity;
+                    growing = 0;
+                    for (int i = 0; i < nodeCount; i++)
+                    {
+                        NetworkNode node = graph.Nodes[i];
+                        res.NodePressure[i] = node.Kind == NodeKind.FixedPressure ? node.FixedPressure : 0;
+                    }
+                    for (int k = 0; k < linkCount; k++)
+                    {
+                        q[k] = res.LinkActive[k] ? InitialFlow(graph.Links[k]) : 0;
+                        rho[k] = fluid.Density(_s.AtmosphericPressure, graph.Links[k].Temperature);
+                    }
+                    continue;
+                }
+
                 // Density follows the ideal gas law at each link's mean pressure.
                 if (fluid.IsCompressible)
                 {
@@ -278,6 +312,27 @@ namespace HeadLoss.Sim.Network
         }
 
         double[] _rhs = Array.Empty<double>(), _p = Array.Empty<double>();
+
+        static bool IsFinite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
+
+        /// <summary>No usable answer: nothing flows, pressures are the fixed ones, and <see cref="SolveResult.NonFinite"/> tells the caller.</summary>
+        static void GiveUp(NetworkGraph graph, SolveResult res)
+        {
+            for (int i = 0; i < graph.Nodes.Count; i++)
+            {
+                NetworkNode node = graph.Nodes[i];
+                res.NodePressure[i] = node.Kind == NodeKind.FixedPressure ? node.FixedPressure : 0;
+            }
+            for (int k = 0; k < graph.Links.Count; k++)
+            {
+                res.Flow[k] = 0;
+                if (!IsFinite(res.Density[k])) res.Density[k] = 0;
+            }
+            res.Converged = false;
+            res.Unstable = true;
+            res.NonFinite = true;
+            res.Residual = double.PositiveInfinity;
+        }
 
         /// <summary>Initial guess for a link entering the solve: 1 m/s (control valves: a trickle forward).</summary>
         double InitialFlow(NetworkLink l) => l.Kind switch
@@ -491,7 +546,8 @@ namespace HeadLoss.Sim.Network
         double MeanAbsPressure(NetworkGraph graph, SolveResult res, int k)
         {
             NetworkLink l = graph.Links[k];
-            return 0.5 * (res.NodePressure[l.From] + res.NodePressure[l.To]) + _s.AtmosphericPressure;
+            // Floored: an iterate far from the answer can pass below vacuum, and a negative density would poison the next step.
+            return Math.Max(0.01 * _s.AtmosphericPressure, 0.5 * (res.NodePressure[l.From] + res.NodePressure[l.To]) + _s.AtmosphericPressure);
         }
 
         static double MaxImbalance(NetworkGraph graph, SolveResult res, int[] unknown)

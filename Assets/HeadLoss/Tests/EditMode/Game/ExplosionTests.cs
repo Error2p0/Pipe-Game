@@ -140,6 +140,58 @@ namespace HeadLoss.Game.Tests
             Assert.IsFalse(ctx2.IsRuin(b2.Record.BuildingId));
         }
 
+        /// <summary>Whatever a blast knocks out, every network still solves to real numbers, at once and on later warm starts.</summary>
+        [Test]
+        public void BlastDamage_AnyPattern_LeavesEveryNetworkSolvable()
+        {
+            var problems = new List<string>();
+            GameState g = GameContext.NewGame(Data, 7);
+            g.Wallet = 1e9;
+            g.City!.UnlockedTier = 3;
+            var ctx = new GameContext(Data, g);
+            var sessions = new List<BuildingSession>();
+            List<Plot> plots = ctx.City!.Plots.FindAll(p => Data.BuildingTier(p.Tier).Available);
+            plots.Sort((x, y) => ctx.City.DistanceToCentre(x.CentreX, x.CentreY).CompareTo(ctx.City.DistanceToCentre(y.CentreX, y.CentreY)));
+            foreach (Plot p in plots)
+            {
+                if (sessions.Count >= 24) break;
+                if (ctx.CityBuildings!.Get(p.Id) is { Reference: { Solvable: true } }) sessions.Add(Build(ctx, p));
+            }
+            ctx.Leave();
+            for (int round = 0; round < 10; round++)
+            {
+                double damage = 0.1 + 0.05 * round;
+                foreach (BuildingSession s in sessions)
+                {
+                    FailureState f = s.Failures.State;
+                    f.Leaks.Clear();
+                    f.Bursts.Clear();
+                    f.DamagedEquipment.Clear();
+                    s.Failures.ApplyBlastDamage(damage, s.Committed, 0);
+                    try
+                    {
+                        // Neighbours leaking on a shared main starve it: the supply a building sees moves as well.
+                        for (int i = 0; i < 6; i++)
+                        {
+                            double share = i == 0 ? 1 : (round + i) % 6 / 5.0 * (i % 2 == 0 ? 1 : 0.02);
+                            s.Supply = new WaterSupply(true, BuildingSession.ReferenceWaterPressure(Data) * share);
+                            s.GasSupply = new WaterSupply(true, BuildingSession.ReferenceGasPressure(Data) * share);
+                            s.SolveNow();
+                            foreach (FluidSolve? fs in new[] { s.CommittedSnapshot?.Air, s.CommittedSnapshot?.Water, s.CommittedSnapshot?.Gas })
+                                if (fs != null)
+                                    foreach (double q in fs.Result.Flow)
+                                        if (double.IsNaN(q) || double.IsInfinity(q)) throw new System.ArithmeticException($"{fs.Fluid} flow {q}");
+                        }
+                    }
+                    catch (System.ArithmeticException e)
+                    {
+                        problems.Add($"round {round} {s.Record.BuildingId} tier {s.Layout.Tier}, leaks {f.Leaks.Count}, bursts {f.Bursts.Count}, damaged {f.DamagedEquipment.Count}: {e.Message}");
+                    }
+                }
+            }
+            Assert.IsEmpty(problems, string.Join("\n", problems));
+        }
+
         [Test]
         public void Explosion_BelowLightDamage_LeavesANeighbourAlone()
         {

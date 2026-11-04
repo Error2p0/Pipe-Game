@@ -42,6 +42,7 @@ namespace HeadLoss.Unity.UI
             VisualElement head = UiKit.Row(_panel);
             head.style.justifyContent = Justify.SpaceBetween;
             head.style.alignItems = Align.Center;
+            head.style.flexShrink = 0;
             _header = UiKit.Text(head, "Outlets", "hl-section");
             _rows = new ScrollView(ScrollViewMode.Vertical);
             _rows.style.flexShrink = 1;

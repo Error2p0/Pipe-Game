@@ -108,7 +108,7 @@ namespace HeadLoss.Unity.UI
             if (_prestige != null)
             {
                 Game.Progression.Milestone m = _ctx.Milestone();
-                _prestige.text = $"Reputation {g.Reputation} · {System.Math.Min(m.Share / System.Math.Max(0.01, m.ShareNeeded), m.Income / System.Math.Max(1, m.IncomeTarget)) * 100:0}% to a new city";
+                _prestige.text = $"Reputation {g.Reputation} · {System.Math.Clamp(System.Math.Min(m.Share / System.Math.Max(0.01, m.ShareNeeded), m.Income / System.Math.Max(1, m.IncomeTarget)), 0, 1) * 100:0}% to a new city";
             }
             double cycle = _ctx.Data.Balancing.Economy.IncomeCycleSeconds;
             _cycle.text = $"{Units.FormatMoney(net * cycle, _symbol)} per {cycle:0} s cycle";

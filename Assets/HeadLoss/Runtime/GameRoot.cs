@@ -248,7 +248,7 @@ namespace HeadLoss.Unity
                 if (peek != null) info = $"Played {FormatDuration(peek.File.PlayTimeSeconds)} · wallet {Units.FormatMoney(peek.File.GameState.Wallet, _data!.Game.CurrencySymbol)}";
             }
             if (info != null && _steam != null && _steam.Status.Length > 0) info = $"{info} · {_steam.Status}";
-            _menu = new MenuScreen(_uiRoot!, _ui!, _data!.Game.DisplayName, info, Continue, () => StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true), OpenSettings, Quit);
+            _menu = new MenuScreen(_uiRoot!, _ui!, MenuTitle, info, Continue, () => StartGame(GameContext.NewGame(_data!, NewCitySeed()), saving: true), OpenSettings, Quit);
         }
 
         /// <summary>A random seed for a new city (the only randomness outside the seeded generators; never used in game rules).</summary>
@@ -303,6 +303,7 @@ namespace HeadLoss.Unity
         {
             s.DesignCommitted += OnCommitted;
             s.Commands.Executed += OnCommand;
+            s.SolveProblem += message => Debug.LogWarning("Head Loss (dev report): " + message);
             s.Failures.Alert += text => _notice?.Show($"{s.Layout.DisplayName}: {text}", Time.unscaledTime);
             s.PanelTrippedEvent += () => _notice?.Show($"{s.Layout.DisplayName}: panel tripped · reduce the load and reset it", Time.unscaledTime);
             s.GasSafety.AlarmRaised += () =>
@@ -331,6 +332,12 @@ namespace HeadLoss.Unity
 
         /// <summary>Shows the city view (tools and tests that change the game from outside the screens).</summary>
         public void ShowCityView() => ShowCity();
+
+#if HEADLOSS_DEMO
+        string MenuTitle => _data!.Game.DisplayName + " · Demo";
+#else
+        string MenuTitle => _data!.Game.DisplayName;
+#endif
 
         /// <summary>The hand-made building list (test fixtures without a city only, D34).</summary>
         void ShowList()

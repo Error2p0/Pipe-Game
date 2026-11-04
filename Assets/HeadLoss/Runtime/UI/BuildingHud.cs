@@ -1671,7 +1671,8 @@ namespace HeadLoss.Unity.UI
                 OutletPlacementDef o = _s.Layout.Outlets[i];
                 OutletStatus? st = ev.Find(o.Id);
                 Label l = _ventLabels[i];
-                l.style.display = o.Floor == View.Floor ? DisplayStyle.Flex : DisplayStyle.None;
+                // Only the network in focus is labelled: three networks' labels collide in a small flat, and the outlet list has them all.
+                l.style.display = o.Floor == View.Floor && _data.Outlet(o.Type).Fluid == View.Fluid ? DisplayStyle.Flex : DisplayStyle.None;
                 if (st == null || !st.Connected)
                 {
                     l.text = "—";

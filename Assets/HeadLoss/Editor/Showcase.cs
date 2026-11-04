@@ -168,9 +168,48 @@ namespace HeadLoss.Editor
             {
                 TilePos t = BuildingFailures.MidTile(net, seg);
                 s.Rooms.SeedRoomGas(s.Layout.RoomIndexAt(t), gasShare);
+                root.Interaction?.View.SetFloor(t.F);
             }
             s.SolveNow();
             return s.Record.BuildingId;
+        }
+
+        /// <summary>Opens the largest built gas building (or back to the city with an empty id). Returns its plot id.</summary>
+        public static string OpenLargest(int floor = 0)
+        {
+            GameRoot root = Root;
+            BuildingSession? s = null;
+            foreach (BuildingSession x in root.Context!.Sessions)
+                if (x.HasGas && x.Committed.Gas.Segments.Count > 0 && (s == null || x.Layout.Rooms.Count > s.Layout.Rooms.Count)) s = x;
+            if (s == null) return "no gas building";
+            root.OpenBuilding(s.Record.BuildingId);
+            return s.Record.BuildingId;
+        }
+
+        /// <summary>Shows a heatmap in the open building: mode 0–7 as the hotkeys, on a network (0 air, 1 water, 2 natural gas).</summary>
+        public static string Look(int mode, int network = 0)
+        {
+            GameRoot root = Root;
+            string fluid = network == 0 ? "air" : network == 1 ? "water" : BuildingState.GasFluid;
+            if (root.Hud != null && root.Hud.SheetVisible) root.Hud.ToggleSheet();
+            root.Interaction?.SetFluid(fluid);
+            root.Heatmap!.SetMode((HeadLoss.Unity.View.HeatmapMode)mode);
+            return $"{root.Heatmap.Mode} on {root.Heatmap.Fluid}";
+        }
+
+        /// <summary>Opens the prestige screen as the top bar's button does.</summary>
+        public static string OpenPrestige()
+        {
+            typeof(GameRoot).GetMethod("OpenPrestige", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(Root, null);
+            return "open";
+        }
+
+        /// <summary>Back to the city from the open building.</summary>
+        public static string BackToCity()
+        {
+            Root.Context!.Leave();
+            Root.ShowCityView();
+            return "city";
         }
 
         /// <summary>Raises the alarm in the open building.</summary>

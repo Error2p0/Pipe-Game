@@ -663,9 +663,26 @@ namespace HeadLoss.Game.Session
             StartSolve(async: false);
         }
 
+        /// <summary>A solve gave up on non-finite numbers (a dev report, once per session): the building keeps its last good solve.</summary>
+        public event Action<string>? SolveProblem;
+        bool _solveProblemReported;
+
+        void ReportNonFinite(NetworkSnapshot snap)
+        {
+            foreach (FluidSolve? fs in new[] { snap.Air, snap.Water, snap.Gas })
+            {
+                if (_solveProblemReported || fs == null || !fs.Result.NonFinite) continue;
+                _solveProblemReported = true;
+                var f = Record.Failures;
+                SolveProblem?.Invoke($"{Record.BuildingId} (tier {Layout.Tier}), {fs.Fluid}: non-finite solve, {fs.Compiled.Graph.Nodes.Count} nodes, {fs.Compiled.Graph.Links.Count} links, water {Supply.PressurePa:0} Pa, gas {GasSupply.PressurePa:0} Pa, power speed {PowerSpeed:0.###}, crank {CrankSpeed:0.###}, air {AirTemperatureK:0.#} K, leaks {f.Leaks.Count}, bursts {f.Bursts.Count}, damaged {f.DamagedEquipment.Count}");
+            }
+        }
+
         void Accept((NetworkSnapshot design, NetworkSnapshot? committed) snaps)
         {
             (NetworkSnapshot d, NetworkSnapshot? c) = snaps;
+            ReportNonFinite(d);
+            if (c != null) ReportNonFinite(c);
             _lastSolveMs = d.SolveMilliseconds + (c?.SolveMilliseconds ?? 0);
             bool ok = d.Converged && (c == null || c.Converged);
             Settling = !ok;

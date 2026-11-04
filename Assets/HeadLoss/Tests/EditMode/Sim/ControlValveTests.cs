@@ -23,6 +23,41 @@ namespace HeadLoss.Sim.Tests
             return r;
         }
 
+        /// <summary>A graph with a leak link, the first place a NaN flow used to throw.</summary>
+        static NetworkGraph LeakyLine()
+        {
+            var g = new NetworkGraph();
+            int hi = g.AddFixed(2 * Bar), a = g.AddJunction(), lo = g.AddFixed(0);
+            g.AddPipe(hi, a, 10, 0.05, Eps);
+            g.AddPipe(a, lo, 10, 0.05, Eps);
+            int room = g.AddFixed(0);
+            g.AddLeak(a, room, 1e-5, 0.5);
+            return g;
+        }
+
+        [Test]
+        public void NonFiniteProperties_DoNotThrow_TheSolveReportsIt()
+        {
+            NetworkGraph g = LeakyLine();
+            SolveResult r = new NetworkSolver(new SolverSettings()).Solve(g, new ConstantFluid(double.NaN, 1.002e-3, 4180, 0.6));
+            Assert.IsFalse(r.Converged);
+            Assert.IsTrue(r.NonFinite);
+            foreach (double q in r.Flow) Assert.IsFalse(double.IsNaN(q) || double.IsInfinity(q));
+            foreach (double p in r.NodePressure) Assert.IsFalse(double.IsNaN(p) || double.IsInfinity(p));
+        }
+
+        [Test]
+        public void NonFiniteWarmStart_IsIgnored()
+        {
+            NetworkGraph g = LeakyLine();
+            var warm = new double[g.Links.Count];
+            for (int i = 0; i < warm.Length; i++) warm[i] = double.NaN;
+            SolveResult r = new NetworkSolver(new SolverSettings()).Solve(g, Water, warm, null);
+            Assert.IsTrue(r.Converged);
+            Assert.IsFalse(r.NonFinite);
+            Assert.Greater(r.Flow[0], 0);
+        }
+
         [Test]
         public void CheckValve_ForwardFlow_Passes()
         {
