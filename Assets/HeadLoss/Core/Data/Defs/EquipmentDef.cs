@@ -10,6 +10,10 @@ namespace HeadLoss.Core.Data.Defs
         public int Tier;
         /// <summary>air-mover, water-mover, gas-supply, climate, control, safety, panel.</summary>
         public string Category = "";
+        /// <summary>Fans and pumps with a switch: time to slow from full speed to a stop, s (<c>05-simulation.md</c> §2).</summary>
+        public double RunDownSeconds;
+        /// <summary>Fans and pumps with a switch: time to reach full speed from a stop, s.</summary>
+        public double SpinUpSeconds;
         public FootprintDef Footprint = new FootprintDef();
         public List<string> Fluids = new List<string>();
         /// <summary>none (hand crank) or curve (P = Q·Δp/η).</summary>

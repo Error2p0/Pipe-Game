@@ -29,7 +29,7 @@ namespace HeadLoss.Sim.Tests
         [Test]
         public void FullyRunning_HasNoExtraLoss()
         {
-            Assert.AreEqual(0, Curve.RunDownResistance(1), 1e-12);
+            Assert.AreEqual(0, Curve.SpinResistance(1), 1e-12);
             SolveResult r = Solve(1);
             Assert.AreEqual(0, r.DpFittings[0], 1e-12);
             Assert.AreEqual(132.26, Units.M3sToM3h(r.Flow[1]), 132.26 * 0.005, "the T5 operating point");
@@ -72,7 +72,7 @@ namespace HeadLoss.Sim.Tests
             int outlet = g.AddFixed(0);
             int fan = g.AddFan(inlet, mid, Curve, 0.1, 0.5);
             g.Links[fan].Opening = 0.5;
-            g.Links[fan].RunDownLoss = 2e5;
+            g.Links[fan].SpinLoss = 2e5;
             g.AddPipe(mid, outlet, 10, 0.1, 0.15e-3, 3.4);
             SolveResult r = new NetworkSolver(new SolverSettings()).Solve(g, new ConstantFluid(1.204, 1.813e-5));
             Assert.IsTrue(r.Converged);

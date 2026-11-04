@@ -36,6 +36,18 @@ def curve(dp0, qmax, peak):
         pts.append({"flowM3h": round(x * qmax, 6), "pressurePa": round(dp0 * (1 - x * x), 6), "efficiency": eta})
     return pts
 
+# Seconds to slow to a stop and to reach full speed (05-simulation.md section 2): big rotors take longer, and pumps,
+# with water to brake them, stop sooner than fans of their size.
+SPIN = {
+    "small-axial-fan": (6, 2), "inline-duct-fan": (6, 2), "centrifugal-blower": (10, 4), "ec-fan": (8, 4), "industrial-ahu": (20, 8),
+    "small-booster-pump": (3, 1.5), "circulation-pump": (3, 1.5), "inline-booster-pump": (3, 1.5), "multistage-pump": (5, 2), "vs-pump-set": (6, 3),
+}
+
+
+def spin(fid):
+    return {"runDownSeconds": SPIN[fid][0], "spinUpSeconds": SPIN[fid][1]} if fid in SPIN else {}
+
+
 items = []
 for fid, name, tier, dp0, qmax, peak, speed, fp, place, conn, price, notes in FANS:
     items.append({
@@ -43,7 +55,7 @@ for fid, name, tier, dp0, qmax, peak, speed, fp, place, conn, price, notes in FA
         "footprint": {"width": fp[0], "height": fp[1], "layer": fp[2]},
         "fluids": ["air"], "powerModel": "none" if peak is None else "curve",
         "isIgnitionSource": peak is not None, "speedControl": speed, "placement": place,
-        "curve": curve(dp0, qmax, peak), "reverseK": 5.0, "connectionDiameterMm": conn, "price": price, "notes": notes,
+        "curve": curve(dp0, qmax, peak), "reverseK": 5.0, "connectionDiameterMm": conn, **spin(fid), "price": price, "notes": notes,
     })
 
 # Water movers (07-equipment.md): dp(Q) = rho g H0 (1 - (Q/Qmax)^2), same efficiency shape as the fans.
@@ -61,7 +73,7 @@ for fid, name, tier, head, qmax, peak, speed, fp, place, conn, price, notes in P
         "id": fid, "displayName": name, "tier": tier, "category": "water-mover",
         "footprint": {"width": fp[0], "height": fp[1], "layer": fp[2]},
         "fluids": ["water"], "powerModel": "curve", "isIgnitionSource": True, "speedControl": speed, "placement": place,
-        "curve": curve(round(RHO_G * head, 1), qmax, peak), "reverseK": 5.0, "connectionDiameterMm": conn, "price": price, "notes": notes,
+        "curve": curve(round(RHO_G * head, 1), qmax, peak), "reverseK": 5.0, "connectionDiameterMm": conn, **spin(fid), "price": price, "notes": notes,
     })
 
 

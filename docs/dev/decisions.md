@@ -150,16 +150,20 @@ Choices the spec did not make. `NEEDS CONFIRMATION` items are listed in the phas
 
 ## Phase 5.5
 
-- **D138 · Fans and pumps run down. NEEDS CONFIRMATION** on the choices below; the behaviour itself is the user's request (2026-11-04). A switched-off fan or pump slows to a stop over `devices.runDownSeconds`, and flow, pressure, power, money, heatmaps, particles, hum and the readout follow it (`05` §2). It is runtime only, so the save format is unchanged.
-  - **6 seconds, for every device.** My pick, one number in `balancing.json`.
-  - **Switching on is still instant,** also during a run-down. Only stopping was asked for; a spin-up would be a small addition.
-  - **Valves still close at once.** A shutoff valve is not a device that coasts, and alarms and isolation rely on it being closed.
+- **D138 · Fans and pumps run down. Confirmed by the user** (2026-11-04): valves stay instant, and D139 replaces the single time and the instant start. A switched-off fan or pump slows to a stop, and flow, pressure, power, money, heatmaps, particles, hum and the readout follow it (`05` §2). It is runtime only, so the save format is unchanged.
+  - **Valves still close at once.** Confirmed. Alarms and isolation also rely on a closed valve being closed.
   - **Speed sliders and brownouts are unchanged.** They slow a running device rather than stop it, and a brownout's speed is computed from the draw, so a lag there would make it hunt.
-  - **A panel trip coasts too:** the rotors slow over the same time while the income stops at once, because the building is offline from the moment the panel trips. Automatic gas shutoffs still close at once on power loss.
+  - **A panel trip coasts too:** the rotors slow over their own times while the income stops at once, because the building is offline from the moment the panel trips. Automatic gas shutoffs still close at once on power loss.
   - **Blast damage still stops a device dead.** It is broken, not switched off.
-  - **Offline, the shop's compare view and drawing previews see the stopped state.** They are steady states.
-  - **Pump hammer changes (`05` §6).** A pump stop used to count as a 0.5 s change. A pump coasting for 6 s changes its flow slowly, so it raises almost no surge. Only inline pumps are affected: at the connection the distance to the reflecting boundary is 0, so the formula already gave no surge there. Blast damage keeps the 0.5 s stop. Phase 6's outage hammer (task 5) has to decide which path it takes.
+  - **Offline, the shop's compare view and drawing previews see the steady state.**
+  - **Pump hammer changes (`05` §6).** A pump stop used to count as a 0.5 s change. A pump coasting for seconds changes its flow slowly, so it raises almost no surge. Only inline pumps are affected: at the connection the distance to the reflecting boundary is 0, so the formula already gave no surge there. Blast damage keeps the 0.5 s stop. Phase 6's outage hammer (task 5) has to decide which path it takes.
   - **Taps during a pump's run-down.** A tap draws a fixed flow, which would hold the flow up until the pump stops. Taps only that pump can reach draw f × their design flow, and the pump's loss is sized to take (1 − f²) of the connection pressure at that flow, so flow fades with f and pressure with f². Near the end an upper floor can dip slightly below zero gauge (about −0.2 bar) because of its height; deliveries read 0 there.
+- **D139 · Each fan and pump has its own times, and starting ramps up too. The behaviour is the user's request; the numbers are NEEDS CONFIRMATION.** Replaces `devices.runDownSeconds`. `equipment.json` now gives each device `runDownSeconds` and `spinUpSeconds` (table in `13`). Big rotors take longer; pumps stop sooner than fans of their size because water brakes them; a motor drives a rotor up faster than it coasts down.
+  - **Switching round mid-change** carries on from the speed it has, in the new direction.
+  - **A panel reset ramps up too,** so a building's fans and pumps come back gradually.
+  - **A newly placed or newly committed device is at full speed at once.** "Simulate before you buy" previews it that way, and a Commit should not make what you just saw drop to nothing and climb back. Only a switch or a panel reset ramps.
+  - **Pump start surges shrink the same way as stops** (D138).
+  - **`tools/equipment/fan_curves.py` is out of date:** it has the new times, but running it would drop `gas-regulator`, `gas-detector` and `passive-vent-opening`, which were added to `equipment.json` by hand in Phase 5. Do not regenerate until it learns about them.
 
 ## Phase 6
 

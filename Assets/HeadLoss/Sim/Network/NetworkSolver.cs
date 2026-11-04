@@ -587,8 +587,8 @@ namespace HeadLoss.Sim.Network
                     double rise = l.Fan!.PressureRise(flow, l.Speed, density, l.Area, out double d);
                     derivative = -d;
                     if (l.Opening >= 1) return -rise + elevation;
-                    // Running down: a loss on top of the slowing curve (05 §2).
-                    double c = l.RunDownLoss > 0 ? l.RunDownLoss : l.Fan.RunDownResistance(l.Opening);
+                    // Slowing down or starting up: a loss on top of the curve (05 §2).
+                    double c = l.SpinLoss > 0 ? l.SpinLoss : l.Fan.SpinResistance(l.Opening);
                     derivative += 2.0 * c * Math.Max(Math.Abs(flow), _s.ZeroFlowThreshold);
                     double extra = Math.Abs(flow) < _s.ZeroFlowThreshold ? c * _s.ZeroFlowThreshold * flow : c * flow * Math.Abs(flow);
                     loss.FittingsDp = extra;

@@ -576,13 +576,11 @@ namespace HeadLoss.Core.Data.Defs
     /// <summary>Fans and pumps in operation (<c>05-simulation.md</c> §2).</summary>
     public sealed class DevicesDef
     {
-        /// <summary>A switched-off device takes this long to slow from its running speed to a stop, s.</summary>
-        public double RunDownSeconds;
         /// <summary>
-        /// While a device runs down the network re-solves each time this share of its speed has gone; below it the device
-        /// counts as stopped (0–1).
+        /// While a device slows down or starts up the network re-solves each time its speed has moved by this share; below
+        /// it the device counts as stopped (0–1). Each device's times are in <c>equipment.json</c>.
         /// </summary>
-        public double RunDownResolveStep;
+        public double SpinResolveStep;
     }
 
     /// <summary>Price rules (<c>13-balancing.md</c> §Prices). Item prices live in their own files.</summary>

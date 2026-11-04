@@ -156,8 +156,7 @@ namespace HeadLoss.Core.Data
             Positive(f + " crank.holdClicksPerSecond", b.Crank.HoldClicksPerSecond, errors);
             Positive(f + " crank.resolveSpeedStep", b.Crank.ResolveSpeedStep, errors);
 
-            Positive(f + " devices.runDownSeconds", b.Devices.RunDownSeconds, errors);
-            Fraction(f + " devices.runDownResolveStep", b.Devices.RunDownResolveStep, errors);
+            Fraction(f + " devices.spinResolveStep", b.Devices.SpinResolveStep, errors);
 
             Positive(f + " prices.ductBasePerMetre", b.Prices.DuctBasePerMetre, errors);
             Positive(f + " prices.ductReferenceDiameterMm", b.Prices.DuctReferenceDiameterMm, errors);
@@ -363,6 +362,11 @@ namespace HeadLoss.Core.Data
                 Id("equipment.json", e.Id, errors);
                 Tier(w, e.Tier, errors);
                 if (!SpeedControls.Contains(e.SpeedControl)) errors.Add($"{w}: speedControl '{e.SpeedControl}' unknown");
+                if (e.Curve.Count > 0 && e.SpeedControl != "crank")
+                {
+                    Positive(w + " runDownSeconds", e.RunDownSeconds, errors);
+                    Positive(w + " spinUpSeconds", e.SpinUpSeconds, errors);
+                }
                 if (!Placements.Contains(e.Placement)) errors.Add($"{w}: placement '{e.Placement}' unknown");
                 if (!PowerModels.Contains(e.PowerModel)) errors.Add($"{w}: powerModel '{e.PowerModel}' unknown");
                 if (!Layers.Contains(e.Footprint.Layer) && e.Footprint.Layer != "none") errors.Add($"{w}: footprint.layer '{e.Footprint.Layer}' unknown");

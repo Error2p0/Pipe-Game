@@ -46,12 +46,21 @@ Outlet type pay factor (× `basePay`): air supply vent 1.0, clean-air vent 1.5, 
 | `decaySeconds` (time constant) | 4 |
 | `holdClicksPerSecond` | 5 (holding the button/key counts as clicking) |
 
-## Devices (`balancing.devices`)
+## Devices
 
-| Key | Default |
-| --- | --- |
-| `runDownSeconds` | 6 (a switched-off fan or pump slows to a stop over this time, `05-simulation.md` §2) |
-| `runDownResolveStep` | 0.02 (share of speed between re-solves; below it the device has stopped) |
+`balancing.devices.spinResolveStep`: 0.02 (share of speed between re-solves while a device changes speed; below it the device has stopped).
+
+Per device in `equipment.json` (`05-simulation.md` §2), seconds:
+
+| Device | `runDownSeconds` | `spinUpSeconds` |
+| --- | --- | --- |
+| small-axial-fan, inline-duct-fan | 6 | 2 |
+| ec-fan | 8 | 4 |
+| centrifugal-blower | 10 | 4 |
+| industrial-ahu | 20 | 8 |
+| small-booster-pump, circulation-pump, inline-booster-pump | 3 | 1.5 |
+| multistage-pump | 5 | 2 |
+| vs-pump-set | 6 | 3 |
 
 ## Outlets (`outlets.json`) [impl, except the T3 example values which are doc]
 

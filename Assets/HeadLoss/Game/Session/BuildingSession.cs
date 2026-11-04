@@ -125,7 +125,7 @@ namespace HeadLoss.Game.Session
     /// <summary>
     /// One building's live session: layout, saved record (committed state + design draft), commands, the
     /// hand crank, and the latest network solves and evaluations of both states. Re-solves on change, when
-    /// the crank speed moves, while a device runs down, and every <c>resolveIntervalSeconds</c>; solves slower than
+    /// the crank speed moves, while a device changes speed, and every <c>resolveIntervalSeconds</c>; solves slower than
     /// <c>asyncThresholdMs</c> move to a worker thread and swap in when done.
     /// </summary>
     public sealed class BuildingSession
@@ -198,13 +198,13 @@ namespace HeadLoss.Game.Session
         double _sinceSolve;
         double _lastSolveMs;
         double _solvedCrank;
-        /// <summary>Fans and pumps still slowing down after being switched off, one tracker per state.</summary>
-        readonly DeviceRunDown _designRun = new DeviceRunDown(), _committedRun = new DeviceRunDown();
-        int _runDownRevision;
-        /// <summary>Share of speed everything has left after a panel trip (0 = not coasting), and the power speed it coasts from.</summary>
-        double _powerLeft, _powerBeforeTrip;
-        /// <summary>Share of speed gone since the last solve.</summary>
-        double _runDownMoved;
+        /// <summary>Fans and pumps slowing down or starting up, one tracker per state.</summary>
+        readonly DeviceSpin _designSpin = new DeviceSpin(), _committedSpin = new DeviceSpin();
+        int _spinRevision;
+        /// <summary>The power speed things coast from after a panel trip.</summary>
+        double _powerBeforeTrip;
+        /// <summary>Share of speed moved since the last solve.</summary>
+        double _spinMoved;
         Task<(NetworkSnapshot design, NetworkSnapshot? committed)>? _pending;
 
         /// <param name="budgetCap">Budget cap when already known (generated buildings), $; else the auto-router computes it.</param>
@@ -239,7 +239,7 @@ namespace HeadLoss.Game.Session
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
             CommittedEvaluation = DesignEvaluation;
             RefreshPending();
-            SettleRunDown();
+            SettleSpin();
         }
 
         static bool HasOutlets(BuildingLayout layout, string fluid)
@@ -519,7 +519,6 @@ namespace HeadLoss.Game.Session
             if (!Record.PanelTripped) return false;
             Record.PanelTripped = false;
             _overPanel = 0;
-            _powerLeft = 0;
             PowerSpeed = 1;
             MarkDirty();
             return true;
@@ -549,7 +548,6 @@ namespace HeadLoss.Game.Session
                 {
                     Record.PanelTripped = true;
                     _powerBeforeTrip = PowerSpeed;
-                    _powerLeft = 1;
                     PowerSpeed = 0;
                     MarkDirty();
                     PanelTrippedEvent?.Invoke();
@@ -571,54 +569,50 @@ namespace HeadLoss.Game.Session
 
         double PowerSpeedFor(bool committed) => PowerSpeed;
 
-        // ---------- running down (05 §2) ----------
+        // ---------- slowing down and starting up (05 §2) ----------
 
-        /// <summary>Share of its speed a switched-off fan or pump in the design still has (0 = stopped or not running down).</summary>
+        /// <summary>Share of full speed of a fan or pump in the design that is changing speed (0 = steady).</summary>
         /// <param name="deviceKey">Its <see cref="HeadLoss.Game.Failures.DamageKeys"/> key.</param>
-        public double RunDownLeft(string deviceKey) => _designRun.Left(deviceKey);
+        public double SpinShare(string deviceKey) => _designSpin.Share(deviceKey);
 
-        bool RunningDown => _designRun.Active || _committedRun.Active || _powerLeft > 0;
+        /// <summary>True when that device is starting up rather than slowing down.</summary>
+        public bool SpinningUp(string deviceKey) => _designSpin.Rising(deviceKey);
 
-        /// <summary>Notices devices switched off since the last tick and slows the ones already stopping.</summary>
-        void TickRunDown(double dt)
+        bool Spinning => _designSpin.Active || _committedSpin.Active;
+
+        void SyncSpin(bool start)
         {
-            if (StateRevision != _runDownRevision)
-            {
-                _runDownRevision = StateRevision;
-                _designRun.Sync(State, Data);
-                _committedRun.Sync(Committed, Data);
-            }
-            if (!RunningDown) return;
-            DevicesDef d = Data.Balancing.Devices;
-            double share = dt / d.RunDownSeconds;
-            _designRun.Advance(share, d.RunDownResolveStep);
-            _committedRun.Advance(share, d.RunDownResolveStep);
-            if (_powerLeft > 0)
-            {
-                _powerLeft -= share;
-                if (_powerLeft < d.RunDownResolveStep) _powerLeft = 0;
-            }
-            _runDownMoved += share;
-            // Everything has stopped: one last solve to show it.
-            if (!RunningDown) _dirty = true;
+            bool powered = !Record.PanelTripped;
+            _designSpin.Sync(State, Data, powered, start);
+            _committedSpin.Sync(Committed, Data, powered, start);
+            _spinRevision = StateRevision;
         }
 
-        /// <summary>Ends every run-down: what is off now counts as already stopped (a new session, offline catch-up).</summary>
-        void SettleRunDown()
+        /// <summary>Notices devices switched since the last tick and moves the ones changing speed.</summary>
+        void TickSpin(double dt)
         {
-            _designRun.Settle(State, Data);
-            _committedRun.Settle(Committed, Data);
-            _powerLeft = 0;
-            _runDownRevision = StateRevision;
+            if (StateRevision != _spinRevision) SyncSpin(true);
+            if (!Spinning) return;
+            double stopBelow = Data.Balancing.Devices.SpinResolveStep;
+            _spinMoved += Math.Max(_designSpin.Advance(dt, stopBelow), _committedSpin.Advance(dt, stopBelow));
+            // Everything has settled: one last solve to show it.
+            if (!Spinning) _dirty = true;
         }
 
-        /// <summary>Puts the live run-down into a solve's options. Only live solves take it: previews and offline are steady states.</summary>
-        void ApplyRunDown(CompileOptions o, DeviceRunDown run)
+        /// <summary>Ends every change of speed: what is off has stopped and what is on runs (a new session, offline catch-up).</summary>
+        void SettleSpin()
         {
-            o.RunDown = run.Snapshot();
-            if (_powerLeft <= 0) return;
-            o.PowerSpeed = _powerBeforeTrip;
-            o.PowerRunDown = _powerLeft;
+            bool powered = !Record.PanelTripped;
+            _designSpin.Settle(State, Data, powered);
+            _committedSpin.Settle(Committed, Data, powered);
+            _spinRevision = StateRevision;
+        }
+
+        /// <summary>Puts the live speeds into a solve's options. Only live solves take them: previews and offline are steady states.</summary>
+        void ApplySpin(CompileOptions o, DeviceSpin spin)
+        {
+            o.Spin = spin.Snapshot();
+            if (Record.PanelTripped && spin.Active) o.PowerSpeed = _powerBeforeTrip;
         }
 
         /// <summary>Compiles and solves a state with the given solvers (pure; safe on a worker thread).</summary>
@@ -666,14 +660,14 @@ namespace HeadLoss.Game.Session
 
         double _solveDelay;
 
-        /// <summary>Advances the session: crank decay; re-solve when dirty, when the crank or a running-down device moved, or on the drift interval.</summary>
+        /// <summary>Advances the session: crank decay; re-solve when dirty, when the crank or a device changing speed moved, or on the drift interval.</summary>
         /// <param name="dt">Seconds since the last tick.</param>
         public void Tick(double dt)
         {
             UpdateCrank(dt);
             TickRooms(dt);
             TickPower(dt);
-            TickRunDown(dt);
+            TickSpin(dt);
             Failures.Tick(dt, CommittedSnapshot, Committed, Game.PlayTimeSeconds);
             Failures.TickRepairs(dt, Record);
             GasSafety.Tick(dt);
@@ -691,8 +685,8 @@ namespace HeadLoss.Game.Session
             }
             bool crankMoved = Math.Abs(CrankSpeed - _solvedCrank) >= Data.Balancing.Crank.ResolveSpeedStep
                 || (CrankSpeed == 0 && _solvedCrank != 0);
-            bool runDownMoved = _runDownMoved >= Data.Balancing.Devices.RunDownResolveStep;
-            if (!_dirty && !crankMoved && !runDownMoved && _sinceSolve < Data.Balancing.Solver.ResolveIntervalSeconds) return;
+            bool spinMoved = _spinMoved >= Data.Balancing.Devices.SpinResolveStep;
+            if (!_dirty && !crankMoved && !spinMoved && _sinceSolve < Data.Balancing.Solver.ResolveIntervalSeconds) return;
             StartSolve(async: _lastSolveMs > Data.Balancing.Solver.AsyncThresholdMs);
         }
 
@@ -724,22 +718,22 @@ namespace HeadLoss.Game.Session
             _sinceSolve = -_solveDelay;
             _solveDelay = 0;
             _solvedCrank = CrankSpeed;
-            _runDownMoved = 0;
+            _spinMoved = 0;
             BuildingState design = State.Clone();
             BuildingState? committed = HasPendingDesign ? Committed.Clone() : null;
             NetworkSnapshot? warmD = Current, warmC = CommittedSnapshot;
             // The thermal solve replaces these dictionaries rather than changing them, so a worker can read them.
             CompileOptions od = OptionsFor(CrankSpeed, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK, !HasPendingDesign);
             CompileOptions oc = OptionsFor(CrankSpeed, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK, true);
-            ApplyRunDown(od, _designRun);
-            ApplyRunDown(oc, _committedRun);
+            ApplySpin(od, _designSpin);
+            ApplySpin(oc, _committedSpin);
             if (async) _pending = Task.Run(() => SolveBoth(design, committed, warmD, warmC, od, oc));
             else Accept(SolveBoth(design, committed, warmD, warmC, od, oc));
         }
 
         /// <summary>
-        /// Solves immediately on the calling thread (tests, first frame). Time does not pass, so a device switched off since
-        /// the last tick counts as stopped; one already running down carries on.
+        /// Solves immediately on the calling thread (tests, first frame). Time does not pass, so a device switched since the
+        /// last tick counts as already there; one already changing speed carries on.
         /// </summary>
         public void SolveNow()
         {
@@ -749,9 +743,7 @@ namespace HeadLoss.Game.Session
                 Accept(_pending.Result);
                 _pending = null;
             }
-            _designRun.Sync(State, Data, false);
-            _committedRun.Sync(Committed, Data, false);
-            _runDownRevision = StateRevision;
+            SyncSpin(false);
             StartSolve(async: false);
         }
 
@@ -943,7 +935,7 @@ namespace HeadLoss.Game.Session
         /// </summary>
         public void PrepareOffline()
         {
-            SettleRunDown();
+            SettleSpin();
             SolveNow();
             TickPower(0);
             if (Record.PanelTripped) PowerSpeed = 0;

@@ -182,8 +182,7 @@
     "resolveSpeedStep": 0.01
   },
   "devices": {
-    "runDownSeconds": 6,
-    "runDownResolveStep": 0.02
+    "spinResolveStep": 0.02
   },
   "prices": {
     "ductBasePerMetre": 1.0,
