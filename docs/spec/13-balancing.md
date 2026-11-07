@@ -216,6 +216,18 @@ Spark-free variants ×1.5.
 | Occupant CO₂ | 0.005 L/s |
 | Outdoor CO₂ | 420 ppm |
 
+## Heating, cooling and the temperature map [impl] (Phase 6 task 0)
+
+| Key | Default |
+| --- | --- |
+| `climate.heatingSetpointC` / `coolingSetpointC` | 20 °C / 24 °C: heat outlets are rated, and room loads figured, at these (D146, D147) |
+| `climate.designHeatingC` / `designCoolingC` | −5 °C / +32 °C (the outlet note above; climate modifiers shift them) |
+| `climate.roomHumidity` | bathroom 0.70, kitchen 0.60, other 0.45 (the table above) |
+| `water.heatingFillPressurePa` | 1.5 bar: a closed heating loop's expansion vessel (D148) |
+| Gas boiler flow temperature (`equipment.json → setpointC`) | 70 °C (D148) |
+| `heatmap.divergingCentreC` / `divergingHalfRangeK` | 22 °C / 10 K: the temperature ramp is white at 22 °C (D151) |
+| Event weights (`events.json`) | 1 each (D152) |
+
 ## Room grid
 
 | Key | Default |

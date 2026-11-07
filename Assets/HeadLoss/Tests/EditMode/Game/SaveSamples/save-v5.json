@@ -1,0 +1,435 @@
+{
+  "saveVersion": 5,
+  "generatorVersion": 5,
+  "dataVersion": "93e989c9db4c12f4",
+  "savedAtUtc": "2026-10-29T12:00:00.0000000Z",
+  "playTimeSeconds": 600.0,
+  "gameState": {
+    "wallet": 23.004780183968272,
+    "debt": 0.0,
+    "lifetimeIncome": 0.0,
+    "reputation": 0,
+    "prestige": {},
+    "statistics": {
+      "citiesFounded": 0,
+      "explosions": 0,
+      "incomeAllCities": 0.0,
+      "playSecondsAllCities": 0.0
+    },
+    "playTimeSeconds": 600.0,
+    "currentBuildingId": "",
+    "city": {
+      "seed": 424242,
+      "index": 1,
+      "unlockedTier": 1,
+      "utilities": {
+        "mains": [],
+        "corridors": [],
+        "nextId": 1,
+        "insurance": false,
+        "engineeringSoftware": false
+      },
+      "ruins": [],
+      "starterItems": []
+    },
+    "buildings": [
+      {
+        "buildingId": "plot-1",
+        "committed": {
+          "buildingId": "plot-1",
+          "networks": [
+            {
+              "fluidId": "air",
+              "nodes": [
+                {
+                  "id": 1,
+                  "x": 5,
+                  "y": 0,
+                  "floor": 0,
+                  "kind": 1,
+                  "anchorId": "air-intake",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 2,
+                  "x": 2,
+                  "y": 3,
+                  "floor": 0,
+                  "kind": 2,
+                  "anchorId": "vent-1",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 3,
+                  "x": 6,
+                  "y": 3,
+                  "floor": 0,
+                  "kind": 2,
+                  "anchorId": "vent-2",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 5,
+                  "x": 5,
+                  "y": 3,
+                  "floor": 0,
+                  "kind": 0,
+                  "anchorId": "",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 6,
+                  "x": 5,
+                  "y": 5,
+                  "floor": 0,
+                  "kind": 0,
+                  "anchorId": "",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 7,
+                  "x": 6,
+                  "y": 5,
+                  "floor": 0,
+                  "kind": 0,
+                  "anchorId": "",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                }
+              ],
+              "segments": [
+                {
+                  "id": 1,
+                  "nodeA": 1,
+                  "nodeB": 5,
+                  "diameterMm": 125.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 4,
+                  "nodeA": 5,
+                  "nodeB": 2,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 5,
+                  "nodeA": 5,
+                  "nodeB": 6,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 6,
+                  "nodeA": 6,
+                  "nodeB": 7,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 7,
+                  "nodeA": 7,
+                  "nodeB": 3,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                }
+              ],
+              "nextNodeId": 8,
+              "nextSegmentId": 8
+            }
+          ],
+          "equipment": [
+            {
+              "equipmentId": "hand-crank-fan",
+              "openingId": "air-intake",
+              "on": true,
+              "speed": 1.0,
+              "vsd": false,
+              "sparkFree": false
+            }
+          ],
+          "safety": [],
+          "devices": []
+        },
+        "design": {
+          "buildingId": "plot-1",
+          "networks": [
+            {
+              "fluidId": "air",
+              "nodes": [
+                {
+                  "id": 1,
+                  "x": 5,
+                  "y": 0,
+                  "floor": 0,
+                  "kind": 1,
+                  "anchorId": "air-intake",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 2,
+                  "x": 2,
+                  "y": 3,
+                  "floor": 0,
+                  "kind": 2,
+                  "anchorId": "vent-1",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 3,
+                  "x": 6,
+                  "y": 3,
+                  "floor": 0,
+                  "kind": 2,
+                  "anchorId": "vent-2",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 5,
+                  "x": 5,
+                  "y": 3,
+                  "floor": 0,
+                  "kind": 0,
+                  "anchorId": "",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 6,
+                  "x": 5,
+                  "y": 5,
+                  "floor": 0,
+                  "kind": 0,
+                  "anchorId": "",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                },
+                {
+                  "id": 7,
+                  "x": 6,
+                  "y": 5,
+                  "floor": 0,
+                  "kind": 0,
+                  "anchorId": "",
+                  "smoothFittings": false,
+                  "partId": "",
+                  "dirX": 0,
+                  "dirY": 0,
+                  "opening": 1.0,
+                  "on": true,
+                  "setting": 0.0,
+                  "vsd": false,
+                  "speed": 1.0,
+                  "sparkFree": false
+                }
+              ],
+              "segments": [
+                {
+                  "id": 1,
+                  "nodeA": 1,
+                  "nodeB": 5,
+                  "diameterMm": 125.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 4,
+                  "nodeA": 5,
+                  "nodeB": 2,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 5,
+                  "nodeA": 5,
+                  "nodeB": 6,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 6,
+                  "nodeA": 6,
+                  "nodeB": 7,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                },
+                {
+                  "id": 7,
+                  "nodeA": 7,
+                  "nodeB": 3,
+                  "diameterMm": 80.0,
+                  "materialId": "galvanized-duct",
+                  "sealing": "",
+                  "insulation": ""
+                }
+              ],
+              "nextNodeId": 8,
+              "nextSegmentId": 8
+            }
+          ],
+          "equipment": [
+            {
+              "equipmentId": "hand-crank-fan",
+              "openingId": "air-intake",
+              "on": true,
+              "speed": 1.0,
+              "vsd": false,
+              "sparkFree": false
+            }
+          ],
+          "safety": [],
+          "devices": []
+        },
+        "spentTotal": 16.995219816031728,
+        "everOnline": false,
+        "sheetSeen": true,
+        "lifetimeIncome": 0.0,
+        "panelTripped": false,
+        "failures": {
+          "stress": {},
+          "bursts": [],
+          "repairs": [],
+          "counter": 0,
+          "leakSensors": [],
+          "maintenanceContract": false,
+          "preferEmergency": false,
+          "weepAlerted": [],
+          "leaks": [],
+          "nextLeak": 1,
+          "gas": {
+            "alarm": false,
+            "timerRunning": false,
+            "timerLeft": 0.0,
+            "detecting": 0.0,
+            "autoClosed": []
+          },
+          "certificate": {
+            "issued": false,
+            "secondsLeft": 0.0,
+            "checkLeft": 0.0,
+            "reminded": false,
+            "lastFailure": ""
+          },
+          "damagedEquipment": []
+        }
+      }
+    ],
+    "settings": {
+      "masterVolume": -1.0
+    },
+    "generatorVersion": 5
+  }
+}

@@ -268,6 +268,30 @@ namespace HeadLoss.Game.Tests
             Assert.AreEqual(5, s.Clone().Networks.Count);
         }
 
+        /// <summary>Phase 5 saves (generator 4): tier 3 buildings are rebuilt with heating and refunded (D137); tier 2 keeps its build.</summary>
+        [Test]
+        public void Regeneration_Generator4_RefundsTierThree_KeepsTierTwo()
+        {
+            GameState g = GameContext.NewGame(Data, 424242);
+            var probe = new GameContext(Data, g);
+            Game.City.Plot? three = probe.City!.Plots.Find(p => p.Tier == 3);
+            Game.City.Plot two = probe.City.Plots.Find(p => p.Tier == 2)!;
+            Assert.IsNotNull(three, "the test city has a tier 3 plot");
+            g.GeneratorVersion = 4;
+            g.Wallet = 10;
+            g.Buildings.Add(new BuildingRecord { BuildingId = three!.Id, SpentTotal = 400, EverOnline = true, LifetimeIncome = 77 });
+            g.Buildings.Add(new BuildingRecord { BuildingId = two.Id, SpentTotal = 120, EverOnline = true });
+            var ctx = new GameContext(Data, g);
+            Assert.AreEqual(410, g.Wallet, 1e-9, "tier 3 spending comes back, tier 2 keeps its build");
+            BuildingRecord r = g.FindBuilding(three.Id)!;
+            Assert.AreEqual(0, r.SpentTotal);
+            Assert.IsFalse(r.EverOnline);
+            Assert.AreEqual(77, r.LifetimeIncome, 1e-9);
+            Assert.AreEqual(120, g.FindBuilding(two.Id)!.SpentTotal, 1e-9);
+            Assert.AreEqual(5, g.GeneratorVersion);
+            Assert.IsTrue(ctx.Notes.Any(n => n.Contains(three.Id)));
+        }
+
         [Test]
         public void Sanitize_DropsWhatNoLongerFits()
         {

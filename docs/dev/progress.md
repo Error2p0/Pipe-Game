@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **5.5 · Fixes and polish** (between Phases 5 and 6; the user sends the tasks one at a time). Phase 6 starts after it, at task 0 (`docs/spec/14-roadmap.md`).
+Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135: task 0 (foundations) is done; next are tasks 4 and 6.
 
 ## Phase 1 · Physics core
 
@@ -118,7 +118,7 @@ An intermediate phase the user added on 2026-11-04, before Phase 6 starts. It is
 
 Scope, set by the user at the Phase 5 gate (2026-11-04): roadmap items 1–8 go into the Early Access launch, in full (D132). Item 9, mobile readiness, is dropped (D133). Task numbers below are the roadmap's. Sub-items come from the spec file named on each task. Spec files: `03`–`11`, `13`, `15`.
 
-Not started. The user will begin it in a new session.
+Started 2026-11-07.
 
 ### Agreed with the user (2026-11-04)
 
@@ -130,14 +130,14 @@ Not started. The user will begin it in a new session.
 
 ### Tasks
 
-- [ ] 0. Foundations for the new networks (`05` §1.5, §4; `01`; `12`)
-  - [ ] One graph per fluid system: air exhaust, hot water, heating loop, each special gas. Toolbox entries, fluid colours and line patterns (`06`).
-  - [ ] Coupling nodes and solve order: hot → cold demand, heat → gas demand, iterate twice.
-  - [ ] Thermal solve on all water networks, with loops iterating 3 times; `hot-water` and `heating-water` on the water tables.
-  - [ ] Outlets measured in watts (`02`), room loads at design temperature −5 °C and +32 °C (`13`).
-  - [ ] `events.json`, `inspections.json`, new balancing sections, definitions and validator rules.
-  - [ ] Diverging palette for temperature relative to setpoint (`11`, never built).
-  - [ ] Save version 5 and generator version 5, migration step and sample save test; what old saves do with changed buildings.
+- [x] 0. Foundations for the new networks (`05` §1.5, §4; `01`; `12`)
+  - [x] One graph per fluid system: air exhaust, hot water, heating loop, each special gas (`networks.json`, D144). Toolbox entries, fluid colours and line patterns (dashed and double drawn now, `06`). The toolbox lists a building's networks; the parts for the new ones come with their tasks.
+  - [x] Coupling nodes and solve order: hot → cold demand, heat → gas demand, iterate twice (D148, D149). Devices with ports, placed on room floors; `water-heater` and `gas-boiler` data. Placing them from the toolbox comes with task 1.
+  - [x] Thermal solve on all water networks, with loops iterating 3 times; `hot-water` and `heating-water` on the water tables (D150).
+  - [x] Outlets measured in watts (`02`), room loads at design temperature −5 °C and +32 °C (`13`; D145–D147). `radiator` and `cooling-terminal` in `outlets.json`; generating them comes with tasks 1 and 2.
+  - [x] `events.json`, `inspections.json`, new balancing sections, definitions and validator rules (D152).
+  - [x] Diverging palette for temperature relative to setpoint (`11`, D151).
+  - [x] Save version 5 and generator version 5, migration step and sample save test; old saves rebuild tier 3 with a refund (D154).
 - [ ] 1. Hot water and heating, tier 3–4 (`05` §4, `07`, `09`, `03`)
   - [ ] `water-heater` (cold in, hot out at 60 °C), `electric-heater` (`07`; the roadmap does not list it).
   - [ ] `hot-water-tap` outlets (bar and ≥ 55 °C) in bathrooms from tier 4.

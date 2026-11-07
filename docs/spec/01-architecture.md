@@ -55,7 +55,7 @@ Allowed: Universal Render Pipeline (2D Renderer), Input System, UI Toolkit (buil
 ## Data
 
 - All game data is JSON in `Assets/HeadLoss/Data/`, loaded through `Core.Data.DataRepository`. In the game it reads TextAssets via a small Unity adapter; in tests it reads the files from disk by path. Same parser (Newtonsoft).
-- Files: `game.json`, `balancing.json`, `fluids/*.json`, `materials.json`, `pipes.json`, `fittings.json`, `equipment.json`, `outlets.json`, `codes.json`, `buildings.json` (tiers, room types, generation rules), `city.json`, `events.json`, `inspections.json`, `prestige.json`, `upgrades.json`.
+- Files: `game.json`, `balancing.json`, `fluids/*.json`, `networks.json` (one entry per building network: fluid, units, opening, tier; D144), `materials.json`, `pipes.json`, `fittings.json`, `equipment.json`, `outlets.json`, `codes.json`, `buildings.json` (tiers, room types, generation rules), `city.json`, `events.json`, `inspections.json`, `prestige.json`, `upgrades.json`.
 - Every data type has a C# definition class in `Core.Data.Defs`, a JSON schema-like validator (`DataValidator`) and an editor menu item `Head Loss/Validate Data`. A test runs the validator on all data files.
 - Ids are lowercase kebab strings (`small-axial-fan`, `copper`, `air-supply-vent`). References between files use ids and are validated.
 
