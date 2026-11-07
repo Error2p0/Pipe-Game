@@ -116,6 +116,10 @@ namespace HeadLoss.Game.Networks
         public HashSet<string>? Damaged;
         /// <summary>Fans and pumps slowing down or starting up: share of full speed, 0–1, by damage key. Null = all steady (previews, offline).</summary>
         public IReadOnlyDictionary<string, double>? Spin;
+        /// <summary>Mean temperature per room index, °C (the thermal solve of piped networks; null = the default air temperature).</summary>
+        public float[]? RoomTemperatureC;
+        /// <summary>Piped liquid networks: temperatures from their last thermal solve, by network id (null = the supply temperature).</summary>
+        public IReadOnlyDictionary<string, Thermal.PipeTemperatures>? PipeTemperatures;
     }
 
     /// <summary>
@@ -144,8 +148,11 @@ namespace HeadLoss.Game.Networks
             bool water = def0 != null ? !def0.IsDuct : fluid != "air";
             bool gas = water && fluidDef.IdealGas;
             double tWater = Units.CToK(gas ? data.Balancing.Gas.SupplyTemperatureC : data.Balancing.Water.MainsTemperatureC);
-            double SegT(int id) => water ? tWater : o.SegmentTemperatureK != null && o.SegmentTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
-            double NodeT(int id) => water ? tWater : o.NodeTemperatureK != null && o.NodeTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
+            Thermal.PipeTemperatures? piped = water && o.PipeTemperatures != null && o.PipeTemperatures.TryGetValue(fluid, out Thermal.PipeTemperatures? pt) ? pt : null;
+            double SegT(int id) => water ? (piped != null && piped.SegmentK.TryGetValue(id, out double tp) ? tp : tWater)
+                : o.SegmentTemperatureK != null && o.SegmentTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
+            double NodeT(int id) => water ? (piped != null && piped.NodeK.TryGetValue(id, out double tp) ? tp : tWater)
+                : o.NodeTemperatureK != null && o.NodeTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
             DuctNetworkState net = state.Net(fluid);
             var c = new CompiledNetwork { Fluid = fluid };
             NetworkGraph g = c.Graph;

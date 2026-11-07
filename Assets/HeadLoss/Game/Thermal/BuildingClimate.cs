@@ -123,6 +123,8 @@ namespace HeadLoss.Game.Thermal
         public IReadOnlyList<Failures.GasInjection> GasLeaks = Array.Empty<Failures.GasInjection>();
         /// <summary>Passive vents letting fresh air in (what the rooms follow: the design while open, else what is built).</summary>
         public IReadOnlyList<SafetyDevice> PassiveVents = Array.Empty<SafetyDevice>();
+        /// <summary>Heat from the piped networks (water pipes, heating, radiators) into the rooms.</summary>
+        public IReadOnlyList<HeatInjection> PipeHeat = Array.Empty<HeatInjection>();
         /// <summary>The air holds gas (below this share it is treated as none and the field stops being stepped).</summary>
         public bool GasPresent { get; private set; }
         const float GasTrace = 1e-7f;
@@ -317,6 +319,13 @@ namespace HeadLoss.Game.Thermal
                 RoomDef room = _layout.Rooms[r];
                 Inputs.HeatLower[c] += (float)((room.Occupants * cd.OccupantSensibleW + room.MachinesW) / cellsPerRoom[r]);
                 Inputs.Co2Lower[c] += (float)(room.Occupants * cd.OccupantCo2Lps * 1e-3 / cellsPerRoom[r]);
+            }
+            foreach (HeatInjection h in PipeHeat)
+            {
+                if (!_layout.InFootprint(h.Tile)) continue;
+                float share = (float)(h.W / (_perTile * _perTile));
+                float[] into = h.Upper ? Inputs.HeatUpper : Inputs.HeatLower;
+                foreach (int c in CellsOf(h.Tile)) into[c] += share;
             }
             foreach (WindowDef w in _layout.Windows)
             {

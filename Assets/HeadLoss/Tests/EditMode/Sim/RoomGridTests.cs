@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using HeadLoss.Sim.Devices;
 using HeadLoss.Sim.Fluids;
 using HeadLoss.Sim.Network;
 using HeadLoss.Sim.Rooms;
@@ -36,6 +38,57 @@ namespace HeadLoss.Sim.Tests
             Assert.Less(warm.LinkOutT[lb], 313.15, "hot air cools");
             Assert.Greater(warm.HeatToAmbient[lb], 0);
             Assert.Less(warm.HeatToAmbient[la], 0);
+        }
+
+        /// <summary>A closed heating loop: expansion vessel, circulation pump, heater, a radiator and pipes back.</summary>
+        static (NetworkGraph g, SolveResult r, int heater, int radiator, int back) HeatingLoop()
+        {
+            var g = new NetworkGraph();
+            int vessel = g.AddFixed(150000, 0, "vessel"), ret = g.AddJunction(0, "ret"), mid = g.AddJunction(0, "mid"), flow = g.AddJunction(0, "flow");
+            int radIn = g.AddJunction(0, "rad-in"), radOut = g.AddJunction(0, "rad-out");
+            g.AddPipe(vessel, ret, 1, 0.015, 1e-5);
+            g.AddFan(ret, mid, FanCurve.Quadratic(30000, 1.0 / 3600), 0.02);
+            int heater = g.AddValve(mid, flow, 2, 0.02);
+            g.AddPipe(flow, radIn, 10, 0.015, 1e-5);
+            int radiator = g.AddValve(radIn, radOut, 4, 0.015);
+            int back = g.AddPipe(radOut, ret, 10, 0.015, 1e-5);
+            SolveResult r = new NetworkSolver(new SolverSettings()).Solve(g, new ConstantFluid(998, 1e-3, 4180, 0.6));
+            return (g, r, heater, radiator, back);
+        }
+
+        [Test]
+        public void Solve_HeatingLoop_HeaterHoldsItsSetpoint_AndHeatAddedEqualsHeatGiven()
+        {
+            (NetworkGraph g, SolveResult r, int heater, int radiator, int back) = HeatingLoop();
+            Assert.IsTrue(r.Converged);
+            double m = r.MassFlow[radiator];
+            Assert.Greater(m, 0.005, "the pump drives the loop");
+            var boundary = new double[g.Nodes.Count];
+            for (int i = 0; i < boundary.Length; i++) boundary[i] = 293.15;
+            var ambient = new double[g.Links.Count];
+            for (int k = 0; k < ambient.Length; k++) ambient[k] = 293.15;
+            var ua = new double[g.Links.Count];
+            ua[radiator] = 30;
+            ThermalResult t = PipeThermal.Solve(g, r, boundary, ambient, ua, 4180, new Dictionary<int, Heater> { [heater] = new Heater(343.15, 50000) });
+            Assert.IsTrue(t.Loops, "a closed loop relaxes 3 times");
+            Assert.AreEqual(343.15, t.LinkOutT[heater], 1e-9, "70 °C out of the heater");
+            double expectedOut = PipeThermal.OutletTemperature(343.15, 293.15, 30, m, 4180);
+            Assert.AreEqual(expectedOut, t.LinkOutT[radiator], 1e-9);
+            Assert.AreEqual(m * 4180 * (343.15 - expectedOut), t.HeatToAmbient[radiator], 1e-6);
+            Assert.AreEqual(t.HeatToAmbient[radiator], t.HeatAdded[heater], 1e-6, "steady state: the heater replaces what the radiator gives");
+            Assert.AreEqual(expectedOut, t.NodeT[g.Links[back].To], 1e-9, "the return carries the radiator's outlet temperature back");
+        }
+
+        [Test]
+        public void Heater_LimitedByItsCapacity_AndACoolerByItsOwn()
+        {
+            var h = new Heater(343.15, 2090);
+            Assert.AreEqual(293.15 + 10, h.Apply(293.15, 0.05, 4180), 1e-9, "2 090 W into 0.05 kg/s raises 10 K");
+            Assert.AreEqual(343.15, h.Apply(340, 0.05, 4180), 1e-9, "the setpoint caps it");
+            Assert.AreEqual(350, h.Apply(350, 0.05, 4180), 1e-9, "a heater never cools");
+            var cooler = new Heater(285.15, -1005);
+            Assert.AreEqual(303.15 - 10, cooler.Apply(303.15, 0.1, 1005), 1e-9);
+            Assert.AreEqual(285.15, cooler.Apply(287, 0.1, 1005), 1e-9);
         }
     }
 

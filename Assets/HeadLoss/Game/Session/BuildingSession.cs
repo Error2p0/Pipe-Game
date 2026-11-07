@@ -34,6 +34,11 @@ namespace HeadLoss.Game.Session
         /// the setpoint (<c>02-economy.md</c>: "for heating/cooling outlets it is heat delivered in W"). Filled with the solve.
         /// </summary>
         public readonly Dictionary<string, double> OutletHeat = new Dictionary<string, double>();
+
+        /// <summary>The thermal solve of a piped liquid network (null for air and gases: the air's lives in <see cref="Thermal.BuildingClimate"/>).</summary>
+        public HeadLoss.Sim.Thermal.ThermalResult? Thermal;
+        /// <summary>Temperatures from <see cref="Thermal"/>, by segment and duct node (fed into the next solve).</summary>
+        public readonly Thermal.PipeTemperatures Temperatures = new Thermal.PipeTemperatures();
     }
 
     /// <summary>A building's compiled networks and their solves, always swapped together.</summary>
@@ -394,6 +399,8 @@ namespace HeadLoss.Game.Session
         CompileOptions OptionsFor(double crank, double outsideK, IReadOnlyDictionary<int, double>? segmentK, IReadOnlyDictionary<int, double>? nodeK, bool committed) =>
             new CompileOptions
             {
+                RoomTemperatureC = RoomTemperatures(),
+                PipeTemperatures = PipeTemperaturesOf(committed ? CommittedSnapshot : Current),
                 AirTemperatureK = outsideK,
                 CrankSpeed = crank,
                 SegmentTemperatureK = segmentK,
@@ -412,6 +419,25 @@ namespace HeadLoss.Game.Session
 
         /// <summary>Speed factor on powered devices: 0 while the panel is tripped, cbrt(available/draw) in a brownout.</summary>
         public double PowerSpeed { get; set; } = 1;
+
+        /// <summary>Mean temperature per room now, °C (a copy: a worker thread reads it while the room grid steps).</summary>
+        float[] RoomTemperatures()
+        {
+            var t = new float[Layout.Rooms.Count];
+            HeadLoss.Sim.Rooms.RoomSummary[] rooms = Rooms.Rooms;
+            for (int i = 0; i < t.Length && i < rooms.Length; i++) t[i] = rooms[i].MeanTemperature;
+            return t;
+        }
+
+        /// <summary>Last temperatures of each piped liquid network of a snapshot (the next solve compiles with them).</summary>
+        static Dictionary<string, Thermal.PipeTemperatures>? PipeTemperaturesOf(NetworkSnapshot? snap)
+        {
+            if (snap == null) return null;
+            Dictionary<string, Thermal.PipeTemperatures>? d = null;
+            foreach (FluidSolve fs in snap.All)
+                if (fs.Thermal != null) (d ??= new Dictionary<string, Thermal.PipeTemperatures>())[fs.Fluid] = fs.Temperatures;
+            return d;
+        }
 
         /// <summary>The building's power connection from the city (the basic connection until a cable reaches it).</summary>
         public City.PowerConnection Power { get; set; }
@@ -674,6 +700,7 @@ namespace HeadLoss.Game.Session
             result.SolveMilliseconds = sw.Elapsed.TotalMilliseconds;
             var fs = new FluidSolve(compiled, result);
             Thermal.HeatDelivery.FillAirTerminals(Data, Layout, fs, props);
+            if (Thermal.NetworkThermal.Applies(Data, fluid)) Thermal.NetworkThermal.Solve(Data, Layout, state.Net(fluid), fs, props, options.RoomTemperatureC);
             return fs;
         }
 
@@ -739,6 +766,7 @@ namespace HeadLoss.Game.Session
             NetworkSnapshot? snap = IsOpen ? Current : CommittedSnapshot;
             if (snap != null) Rooms.Index(snap.Compiled, snap.State.Air);
             Rooms.PassiveVents = PassiveVents(snap?.State ?? Committed);
+            Rooms.PipeHeat = PipeHeat(snap);
             Rooms.Tick(dt, IsOpen, snap?.Compiled, snap?.Result);
         }
 
@@ -751,6 +779,20 @@ namespace HeadLoss.Game.Session
             return _vents;
         }
 
+        /// <summary>Heat the piped networks of a snapshot give to the rooms (rebuilt only when the snapshot changes).</summary>
+        IReadOnlyList<Thermal.HeatInjection> PipeHeat(NetworkSnapshot? snap)
+        {
+            if (snap == _pipeHeatOf) return _pipeHeat;
+            _pipeHeatOf = snap;
+            _pipeHeat = new List<Thermal.HeatInjection>();
+            if (snap != null)
+                foreach (FluidSolve fs in snap.All)
+                    if (fs.Thermal != null) Thermal.NetworkThermal.AddPipeHeat(fs, snap.State.Net(fs.Fluid), _pipeHeat);
+            return _pipeHeat;
+        }
+
+        NetworkSnapshot? _pipeHeatOf;
+        List<Thermal.HeatInjection> _pipeHeat = new List<Thermal.HeatInjection>();
         BuildingState? _ventsOf;
         List<SafetyDevice> _vents = new List<SafetyDevice>();
 
