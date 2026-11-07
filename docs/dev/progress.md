@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135: task 0 (foundations) is done; next are tasks 4 and 6.
+Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 starts with tasks 4 and 6.
 
 ## Phase 1 · Physics core
 
@@ -140,6 +140,7 @@ Started 2026-11-07.
   - [x] Save version 5 and generator version 5, migration step and sample save test; old saves rebuild tier 3 with a refund (D154).
 - [ ] 1. Hot water and heating, tier 3–4 (`05` §4, `07`, `09`, `03`)
   - [ ] `water-heater` (cold in, hot out at 60 °C), `electric-heater` (`07`; the roadmap does not list it).
+  - [ ] Hot water storage tank in the water heater (D153, the user's pick): propose the tank model before building it.
   - [ ] `hot-water-tap` outlets (bar and ≥ 55 °C) in bathrooms from tier 4.
   - [ ] Circulation loops: return runs with `circulation-pump`, heat loss along them.
   - [ ] Legionella code, with one passing and one failing test.
