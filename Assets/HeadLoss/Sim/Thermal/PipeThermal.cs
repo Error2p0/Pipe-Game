@@ -89,11 +89,16 @@ namespace HeadLoss.Sim.Thermal
         /// </summary>
         /// <param name="ua">Exchange with the surroundings per link, W/K (0 = none).</param>
         /// <param name="heaters">Heaters and coolers by link (null = none).</param>
-        public static ThermalResult Solve(NetworkGraph g, SolveResult r, double[] boundaryK, double[] ambientK, double[] ua, double cp, IReadOnlyDictionary<int, Heater>? heaters)
+        /// <param name="guessK">
+        /// Starting temperature of the nodes that are not fixed, K (null = their boundary value). Loops relax from it, so a warm start
+        /// (the last solve) settles them; trees do not depend on it.
+        /// </param>
+        public static ThermalResult Solve(NetworkGraph g, SolveResult r, double[] boundaryK, double[] ambientK, double[] ua, double cp,
+            IReadOnlyDictionary<int, Heater>? heaters, double[]? guessK = null)
         {
             int nodes = g.Nodes.Count, links = g.Links.Count;
             var res = new ThermalResult { NodeT = new double[nodes], LinkInT = new double[links], LinkOutT = new double[links], HeatToAmbient = new double[links], HeatAdded = new double[links] };
-            for (int i = 0; i < nodes; i++) res.NodeT[i] = boundaryK[i];
+            for (int i = 0; i < nodes; i++) res.NodeT[i] = guessK != null && g.Nodes[i].Kind != NodeKind.FixedPressure ? guessK[i] : boundaryK[i];
 
             // Flow order: Kahn over links directed by their flow.
             var indegree = new int[nodes];
@@ -106,27 +111,46 @@ namespace HeadLoss.Sim.Thermal
                 outLinks[from].Add(k);
                 if (g.Nodes[to].Kind != NodeKind.FixedPressure) indegree[to]++;
             }
+            // Kahn's order; when only loops are left, one loop node is taken as known (a heater's outlet first, else the node with the
+            // fewest unknown inflows) and the order carries on from it, so each pass goes round the whole loop in flow order.
+            var heaterOut = new HashSet<int>();
+            if (heaters != null)
+                foreach (var kv in heaters)
+                    if (kv.Key < links && r.LinkActive[kv.Key] && Math.Abs(r.MassFlow[kv.Key]) >= 1e-12) heaterOut.Add(Direction(g, r, kv.Key).to);
             var order = new List<int>(nodes);
             var queue = new Queue<int>();
-            for (int i = 0; i < nodes; i++) if (indegree[i] == 0) queue.Enqueue(i);
+            var placed = new bool[nodes];
+            for (int i = 0; i < nodes; i++) if (indegree[i] == 0) { queue.Enqueue(i); placed[i] = true; }
             var left = (int[])indegree.Clone();
-            while (queue.Count > 0)
+            bool loops = false;
+            while (order.Count < nodes)
             {
+                if (queue.Count == 0)
+                {
+                    loops = true;
+                    int pick = -1;
+                    for (int i = 0; i < nodes; i++)
+                    {
+                        if (placed[i]) continue;
+                        if (pick < 0) { pick = i; continue; }
+                        bool hi = heaterOut.Contains(i), hp = heaterOut.Contains(pick);
+                        if (hi != hp ? hi : left[i] < left[pick]) pick = i;
+                    }
+                    placed[pick] = true;
+                    queue.Enqueue(pick);
+                }
                 int u0 = queue.Dequeue();
                 order.Add(u0);
                 foreach (int k in outLinks[u0])
                 {
                     int to = Direction(g, r, k).to;
-                    if (g.Nodes[to].Kind == NodeKind.FixedPressure) continue;
-                    if (--left[to] == 0) queue.Enqueue(to);
+                    if (g.Nodes[to].Kind == NodeKind.FixedPressure || placed[to]) continue;
+                    if (--left[to] <= 0)
+                    {
+                        placed[to] = true;
+                        queue.Enqueue(to);
+                    }
                 }
-            }
-            bool loops = order.Count < nodes;
-            if (loops)
-            {
-                var placed = new bool[nodes];
-                foreach (int i in order) placed[i] = true;
-                for (int i = 0; i < nodes; i++) if (!placed[i]) order.Add(i);
             }
             res.Loops = loops;
 

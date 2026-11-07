@@ -6,6 +6,7 @@ using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Sim.Devices;
 using HeadLoss.Sim.Network;
+using HeadLoss.Sim.Thermal;
 
 namespace HeadLoss.Game.Networks
 {
@@ -59,6 +60,18 @@ namespace HeadLoss.Game.Networks
         /// <summary>Segments (burst ones included) cut off from the supply by a closed shutoff.</summary>
         public HashSet<int> IsolatedSegments = new HashSet<int>();
         public List<CompiledFitting> Fittings = new List<CompiledFitting>();
+        /// <summary>Device key → the demand node of its in or fuel port (what it draws from this network), when that port is connected.</summary>
+        public Dictionary<string, int> DeviceInlet = new Dictionary<string, int>();
+        /// <summary>Device key → the fixed node its out port is fed from (this network's source, at the in port's pressure).</summary>
+        public Dictionary<string, int> DeviceSource = new Dictionary<string, int>();
+        /// <summary>Device key → the link through which it heats the water.</summary>
+        public Dictionary<string, int> HeaterLink = new Dictionary<string, int>();
+        /// <summary>Heater links for the thermal solve.</summary>
+        public Dictionary<int, Heater> Heaters = new Dictionary<int, Heater>();
+        /// <summary>Electric heater links → their efficiency: they draw heat added / efficiency (<c>02-economy.md</c> §Electricity).</summary>
+        public Dictionary<int, double> HeaterEfficiency = new Dictionary<int, double>();
+        /// <summary>Temperature of water entering at particular fixed nodes (a device's source), K.</summary>
+        public Dictionary<int, double> BoundaryK = new Dictionary<int, double>();
 
         /// <summary>Total flow drawn from the supply node, m³/s.</summary>
         public double SupplyFlow(SolveResult r)
@@ -120,6 +133,12 @@ namespace HeadLoss.Game.Networks
         public float[]? RoomTemperatureC;
         /// <summary>Piped liquid networks: temperatures from their last thermal solve, by network id (null = the supply temperature).</summary>
         public IReadOnlyDictionary<string, Thermal.PipeTemperatures>? PipeTemperatures;
+        /// <summary>Coupling (<c>05-simulation.md</c> §1.5): what each device draws at its in or fuel port, m³/s, by device key.</summary>
+        public IReadOnlyDictionary<string, double>? CouplingDemand;
+        /// <summary>Coupling: the pressure at each device's in port, Pa gauge (its out port feeds at this), by device key.</summary>
+        public IReadOnlyDictionary<string, double>? CouplingPressure;
+        /// <summary>Coupling: the temperature of the water entering each device, K, by device key.</summary>
+        public IReadOnlyDictionary<string, double>? CouplingTemperatureK;
     }
 
     /// <summary>
@@ -338,6 +357,8 @@ namespace HeadLoss.Game.Networks
                 c.InlineLink[n.Id] = link;
             }
 
+            if (water) CompileDevices(layout, state, data, fluid, o, c, net, Ceiling, FloorLayer, tWater, speedFactor);
+
             if (!water)
             {
                 // Air outlets: vent grille → room (fixed 0 Pa), only when a duct reaches the outlet.
@@ -435,6 +456,92 @@ namespace HeadLoss.Game.Networks
         }
 
         static bool IsDamaged(CompileOptions o, string key) => o.Damaged != null && o.Damaged.Contains(key);
+
+        /// <summary>
+        /// Devices that join networks (<c>05-simulation.md</c> §1.5 coupling nodes). Each connected port is its anchor at the ceiling
+        /// with a drop to the device on the floor. An in or fuel port is a demand of the coupled flow; an out port is fed from a fixed
+        /// node at the in port's pressure; a flow port closes a loop through an expansion vessel at the fill pressure. Either way the
+        /// water passes a heater link (its resistance K) that the thermal solve heats toward the setpoint within the capacity.
+        /// </summary>
+        static void CompileDevices(BuildingLayout layout, BuildingState state, DataRepository data, string fluid, CompileOptions o, CompiledNetwork c,
+            DuctNetworkState net, Func<int, double> ceiling, Func<int, double> floorLayer, double supplyK, double powerSpeed)
+        {
+            NetworkGraph g = c.Graph;
+            BuildingBalancingDef bb = data.Balancing.Building;
+            foreach (PlacedDevice d in state.Devices)
+            {
+                EquipmentDef? dd = data.FindEquipment(d.EquipmentId);
+                if (dd == null) continue;
+                List<PortDef> ports = dd.Ports.FindAll(p => p.Network == fluid);
+                if (ports.Count == 0) continue;
+                string key = d.Key;
+                double z = floorLayer(d.Floor);
+                double dConn = Units.MmToM(dd.ConnectionDiameterMm > 0 ? dd.ConnectionDiameterMm : 22);
+
+                // The drop between a port's anchor and the device; -1 when no pipe reaches the port.
+                int Drop(PortDef p, int floorNode, bool up)
+                {
+                    DuctNode? n = Devices.PortNode(net, d, p);
+                    if (n == null || !c.NodeIndex.TryGetValue(n.Id, out int top)) return -1;
+                    DuctSegment? first = net.Segments.Find(x => x.NodeA == n.Id || x.NodeB == n.Id);
+                    if (first == null) return -1;
+                    MaterialDef m = data.Material(first.MaterialId);
+                    double inner = Units.MmToM(m.InternalDiameterMm(first.DiameterMm));
+                    double h = bb.CeilingLayerOffset - bb.FloorLayerOffset;
+                    int link = up ? g.AddPipe(floorNode, top, h, inner, Units.MmToM(m.RoughnessMm), 0, $"drop-{key}:{p.Role}")
+                        : g.AddPipe(top, floorNode, h, inner, Units.MmToM(m.RoughnessMm), 0, $"drop-{key}:{p.Role}");
+                    g.Links[link].Temperature = supplyK;
+                    return link;
+                }
+                bool Connected(PortDef p)
+                {
+                    DuctNode? n = Devices.PortNode(net, d, p);
+                    return n != null && net.Degree(n.Id) > 0;
+                }
+
+                PortDef? inlet = ports.Find(p => p.Role == "in" || p.Role == "fuel");
+                if (inlet != null && Connected(inlet))
+                {
+                    double q = o.CouplingDemand != null && o.CouplingDemand.TryGetValue(key, out double v) ? Math.Max(0, v) : 0;
+                    int demand = g.AddDemand(q, z, $"{key}:{inlet.Role}");
+                    Drop(inlet, demand, false);
+                    c.DeviceInlet[key] = demand;
+                }
+
+                PortDef? outlet = ports.Find(p => p.Role == "out" || p.Role == "flow");
+                if (outlet == null) continue;
+                int mix = g.AddJunction(z, $"{key}:mix");
+                double t0 = o.CouplingTemperatureK != null && o.CouplingTemperatureK.TryGetValue(key, out double tk) ? tk : supplyK;
+                if (outlet.Role == "out")
+                {
+                    double p0 = o.CouplingPressure != null && o.CouplingPressure.TryGetValue(key, out double pv) ? pv : 0;
+                    int source = g.AddFixed(p0, z, $"{key}:source");
+                    int feed = g.AddPipe(source, mix, 0.2, dConn, 1.5e-6, 0, $"{key}:feed");
+                    g.Links[feed].Temperature = t0;
+                    c.DeviceSource[key] = source;
+                    c.BoundaryK[source] = t0;
+                }
+                else
+                {
+                    // A closed loop: the expansion vessel holds it at the fill pressure (no flow through it once settled).
+                    int vessel = g.AddFixed(data.Balancing.Water.HeatingFillPressurePa, z, $"{key}:vessel");
+                    int link = g.AddPipe(vessel, mix, 0.2, dConn, 1.5e-6, 0, $"{key}:vessel");
+                    g.Links[link].Temperature = supplyK;
+                    c.BoundaryK[vessel] = supplyK;
+                }
+                int heated = g.AddJunction(z, $"{key}:out");
+                int heater = g.AddValve(mix, heated, dd.ResistanceK, dConn, 1, $"{key}:heater");
+                g.Links[heater].Temperature = supplyK;
+                bool working = d.On && !IsDamaged(o, key) && !(dd.PowerModel == "heat" && powerSpeed <= 0);
+                double setK = Units.CToK(d.SetpointC > 0 ? d.SetpointC : dd.SetpointC);
+                c.Heaters[heater] = new Heater(setK, working ? dd.HeatOutputW : 0);
+                c.HeaterLink[key] = heater;
+                if (dd.PowerModel == "heat") c.HeaterEfficiency[heater] = dd.ThermalEfficiency;
+                Drop(outlet, heated, true);
+                PortDef? back = ports.Find(p => p.Role == "return");
+                if (back != null) Drop(back, mix, false);
+            }
+        }
 
         /// <summary>Air density at atmospheric pressure, kg/m³ (the ambient of a gas column).</summary>
         static double IdealAir(DataRepository data, double temperatureK) =>

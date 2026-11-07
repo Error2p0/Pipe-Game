@@ -14,7 +14,8 @@ namespace HeadLoss.Core.Data
         static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "check", "regulator", "relief", "filter" };
         static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable", "none" };
         static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon", "room", "wall" };
-        static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve" };
+        static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve", "heat" };
+        static readonly HashSet<string> PortRoles = new HashSet<string> { "in", "fuel", "out", "return", "flow" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };
         static readonly HashSet<string> Utilities = new HashSet<string> { "air", "water", "gas", "heating", "power" };
         static readonly HashSet<string> Facings = new HashSet<string> { "north", "south", "east", "west" };
@@ -265,6 +266,40 @@ namespace HeadLoss.Core.Data
             return false;
         }
 
+        /// <summary>Devices that join networks: ports on known networks, inside the footprint, in pairs that make sense.</summary>
+        static void ValidatePorts(DataRepository data, EquipmentDef e, List<string> errors)
+        {
+            if (e.Ports.Count == 0) return;
+            string w = $"equipment.json '{e.Id}'";
+            var tiles = new HashSet<(string, int, int)>();
+            bool Has(string role, string? network = null) => e.Ports.Exists(p => p.Role == role && (network == null || p.Network == network));
+            foreach (PortDef p in e.Ports)
+            {
+                if (data.FindNetwork(p.Network) == null) errors.Add($"{w}: port network '{p.Network}' unknown");
+                if (!PortRoles.Contains(p.Role)) errors.Add($"{w}: port role '{p.Role}' unknown");
+                if (p.Dx < 0 || p.Dy < 0 || p.Dx >= e.Footprint.Width || p.Dy >= e.Footprint.Height) errors.Add($"{w}: port {p.Role} lies outside the footprint");
+                if (!tiles.Add((p.Network, p.Dx, p.Dy))) errors.Add($"{w}: two ports on {p.Network} share a tile");
+                if (p.Role == "out" && !e.Ports.Exists(q => q.Role == "in" && q.Network != p.Network)) errors.Add($"{w}: an out port needs an in port on another network");
+                if (p.Role == "in" && !e.Ports.Exists(q => q.Role == "out" && q.Network != p.Network)) errors.Add($"{w}: an in port needs an out port on another network");
+                if (p.Role == "flow" && !Has("return", p.Network)) errors.Add($"{w}: a flow port needs a return port on {p.Network}");
+                if (p.Role == "return" && !Has("flow", p.Network) && !Has("out", p.Network)) errors.Add($"{w}: a return port needs a flow or out port on {p.Network}");
+                if (p.Role == "fuel" && !Has("flow") && !Has("out")) errors.Add($"{w}: a fuel port needs something to heat");
+            }
+            if (Has("flow") || Has("out"))
+            {
+                Positive(w + " connectionDiameterMm", e.ConnectionDiameterMm, errors);
+                Positive(w + " resistanceK", e.ResistanceK, errors);
+            }
+            if (e.HeatOutputW > 0 || Has("fuel"))
+            {
+                Positive(w + " heatOutputW", e.HeatOutputW, errors);
+                Positive(w + " setpointC", e.SetpointC, errors);
+                if (!(e.ThermalEfficiency > 0 && e.ThermalEfficiency <= 1)) errors.Add($"{w}: thermalEfficiency must be in (0, 1]");
+            }
+            if (Has("fuel") && !data.FluidOf(e.Ports.Find(p => p.Role == "fuel")!.Network).IdealGas) errors.Add($"{w}: a fuel port takes gas");
+            if (e.PowerModel == "heat" && !(e.HeatOutputW > 0)) errors.Add($"{w}: powerModel heat needs heatOutputW");
+        }
+
         static void ValidateTable(DataRepository data, FluidDef fluid, FluidTableDef t, List<string> errors)
         {
             string f = fluid.Table;
@@ -408,6 +443,7 @@ namespace HeadLoss.Core.Data
         {
             foreach (EquipmentDef e in data.Equipment)
             {
+                ValidatePorts(data, e, errors);
                 string w = $"equipment.json '{e.Id}'";
                 Id("equipment.json", e.Id, errors);
                 Tier(w, e.Tier, errors);

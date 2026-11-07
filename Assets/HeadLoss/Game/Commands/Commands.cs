@@ -920,4 +920,74 @@ namespace HeadLoss.Game.Commands
             return true;
         }
     }
+
+    /// <summary>Stands a device that joins networks (water heater, boiler) on a room floor, with an anchor at each port.</summary>
+    public sealed class PlaceDeviceCommand : DesignCommand
+    {
+        readonly string _equipmentId;
+        readonly TilePos _origin;
+        readonly string _facing;
+
+        public PlaceDeviceCommand(string equipmentId, TilePos origin, string facing = "east")
+        {
+            _equipmentId = equipmentId;
+            _origin = origin;
+            _facing = facing;
+        }
+
+        public override string Description => "Place device";
+        /// <summary>Why the last attempt failed, or None.</summary>
+        public DrawError LastError { get; private set; }
+
+        protected override bool Apply(BuildingSession s)
+        {
+            EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
+            if (def == null || def.Ports.Count == 0 || def.Placement != "room") return false;
+            if (!s.ItemUnlocked(_equipmentId))
+            {
+                LastError = DrawError.Locked;
+                return false;
+            }
+            LastError = Devices.Validate(s.Data, s.Layout, s.State, def, _origin, _facing);
+            if (LastError != DrawError.None) return false;
+            Devices.Place(s.State, def, _origin, _facing);
+            return true;
+        }
+    }
+
+    /// <summary>Removes a device with its ports and the pipes ending on them.</summary>
+    public sealed class RemoveDeviceCommand : DesignCommand
+    {
+        readonly string _key;
+        public RemoveDeviceCommand(string key) => _key = key;
+        public override string Description => "Remove device";
+        protected override bool Apply(BuildingSession s) => Devices.Remove(s.Data, s.State, _key);
+    }
+
+    /// <summary>Switches a device on or off, or sets its outlet temperature.</summary>
+    public sealed class SetDeviceCommand : DesignCommand
+    {
+        readonly string _key;
+        readonly bool? _on;
+        readonly double? _setpointC;
+
+        public SetDeviceCommand(string key, bool? on = null, double? setpointC = null)
+        {
+            _key = key;
+            _on = on;
+            _setpointC = setpointC;
+        }
+
+        public override string Description => _on.HasValue ? (_on.Value ? "Switch on" : "Switch off") : "Set temperature";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            PlacedDevice? d = Devices.Find(s.State, _key);
+            if (d == null) return false;
+            bool changed = false;
+            if (_on.HasValue && d.On != _on.Value) { d.On = _on.Value; changed = true; }
+            if (_setpointC.HasValue && d.SetpointC != _setpointC.Value) { d.SetpointC = _setpointC.Value; changed = true; }
+            return changed;
+        }
+    }
 }

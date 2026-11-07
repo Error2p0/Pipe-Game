@@ -320,7 +320,8 @@
   "water": {
     "mainsTemperatureC": 12,
     "referenceConnectionFactor": 0.85,
-    "openEndK": 1.0
+    "openEndK": 1.0,
+    "heatingFillPressurePa": 150000
   },
   "failure": {
     "forecastHours": 24,

@@ -262,6 +262,9 @@ namespace HeadLoss.Game.Economy
                     EquipmentDef? def = data.FindEquipment(d.EquipmentId);
                     if (def != null) bill.Equipment[$"safety:{d.EquipmentId}:{d.X},{d.Y},{d.Floor}"] = new Item(d.EquipmentId + (d.High ? "/high" : "/low"), def.Price);
                 }
+                // A device turned in place is the same purchase; one moved is a removal and a new one.
+                foreach (PlacedDevice d in s.Devices)
+                    if (data.FindEquipment(d.EquipmentId) is EquipmentDef def) bill.Equipment["device:" + d.Key] = new Item(d.EquipmentId, def.Price);
             }
 
             static (TilePos, TilePos) Edge(TilePos a, TilePos b) =>

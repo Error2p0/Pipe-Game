@@ -72,7 +72,9 @@ for fid, name, tier, head, qmax, peak, speed, fp, place, conn, price, notes in P
     items.append({
         "id": fid, "displayName": name, "tier": tier, "category": "water-mover",
         "footprint": {"width": fp[0], "height": fp[1], "layer": fp[2]},
-        "fluids": ["water"], "powerModel": "curve", "isIgnitionSource": True, "speedControl": speed, "placement": place,
+        # The circulation pump moves water round hot-water return loops and heating loops (07), not the cold supply.
+        "fluids": ["hot-water", "heating-water"] if fid == "circulation-pump" else ["water"], "powerModel": "curve", "isIgnitionSource": True,
+        "speedControl": speed, "placement": place,
         "curve": curve(round(RHO_G * head, 1), qmax, peak), "reverseK": 5.0, "connectionDiameterMm": conn, **spin(fid), "price": price, "notes": notes,
     })
 
@@ -113,6 +115,24 @@ items.append(plain("passive-vent-opening", "Passive vent", 3, "safety", ["air"],
                    fp=(1, 1, "none")))
 items.append(plain("transformer-room", "Transformer room", 4, "panel", [], "intake", 60000,
                    "Needs a 3x3 room on the ground floor or basement; industrial buildings only", fp=(3, 3, "floor"), ignition=True, panelLimitKW=250))
+
+# Climate devices that join networks (07 Climate equipment, 05 1.5 coupling nodes). Ports are tile offsets in the footprint
+# before it is turned: "in" draws the same flow the "out" port sends, "fuel" draws gas for the heat made, "flow"/"return" feed a
+# closed loop with an expansion vessel.
+items.append(plain("water-heater", "Water heater", 3, "climate", ["water", "hot-water"], "room", 600,
+                   "Cold in, hot out at 60 \u00b0C; 3 kW electric. Its hot side takes the cold side's pressure",
+                   fp=(2, 1, "floor"), ignition=True, powerModel="heat", connectionDiameterMm=22, resistanceK=2.0,
+                   heatOutputW=3000, setpointC=60, thermalEfficiency=0.98,
+                   ports=[{"network": "water", "role": "in", "dx": 0, "dy": 0},
+                          {"network": "hot-water", "role": "return", "dx": 0, "dy": 0},
+                          {"network": "hot-water", "role": "out", "dx": 1, "dy": 0}]))
+items.append(plain("gas-boiler", "Gas boiler", 3, "climate", ["natural-gas", "heating-water"], "room", 2500,
+                   "24 kW at 92%: burns gas for the heat it gives the loop; flue through an exterior wall",
+                   fp=(2, 1, "floor"), ignition=True, needsExteriorWall=True, connectionDiameterMm=22, resistanceK=3.0,
+                   heatOutputW=24000, setpointC=70, thermalEfficiency=0.92,
+                   ports=[{"network": "natural-gas", "role": "fuel", "dx": 0, "dy": 0},
+                          {"network": "heating-water", "role": "return", "dx": 0, "dy": 0},
+                          {"network": "heating-water", "role": "flow", "dx": 1, "dy": 0}]))
 
 with open(OUT, "w", encoding="utf-8", newline="\n") as f:
     f.write("[\n")

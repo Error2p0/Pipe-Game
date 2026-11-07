@@ -41,7 +41,38 @@ namespace HeadLoss.Core.Data.Defs
         public double SetpointPa;
         /// <summary>Gas regulators: loss coefficient when fully open, referenced to the connecting pipe.</summary>
         public double RegulatorK;
+        /// <summary>
+        /// Devices that join networks (water heater, boiler, heat exchanger): where pipes connect, as offsets in the footprint before
+        /// it is turned (<c>05-simulation.md</c> §1.5 coupling nodes).
+        /// </summary>
+        public List<PortDef> Ports = new List<PortDef>();
+        /// <summary>Heat devices: the most heat they add, W.</summary>
+        public double HeatOutputW;
+        /// <summary>Heat devices: outlet temperature they heat toward, °C.</summary>
+        public double SetpointC;
+        /// <summary>Heat devices: share of the fuel or electricity that becomes heat in the water (boiler 0.92, water heater 0.98).</summary>
+        public double ThermalEfficiency;
+        /// <summary>Devices with ports: loss coefficient of the water passing through, referenced to the connection diameter.</summary>
+        public double ResistanceK;
+        /// <summary>Room devices: must stand against an exterior wall (a boiler's flue).</summary>
+        public bool NeedsExteriorWall;
         public string Notes = "";
+    }
+
+    /// <summary>One pipe connection of a device (<see cref="EquipmentDef.Ports"/>).</summary>
+    public sealed class PortDef
+    {
+        /// <summary>The network this port is on (<c>networks.json</c>).</summary>
+        public string Network = "";
+        /// <summary>
+        /// in: the device draws water from the network (the same flow it sends out of its out port); fuel: it draws gas for the heat
+        /// it makes; out: it feeds the network at the pressure its in port has; return: water comes back into it; flow: it feeds a
+        /// closed loop (with its return port and an expansion vessel).
+        /// </summary>
+        public string Role = "";
+        /// <summary>Tile offset in the footprint before turning (dx along its width, dy along its depth).</summary>
+        public int Dx;
+        public int Dy;
     }
 
     public sealed class FootprintDef

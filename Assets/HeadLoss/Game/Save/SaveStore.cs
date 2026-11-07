@@ -192,6 +192,21 @@ namespace HeadLoss.Game.Save
             foreach (string id in ids) dropped += SanitizeNetwork(s.Net(id), fresh.Net(id), layout, data);
             dropped += s.Equipment.RemoveAll(e => data.FindEquipment(e.EquipmentId) == null || layout.FindOpening(e.OpeningId) == null);
             dropped += s.Safety.RemoveAll(d => data.FindEquipment(d.EquipmentId) == null || !layout.IsInside(d.Pos));
+            // Devices whose item is gone or that no longer stand inside one room go, with their ports.
+            foreach (PlacedDevice d in s.Devices.ToArray())
+            {
+                EquipmentDef? def = data.FindEquipment(d.EquipmentId);
+                bool fits = def != null && def.Ports.Count > 0;
+                if (fits)
+                    foreach (TilePos t in Devices.Tiles(def!, d.Pos, d.Facing)) if (layout.RoomIndexAt(t) != layout.RoomIndexAt(d.Pos) || layout.RoomIndexAt(t) < 0) fits = false;
+                if (fits) continue;
+                if (def != null) Devices.Remove(data, s, d.Key);
+                else s.Devices.Remove(d);
+                dropped++;
+            }
+            // Port anchors of devices that are gone.
+            foreach (DuctNetworkState net in s.Networks)
+                dropped += net.Nodes.RemoveAll(n => (n.Kind == DuctNodeKind.DeviceIn || n.Kind == DuctNodeKind.DeviceOut) && Devices.Find(s, n.AnchorId) == null);
             // Pre-placed equipment the layout starts with (the basic panel since Phase 4) is added when missing, for free.
             foreach (EquipmentState e in fresh.Equipment)
                 if (s.EquipmentAt(e.OpeningId) == null) s.Equipment.Add(e.Clone());

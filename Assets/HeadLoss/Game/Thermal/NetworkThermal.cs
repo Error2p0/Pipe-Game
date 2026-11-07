@@ -59,8 +59,10 @@ namespace HeadLoss.Game.Thermal
         /// <param name="roomTemperatureC">Mean temperature per room index, °C (null or 0 = the default air temperature).</param>
         /// <param name="heaters">Heater links of the compiled graph (null = none).</param>
         /// <param name="boundaryK">Temperature entering at particular fixed nodes, by node index (others: the supply temperature).</param>
+        /// <param name="previous">The network's last solve: its temperatures are where loops start relaxing from (matched by graph label).</param>
         public static void Solve(DataRepository data, BuildingLayout layout, DuctNetworkState net, FluidSolve fs, IFluidProperties props,
-            float[]? roomTemperatureC, IReadOnlyDictionary<int, Heater>? heaters = null, IReadOnlyDictionary<int, double>? boundaryK = null)
+            float[]? roomTemperatureC, IReadOnlyDictionary<int, Heater>? heaters = null, IReadOnlyDictionary<int, double>? boundaryK = null,
+            FluidSolve? previous = null)
         {
             NetworkGraph g = fs.Compiled.Graph;
             int nodes = g.Nodes.Count, links = g.Links.Count;
@@ -85,10 +87,31 @@ namespace HeadLoss.Game.Thermal
                 ua[k] = u * Math.PI * outer * g.Links[k].Length;
             }
             double cp = props.SpecificHeat(data.Balancing.Physics.AtmosphericPressurePa, supply);
-            ThermalResult t0 = PipeThermal.Solve(g, fs.Result, boundary, ambient, ua, cp, heaters);
+            ThermalResult t0 = PipeThermal.Solve(g, fs.Result, boundary, ambient, ua, cp, heaters, Guess(g, previous, heaters, supply));
             fs.Thermal = t0;
             foreach (var kv in fs.Compiled.SegmentLink) fs.Temperatures.SegmentK[kv.Key] = 0.5 * (t0.LinkInT[kv.Value] + t0.LinkOutT[kv.Value]);
             foreach (var kv in fs.Compiled.NodeIndex) fs.Temperatures.NodeK[kv.Key] = t0.NodeT[kv.Value];
+        }
+
+        /// <summary>
+        /// Where loop temperatures start: the last solve's, node by node (graph labels are stable across compiles); without one, the
+        /// hottest working heater's setpoint (a heated loop settles near it), else the supply temperature.
+        /// </summary>
+        static double[] Guess(NetworkGraph g, FluidSolve? previous, IReadOnlyDictionary<int, Heater>? heaters, double supplyK)
+        {
+            double start = supplyK;
+            if (heaters != null)
+                foreach (Heater h in heaters.Values) if (h.CapacityW > 0) start = Math.Max(start, h.SetpointK);
+            Dictionary<string, double>? last = null;
+            if (previous?.Thermal != null)
+            {
+                NetworkGraph pg = previous.Compiled.Graph;
+                last = new Dictionary<string, double>(pg.Nodes.Count);
+                for (int i = 0; i < pg.Nodes.Count; i++) last[pg.Nodes[i].Label] = previous.Thermal.NodeT[i];
+            }
+            var guess = new double[g.Nodes.Count];
+            for (int i = 0; i < guess.Length; i++) guess[i] = last != null && last.TryGetValue(g.Nodes[i].Label, out double t) ? t : start;
+            return guess;
         }
 
         /// <summary>U per outer area, W/(m²·K), and the outer diameter, m, of a pipe from its material or insulation.</summary>

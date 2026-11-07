@@ -48,6 +48,12 @@ namespace HeadLoss.Game.Session
         public readonly IReadOnlyList<FluidSolve> All;
         /// <summary>The state the snapshot was solved from (a private copy).</summary>
         public BuildingState State;
+        /// <summary>Coupled devices: what each drew at its in or fuel port, m³/s, by device key (<c>05-simulation.md</c> §1.5).</summary>
+        public readonly Dictionary<string, double> CouplingDemand = new Dictionary<string, double>();
+        /// <summary>Coupled devices: the pressure at each one's in port, Pa gauge (its out port fed at this).</summary>
+        public readonly Dictionary<string, double> CouplingPressure = new Dictionary<string, double>();
+        /// <summary>Coupled devices: the temperature of the water entering each one, K.</summary>
+        public readonly Dictionary<string, double> CouplingTemperatureK = new Dictionary<string, double>();
 
         /// <param name="solves">The air supply's solve first.</param>
         public NetworkSnapshot(IReadOnlyList<FluidSolve> solves, BuildingState state)
@@ -684,11 +690,102 @@ namespace HeadLoss.Game.Session
         }
 
         /// <summary>Compiles and solves a state with the given solvers (pure; safe on a worker thread).</summary>
+        /// <summary>The building's networks plus any a placed device connects to (in <c>networks.json</c> order after the air).</summary>
+        List<string> NetworksOf(BuildingState state)
+        {
+            if (state.Devices.Count == 0) return _networkIds;
+            var extra = new HashSet<string>();
+            foreach (PlacedDevice d in state.Devices)
+                if (Data.FindEquipment(d.EquipmentId) is EquipmentDef def)
+                    foreach (PortDef p in def.Ports) if (!_networkIds.Contains(p.Network)) extra.Add(p.Network);
+            if (extra.Count == 0) return _networkIds;
+            var ids = new List<string> { "air" };
+            foreach (NetworkDef n in Data.Networks) if (n.Id != "air" && (_networkIds.Contains(n.Id) || extra.Contains(n.Id))) ids.Add(n.Id);
+            return ids;
+        }
+
         NetworkSnapshot SolveState(BuildingState state, NetworkSnapshot? warmFrom, SolverSet solvers, CompileOptions options)
         {
-            var solves = new List<FluidSolve>(_networkIds.Count);
-            foreach (string id in _networkIds) solves.Add(SolveFluid(state, id, warmFrom?.For(id), solvers.For(id), options, Properties(id)));
-            return new NetworkSnapshot(solves, state);
+            List<string> networks = NetworksOf(state);
+            List<Coupling> couplings = Couplings.Of(Data, state, networks);
+            if (couplings.Count == 0)
+            {
+                var solves = new List<FluidSolve>(networks.Count);
+                foreach (string id in networks) solves.Add(SolveFluid(state, id, warmFrom?.For(id), solvers.For(id), options, Properties(id)));
+                return new NetworkSnapshot(solves, state);
+            }
+
+            // Coupled networks (05 §1.5): a device's child is solved before its parent (hot before cold, heating before gas), the
+            // parent learns what the device draws and the child the pressure and temperature at the device's in port; twice over.
+            var demand = new Dictionary<string, double>();
+            var pressure = new Dictionary<string, double>();
+            var temperature = new Dictionary<string, double>();
+            foreach (Coupling c in couplings)
+            {
+                demand[c.Key] = warmFrom != null && warmFrom.CouplingDemand.TryGetValue(c.Key, out double q) ? q : 0;
+                pressure[c.Key] = warmFrom != null && warmFrom.CouplingPressure.TryGetValue(c.Key, out double p) ? p : options.SupplyFor(c.Parent).pressurePa;
+                temperature[c.Key] = warmFrom != null && warmFrom.CouplingTemperatureK.TryGetValue(c.Key, out double t) ? t : Thermal.NetworkThermal.SupplyK(Data, c.Parent);
+            }
+            options.CouplingDemand = demand;
+            options.CouplingPressure = pressure;
+            options.CouplingTemperatureK = temperature;
+            var coupled = new HashSet<string>();
+            foreach (Coupling c in couplings)
+            {
+                coupled.Add(c.Parent);
+                coupled.Add(c.Child);
+            }
+            var solved = new Dictionary<string, FluidSolve>();
+            List<string> order = Couplings.Order(networks, couplings);
+            for (int pass = 0; pass < Couplings.Passes; pass++)
+                foreach (string id in order)
+                {
+                    if (pass > 0 && !coupled.Contains(id)) continue;
+                    FluidSolve fs = SolveFluid(state, id, solved.TryGetValue(id, out FluidSolve? prev) ? prev : warmFrom?.For(id), solvers.For(id), options, Properties(id));
+                    solved[id] = fs;
+                    foreach (Coupling c in couplings)
+                    {
+                        if (c.Child == id) demand[c.Key] = Draw(c, fs, pressure[c.Key], temperature[c.Key]);
+                        if (c.Parent == id && fs.Compiled.DeviceInlet.TryGetValue(c.Key, out int node) && fs.Result.NodeActive[node])
+                        {
+                            pressure[c.Key] = fs.Result.NodePressure[node];
+                            if (fs.Thermal != null) temperature[c.Key] = fs.Thermal.NodeT[node];
+                        }
+                    }
+                }
+            var list = new List<FluidSolve>(networks.Count);
+            foreach (string id in networks) list.Add(solved[id]);
+            var snap = new NetworkSnapshot(list, state);
+            foreach (var kv in demand) snap.CouplingDemand[kv.Key] = kv.Value;
+            foreach (var kv in pressure) snap.CouplingPressure[kv.Key] = kv.Value;
+            foreach (var kv in temperature) snap.CouplingTemperatureK[kv.Key] = kv.Value;
+            return snap;
+        }
+
+        /// <summary>
+        /// What a coupled device draws from its parent network after its child's solve, m³/s: a water heater the mass it sends on
+        /// (at the cold water's density), a boiler the gas for the heat it gave the loop.
+        /// </summary>
+        /// <param name="inletPa">Pressure at the device's in port, Pa gauge.</param>
+        /// <param name="inletK">Temperature at the device's in port, K.</param>
+        double Draw(Coupling c, FluidSolve child, double inletPa, double inletK)
+        {
+            double pAbs = Data.Balancing.Physics.AtmosphericPressurePa + Math.Max(0, inletPa);
+            if (c.Fuel)
+            {
+                double heat = child.Thermal != null && child.Compiled.HeaterLink.TryGetValue(c.Key, out int link) ? Math.Max(0, child.Thermal.HeatAdded[link]) : 0;
+                double rho = Properties(c.Parent).Density(pAbs, Units.CToK(Data.Balancing.Gas.SupplyTemperatureC));
+                return Couplings.FuelFlow(heat, c.Def.ThermalEfficiency, Data.FluidOf(c.Parent).LowerHeatingValueMJPerKg, rho);
+            }
+            if (!child.Compiled.DeviceSource.TryGetValue(c.Key, out int source)) return 0;
+            double mass = 0;
+            NetworkGraph g = child.Compiled.Graph;
+            for (int k = 0; k < g.Links.Count; k++)
+            {
+                if (g.Links[k].From == source) mass += child.Result.MassFlow[k];
+                else if (g.Links[k].To == source) mass -= child.Result.MassFlow[k];
+            }
+            return Math.Max(0, mass) / Properties(c.Parent).Density(pAbs, inletK);
         }
 
         FluidSolve SolveFluid(BuildingState state, string fluid, FluidSolve? warmFrom, NetworkSolver solver, CompileOptions options, IFluidProperties props)
@@ -700,7 +797,8 @@ namespace HeadLoss.Game.Session
             result.SolveMilliseconds = sw.Elapsed.TotalMilliseconds;
             var fs = new FluidSolve(compiled, result);
             Thermal.HeatDelivery.FillAirTerminals(Data, Layout, fs, props);
-            if (Thermal.NetworkThermal.Applies(Data, fluid)) Thermal.NetworkThermal.Solve(Data, Layout, state.Net(fluid), fs, props, options.RoomTemperatureC);
+            if (Thermal.NetworkThermal.Applies(Data, fluid))
+                Thermal.NetworkThermal.Solve(Data, Layout, state.Net(fluid), fs, props, options.RoomTemperatureC, compiled.Heaters, compiled.BoundaryK, warmFrom);
             return fs;
         }
 

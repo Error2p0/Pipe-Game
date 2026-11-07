@@ -180,6 +180,8 @@ namespace HeadLoss.Core.Data.Defs
     /// <summary>Building water networks (<c>05-simulation.md</c>, <c>06-fluids.md</c>).</summary>
     public sealed class WaterDef
     {
+        /// <summary>Pressure an expansion vessel holds a closed heating loop at, Pa gauge.</summary>
+        public double HeatingFillPressurePa;
         /// <summary>Temperature of city water in the building, °C (no thermal model for cold water yet).</summary>
         public double MainsTemperatureC;
         /// <summary>The auto-router's reference assumes a connection pressure of this share of the facility pressure.</summary>

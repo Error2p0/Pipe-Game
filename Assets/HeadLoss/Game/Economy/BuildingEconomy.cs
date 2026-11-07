@@ -212,6 +212,9 @@ namespace HeadLoss.Game.Economy
                 {
                     foreach (var kv in fs.Compiled.FanLink) ev.PowerW += DevicePower(fs.Compiled, fs.Result, kv.Value);
                     foreach (var kv in fs.Compiled.InlineLink) ev.PowerW += DevicePower(fs.Compiled, fs.Result, kv.Value);
+                    // Electric heaters draw the heat they add over their efficiency (02 §Electricity: P = Q_heat / COP for heat devices).
+                    if (fs.Thermal != null)
+                        foreach (var kv in fs.Compiled.HeaterEfficiency) ev.PowerW += System.Math.Max(0, fs.Thermal.HeatAdded[kv.Key]) / kv.Value;
                 }
             ev.Electricity = ev.PowerW / 1000.0 * e.ElectricityPricePerKWs * e.ElectricityTierFactor[layout.Tier - 1];
             return ev;

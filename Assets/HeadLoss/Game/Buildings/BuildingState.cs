@@ -12,6 +12,10 @@ namespace HeadLoss.Game.Buildings
         Outlet,
         /// <summary>An inline part (damper or inline fan) on a straight run, between exactly two segments.</summary>
         Inline,
+        /// <summary>A device's port where the network feeds it (water heater cold in, boiler gas, a loop's return); AnchorId = device key, PartId = role.</summary>
+        DeviceIn,
+        /// <summary>A device's port where it feeds the network (water heater hot out, boiler flow); AnchorId = device key, PartId = role.</summary>
+        DeviceOut,
     }
 
     /// <summary>A node of the player's duct layout (one per tile at most).</summary>
@@ -160,6 +164,8 @@ namespace HeadLoss.Game.Buildings
         public List<EquipmentState> Equipment = new List<EquipmentState>();
         /// <summary>Gas detectors and passive vents.</summary>
         public List<SafetyDevice> Safety = new List<SafetyDevice>();
+        /// <summary>Devices on room floors that join networks (water heaters, boilers, …).</summary>
+        public List<PlacedDevice> Devices = new List<PlacedDevice>();
 
         /// <summary>Fluid id of the gas network.</summary>
         public const string GasFluid = "natural-gas";
@@ -228,6 +234,7 @@ namespace HeadLoss.Game.Buildings
             foreach (DuctNetworkState n in Networks) c.Networks.Add(n.Clone());
             foreach (EquipmentState e in Equipment) c.Equipment.Add(e.Clone());
             foreach (SafetyDevice d in Safety) c.Safety.Add(d.Clone());
+            foreach (PlacedDevice d in Devices) c.Devices.Add(d.Clone());
             return c;
         }
 
@@ -259,6 +266,7 @@ namespace HeadLoss.Game.Buildings
             }
             foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}");
             foreach (SafetyDevice d in Safety) parts.Add($"d{d.EquipmentId},{d.X},{d.Y},{d.Floor},{d.Facing},{d.High}");
+            foreach (PlacedDevice d in Devices) parts.Add($"x{d.Key},{d.Facing},{d.On},{d.SetpointC}");
             parts.Sort(System.StringComparer.Ordinal);
             return string.Join(";", parts);
         }

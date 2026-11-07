@@ -29,6 +29,8 @@ namespace HeadLoss.Game.Buildings
         WrongMaterial,
         /// <summary>The part does not belong on this network (a damper on a water pipe, a pump in a duct).</summary>
         WrongNetwork,
+        /// <summary>The device must stand against an exterior wall (a boiler's flue).</summary>
+        NeedsExteriorWall,
         /// <summary>Equipment does not fit the floor space at its opening.</summary>
         NoFloorSpace,
         /// <summary>A passive vent needs an outside wall.</summary>
@@ -80,6 +82,7 @@ namespace HeadLoss.Game.Buildings
             DrawError.WrongNetwork => "That part does not fit this network",
             DrawError.NoFloorSpace => "Not enough floor space here",
             DrawError.NotOnOutsideWall => "Passive vents go on an outside wall",
+            DrawError.NeedsExteriorWall => "This needs an outside wall for its flue",
             _ => e.ToString(),
         };
 
@@ -405,7 +408,8 @@ namespace HeadLoss.Game.Buildings
             var queue = new Queue<int>();
             foreach (DuctNode n in net.Nodes)
             {
-                if (n.Kind != DuctNodeKind.Intake) continue;
+                // Fittings face away from where the fluid comes in: an intake, or a device feeding the network.
+                if (n.Kind != DuctNodeKind.Intake && n.Kind != DuctNodeKind.DeviceOut) continue;
                 dist[n.Id] = 0;
                 queue.Enqueue(n.Id);
             }
