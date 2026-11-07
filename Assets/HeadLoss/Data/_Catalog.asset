@@ -23,6 +23,8 @@ MonoBehaviour:
     text: {fileID: 4900000, guid: 344e4e590e3db304f93c621561dde0ba, type: 3}
   - path: equipment.json
     text: {fileID: 4900000, guid: 85df87ba1bdcff841adca549b71a7f30, type: 3}
+  - path: events.json
+    text: {fileID: 4900000, guid: 0efb412314d0f794eb1f52f19c79346a, type: 3}
   - path: fittings.json
     text: {fileID: 4900000, guid: 408c62bd3457e2d47bcd8cd0f7b2c05e, type: 3}
   - path: fluids.json
@@ -57,8 +59,12 @@ MonoBehaviour:
     text: {fileID: 4900000, guid: 24e6fead3f9622f4ea7b71e17edcf271, type: 3}
   - path: handmade/water-house.json
     text: {fileID: 4900000, guid: 5e5f4712a85a2d6409a30c837e50a998, type: 3}
+  - path: inspections.json
+    text: {fileID: 4900000, guid: 75da374f5d24b3a4f9413d27ab23f6e3, type: 3}
   - path: materials.json
     text: {fileID: 4900000, guid: a42f9ff564640e1448f712dd3826effe, type: 3}
+  - path: networks.json
+    text: {fileID: 4900000, guid: 0f34a181c52004a46b6cf0c29ca2b2e4, type: 3}
   - path: outlets.json
     text: {fileID: 4900000, guid: 6daba69bffbc8dc448a9afa7be2c0da2, type: 3}
   - path: pipes.json

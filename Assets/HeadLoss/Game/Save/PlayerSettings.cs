@@ -24,6 +24,8 @@ namespace HeadLoss.Game.Save
         public double AutosaveSeconds = 30;
         /// <summary>No particle speed variation, glow breathing, cloud drift or ripples.</summary>
         public bool ReduceMotion;
+        /// <summary>Temperature heatmap relative to the setpoint, on the diverging ramp (else on the palette above).</summary>
+        public bool TemperatureDiverging = true;
         /// <summary>Input System binding overrides (JSON from SaveBindingOverridesAsJson; "" = defaults).</summary>
         public string Bindings = "";
 

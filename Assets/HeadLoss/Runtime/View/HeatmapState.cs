@@ -139,6 +139,29 @@ namespace HeadLoss.Unity.View
             Revision++;
         }
 
+        /// <summary>Name of the diverging temperature ramp in <see cref="ViewPalette"/>.</summary>
+        public const string DivergingRamp = "diverging";
+
+        /// <summary>
+        /// Temperature reads relative to the setpoint on a diverging ramp (blue colder, white at the comfort centre, red warmer;
+        /// <c>11-ui-visuals-audio.md</c> §Visual style). A setting; on by default.
+        /// </summary>
+        public bool Diverging { get; private set; } = true;
+
+        public void SetDiverging(bool on)
+        {
+            if (Diverging == on) return;
+            Diverging = on;
+            if (!Locked) ResetRange();
+            Revision++;
+        }
+
+        /// <summary>The temperature map is on the diverging ramp now.</summary>
+        public bool DivergingNow => Diverging && Mode == HeatmapMode.Temperature;
+
+        /// <summary>The ramp the current mode is drawn with: the diverging one for temperature when it is on, else the chosen palette.</summary>
+        public string Ramp => DivergingNow ? DivergingRamp : Palette;
+
         /// <summary>H: max → upper → lower → max.</summary>
         public void CycleLayer()
         {
@@ -153,7 +176,9 @@ namespace HeadLoss.Unity.View
             {
                 HeatmapMode.Pressure => (0f, (float)(air ? _def.PressureAnchorMaxAirPa : gas ? _def.PressureAnchorMaxGasMbar : _def.PressureAnchorMaxWaterBar)),
                 HeatmapMode.Flow => (0f, (float)(air ? _def.FlowAnchorMaxM3h : gas ? _def.FlowAnchorMaxGasM3h : _def.FlowAnchorMaxWaterLps)),
-                HeatmapMode.Temperature => ((float)_def.TemperatureAnchorC[0], (float)_def.TemperatureAnchorC[1]),
+                HeatmapMode.Temperature => Diverging
+                    ? ((float)(_def.DivergingCentreC - _def.DivergingHalfRangeK), (float)(_def.DivergingCentreC + _def.DivergingHalfRangeK))
+                    : ((float)_def.TemperatureAnchorC[0], (float)_def.TemperatureAnchorC[1]),
                 HeatmapMode.Density => air ? ((float)_def.DensityAnchor[0], (float)_def.DensityAnchor[1]) : gas ? ((float)_def.DensityAnchorGas[0], (float)_def.DensityAnchorGas[1]) : ((float)_def.DensityAnchorWater[0], (float)_def.DensityAnchorWater[1]),
                 HeatmapMode.Stress => (0f, 1f),
                 HeatmapMode.Concentration => Species switch
@@ -198,7 +223,15 @@ namespace HeadLoss.Unity.View
                         : Extend(max, (float)_def.FlowAnchorMaxWaterLps, (float)_def.FlowStepWaterLps);
                     break;
                 case HeatmapMode.Temperature:
-                    (lo, hi) = Widen(min, max, _def.TemperatureAnchorC, (float)_def.TemperatureStepK);
+                    if (Diverging)
+                    {
+                        // Even on both sides, so white stays at the centre: the scale reaches the farther of the coldest and warmest values.
+                        double c = _def.DivergingCentreC, step = _def.TemperatureStepK;
+                        double half = System.Math.Max(_def.DivergingHalfRangeK, System.Math.Max(c - min, max - c));
+                        half = half > _def.DivergingHalfRangeK ? System.Math.Ceiling(half / step) * step : half;
+                        (lo, hi) = ((float)(c - half), (float)(c + half));
+                    }
+                    else (lo, hi) = Widen(min, max, _def.TemperatureAnchorC, (float)_def.TemperatureStepK);
                     break;
                 case HeatmapMode.Density:
                     (lo, hi) = Widen(min, max, air ? _def.DensityAnchor : gas ? _def.DensityAnchorGas : _def.DensityAnchorWater, air || gas ? (float)_def.DensityStep : 1f);

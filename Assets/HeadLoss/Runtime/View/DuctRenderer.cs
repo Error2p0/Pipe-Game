@@ -113,7 +113,7 @@ namespace HeadLoss.Unity.View
             if (_heatmap.Mode == HeatmapMode.Stress)
             {
                 double s = input.Stress?.Invoke(view.Fluid, segmentId) ?? 0;
-                return s >= 1 ? _palette.Warning : _palette.Ramp(_heatmap.Palette, _heatmap.Normalise(s));
+                return s >= 1 ? _palette.Warning : _palette.Ramp(_heatmap.Ramp, _heatmap.Normalise(s));
             }
             FluidSolve? solve = view.Solve;
             if (solve == null || !solve.Compiled.SegmentLink.TryGetValue(segmentId, out int link))
@@ -122,7 +122,7 @@ namespace HeadLoss.Unity.View
                 neutral.a = 0.35f;
                 return neutral;
             }
-            return _palette.Ramp(_heatmap.Palette, _heatmap.Normalise(Value(_heatmap.Mode, solve, link)));
+            return _palette.Ramp(_heatmap.Ramp, _heatmap.Normalise(Value(_heatmap.Mode, solve, link)));
         }
 
         /// <summary>A segment's place on the heatmap ramp, 0–1: at its two ends and along its middle.</summary>
@@ -205,7 +205,7 @@ namespace HeadLoss.Unity.View
             float jointA = Joint(s.NodeA, shade.A), jointB = Joint(s.NodeB, shade.B);
             Color At(float x)
             {
-                Color c = _palette!.Ramp(_heatmap.Palette, BlendAt(x, l, blend, jointA, shade.Mid, jointB));
+                Color c = _palette!.Ramp(_heatmap.Ramp, BlendAt(x, l, blend, jointA, shade.Mid, jointB));
                 c.a *= alpha;
                 return c;
             }
@@ -429,7 +429,7 @@ namespace HeadLoss.Unity.View
             {
                 Color c = Col(seg);
                 if (!_shades.TryGetValue(seg, out Shade shade)) return c;
-                Color at = _palette!.Ramp(_heatmap!.Palette, Joint(node, shade.Mid));
+                Color at = _palette!.Ramp(_heatmap!.Ramp, Joint(node, shade.Mid));
                 at.a *= c.a;
                 return at;
             }

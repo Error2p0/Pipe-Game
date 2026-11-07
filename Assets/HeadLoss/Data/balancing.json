@@ -115,7 +115,20 @@
     "o2DeficitAnchor": [
       0,
       0.015
-    ]
+    ],
+    "divergingPalette": [
+      "#2166AC",
+      "#4393C3",
+      "#92C5DE",
+      "#D1E5F0",
+      "#F7F7F7",
+      "#FDDBC7",
+      "#F4A582",
+      "#D6604D",
+      "#B2182B"
+    ],
+    "divergingCentreC": 22,
+    "divergingHalfRangeK": 10
   },
   "drawing": {
     "ghostOpacity": 0.1,

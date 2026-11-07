@@ -22,7 +22,7 @@ namespace HeadLoss.Unity.UI
         readonly Action<PlayerSettings> _changed;
         readonly List<(InputAction action, int binding, Label shown)> _keys = new List<(InputAction, int, Label)>();
         InputActionRebindingExtensions.RebindingOperation? _rebind;
-        Button? _light, _dark, _motion;
+        Button? _light, _dark, _motion, _diverging;
 
         /// <summary>The settings being edited (a copy; the caller stores it on close).</summary>
         public PlayerSettings Settings => _s;
@@ -58,6 +58,10 @@ namespace HeadLoss.Unity.UI
             ui.StyleField(pal);
             pal.RegisterValueChangedCallback(e => { _s.Palette = e.newValue; Notify(); });
             scroll.Add(pal);
+            VisualElement diverging = UiKit.Row(scroll);
+            UiKit.Text(diverging, "Temperature vs setpoint", "hl-readout-line").style.minWidth = 160;
+            _diverging = ui.Button(diverging, "", () => { _s.TemperatureDiverging = !_s.TemperatureDiverging; Notify(); });
+            UiKit.Text(scroll, "Temperature heatmap in blue (colder) to red (warmer), white at a comfortable 22 °C.", "hl-subtitle");
             VisualElement theme = UiKit.Row(scroll);
             UiKit.Text(theme, "Theme", "hl-readout-line").style.minWidth = 160;
             _light = ui.Button(theme, "Light", () => SetTheme("light"));
@@ -120,6 +124,11 @@ namespace HeadLoss.Unity.UI
         {
             if (_light != null) _ui.Style(_light, _s.Theme == "light");
             if (_dark != null) _ui.Style(_dark, _s.Theme == "dark");
+            if (_diverging != null)
+            {
+                _diverging.text = _s.TemperatureDiverging ? "On" : "Off";
+                _ui.Style(_diverging, _s.TemperatureDiverging);
+            }
             if (_motion != null)
             {
                 _motion.text = _s.ReduceMotion ? "On" : "Off";

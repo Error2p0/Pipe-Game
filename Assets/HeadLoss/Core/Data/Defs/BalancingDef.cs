@@ -555,6 +555,15 @@ namespace HeadLoss.Core.Data.Defs
         public double RoomAlpha;
         /// <summary>Palette ramps as hex colour stops, evenly spaced.</summary>
         public Dictionary<string, List<string>> Palettes = new Dictionary<string, List<string>>();
+        /// <summary>
+        /// The diverging ramp for temperature relative to the setpoint (<c>11-ui-visuals-audio.md</c>: blue–white–red, colour-blind safe),
+        /// cold to warm, its middle stop at <see cref="DivergingCentreC"/>.
+        /// </summary>
+        public List<string> DivergingPalette = new List<string>();
+        /// <summary>Temperature the diverging ramp is white at, °C: the middle of the comfort band between the heating and cooling setpoints.</summary>
+        public double DivergingCentreC;
+        /// <summary>The diverging scale reaches this far each side of its centre at least, K (it widens in temperatureStepK steps, evenly).</summary>
+        public double DivergingHalfRangeK;
     }
 
     public sealed class DrawingDef

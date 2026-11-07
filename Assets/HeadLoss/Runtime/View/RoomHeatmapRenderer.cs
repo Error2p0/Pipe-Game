@@ -48,11 +48,11 @@ namespace HeadLoss.Unity.View
             _climateRev = climate.Revision;
             _heatmapRev = hm.Revision;
             _floor = floorIndex;
-            if (_rampPalette != hm.Palette)
+            if (_rampPalette != hm.Ramp)
             {
-                for (int i = 0; i < 256; i++) _ramp.SetPixel(i, 0, palette.Ramp(hm.Palette, i / 255f));
+                for (int i = 0; i < 256; i++) _ramp.SetPixel(i, 0, palette.Ramp(hm.Ramp, i / 255f));
                 _ramp.Apply();
-                _rampPalette = hm.Palette;
+                _rampPalette = hm.Ramp;
             }
             _material.SetFloat("_Alpha", alpha);
             RoomGridLayout g = climate.Grid;

@@ -44,6 +44,13 @@ namespace HeadLoss.Unity.View
                 for (int i = 0; i < stops.Length; i++) stops[i] = Parse(kv.Value[i]);
                 _ramps[kv.Key] = stops;
             }
+            var diverging = data.Balancing.Heatmap.DivergingPalette;
+            if (diverging.Count >= 2)
+            {
+                var stops = new Color[diverging.Count];
+                for (int i = 0; i < stops.Length; i++) stops[i] = Parse(diverging[i]);
+                _ramps[HeatmapState.DivergingRamp] = stops;
+            }
         }
 
         public static Color Parse(string hex)

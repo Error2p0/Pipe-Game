@@ -165,6 +165,7 @@ namespace HeadLoss.Unity
         {
             _audio!.SetVolumes((float)s.MasterVolume, (float)s.AmbienceVolume, (float)s.UiVolume);
             _heatmap!.SetPalette(s.Palette);
+            _heatmap.SetDiverging(s.TemperatureDiverging);
             if (panelSettings != null) panelSettings.scale = (float)s.UiScale;
             if (_scene != null) _scene.ReduceMotion = s.ReduceMotion;
             try

@@ -709,12 +709,12 @@ namespace HeadLoss.Unity.UI
                 _legendNote.style.display = DisplayStyle.None;
                 return;
             }
-            if (_legendTexture == null || _legendPalette != _hm.Palette)
+            if (_legendTexture == null || _legendPalette != _hm.Ramp)
             {
                 _legendTexture ??= new Texture2D(256, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
-                for (int i = 0; i < 256; i++) _legendTexture.SetPixel(i, 0, _p.Ramp(_hm.Palette, i / 255f));
+                for (int i = 0; i < 256; i++) _legendTexture.SetPixel(i, 0, _p.Ramp(_hm.Ramp, i / 255f));
                 _legendTexture.Apply();
-                _legendPalette = _hm.Palette;
+                _legendPalette = _hm.Ramp;
             }
             string unit = _hm.UnitNow;
             string pipes = View.Fluid == "air" ? "ducts" : "pipes";

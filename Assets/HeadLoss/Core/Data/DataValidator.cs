@@ -130,6 +130,12 @@ namespace HeadLoss.Core.Data
                 if (kv.Value.Count < 2) errors.Add($"{f} heatmap.palettes.{kv.Key} needs ≥ 2 stops");
                 foreach (string c in kv.Value) Colour($"{f} heatmap.palettes.{kv.Key}", c, errors);
             }
+            if (b.Heatmap.DivergingPalette.Count < 3 || b.Heatmap.DivergingPalette.Count % 2 == 0) errors.Add($"{f} heatmap.divergingPalette needs an odd number (≥ 3) of stops, its middle one at the centre");
+            foreach (string c in b.Heatmap.DivergingPalette) Colour($"{f} heatmap.divergingPalette", c, errors);
+            if (b.Heatmap.Palettes.ContainsKey("diverging")) errors.Add($"{f} heatmap.palettes: 'diverging' is the temperature ramp's name");
+            Positive(f + " heatmap.divergingHalfRangeK", b.Heatmap.DivergingHalfRangeK, errors);
+            if (!(b.Heatmap.DivergingCentreC >= b.Climate.HeatingSetpointC && b.Heatmap.DivergingCentreC <= b.Climate.CoolingSetpointC))
+                errors.Add($"{f} heatmap.divergingCentreC should lie between the heating and cooling setpoints");
             Fraction(f + " drawing.ghostOpacity", b.Drawing.GhostOpacity, errors);
             Fraction(f + " drawing.otherNetworkOpacity", b.Drawing.OtherNetworkOpacity, errors);
             MaterialDef? mat = data.FindMaterial(b.Drawing.DefaultMaterial);
