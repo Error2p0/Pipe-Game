@@ -287,7 +287,16 @@
     "outdoorO2": 0.209,
     "windFactorMin": 0.5,
     "windFactorMax": 1.5,
-    "windPeriodHours": 9
+    "windPeriodHours": 9,
+    "designHeatingC": -5,
+    "designCoolingC": 32,
+    "heatingSetpointC": 20,
+    "coolingSetpointC": 24,
+    "roomHumidity": {
+      "bathroom": 0.7,
+      "kitchen": 0.6,
+      "other": 0.45
+    }
   },
   "roomGrid": {
     "cellSize": 0.5,
@@ -392,20 +401,28 @@
     "passiveVentFlowM3h": 30,
     "sparkFreeTier": 3,
     "sparkFreeFactor": 1.5,
-    "sparkFreeMinPrice": 50
+    "sparkFreeMinPrice": 50,
+    "backgroundLeakPerFitting": 1e-08
   },
   "fines": {
     "explosionGrossHours": 2,
     "explosionMinimum": 5000,
     "neighbourGrossHours": 0.5,
-    "neighbourMinimum": 500
+    "neighbourMinimum": 500,
+    "inspectionFailGrossMinutes": 10,
+    "inspectionFailMinimum": 50
   },
   "inspection": {
     "gasCertHours": 48,
     "gasCertRenewalPrice": 100,
     "gasCertCheckSeconds": 600,
     "gasCertExpiredFactor": 0.5,
-    "gasCertReminderHours": 2
+    "gasCertReminderHours": 2,
+    "chancePerHour": 0.08,
+    "inspectorWalkSeconds": 10,
+    "passPayFactor": 1.25,
+    "passMinutes": 60,
+    "fixDeadlineMinutes": 30
   },
   "prestige": {
     "shareOnline": 0.6,
@@ -413,6 +430,23 @@
     "incomeTargetGrowth": 10,
     "k": 3,
     "reconstructionCostFactor": 20
+  },
+  "events": {
+    "tickHz": 1,
+    "meanIntervalHours": 3,
+    "minGapMinutes": 45,
+    "maxPerDistrict": 1,
+    "maxCityWide": 2,
+    "logSize": 20
+  },
+  "outage": {
+    "gasSafetyWindowSeconds": 600,
+    "tankWarmRateKPerMinute": 0.5,
+    "groundwaterLpsPer100M2": 0.2,
+    "floodPanelLevelM": 0.3,
+    "generatorStartSeconds": 5,
+    "generatorFuelPerKWs": 0.002,
+    "raisedPanelPriceFactor": 0.25
   },
   "demo": {
     "maxTier": 2,

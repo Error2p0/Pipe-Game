@@ -25,6 +25,9 @@ namespace HeadLoss.Core.Data
         public BuildingsDef Buildings { get; private set; } = new BuildingsDef();
         public UpgradesDef Upgrades { get; private set; } = new UpgradesDef();
         public PrestigeDef Prestige { get; private set; } = new PrestigeDef();
+        /// <summary>Inspection kinds and the energy rating bands (<c>inspections.json</c>).</summary>
+        public InspectionsDef Inspections { get; private set; } = new InspectionsDef();
+        public IReadOnlyList<EventDef> Events => _events;
         public IReadOnlyList<FluidDef> Fluids => _fluids;
         /// <summary>Building network systems in display order (<c>networks.json</c>).</summary>
         public IReadOnlyList<NetworkDef> Networks => _networks;
@@ -47,6 +50,8 @@ namespace HeadLoss.Core.Data
 
         readonly List<FluidDef> _fluids = new List<FluidDef>();
         readonly List<NetworkDef> _networks = new List<NetworkDef>();
+        readonly List<EventDef> _events = new List<EventDef>();
+        readonly Dictionary<string, EventDef> _eventById = new Dictionary<string, EventDef>();
         readonly List<MaterialDef> _materials = new List<MaterialDef>();
         readonly List<PipeFamilyDef> _pipeFamilies = new List<PipeFamilyDef>();
         readonly List<FittingDef> _fittings = new List<FittingDef>();
@@ -90,6 +95,8 @@ namespace HeadLoss.Core.Data
             repo.Buildings = Parse<BuildingsDef>(source, "buildings.json");
             repo.Upgrades = Parse<UpgradesDef>(source, "upgrades.json");
             repo.Prestige = Parse<PrestigeDef>(source, "prestige.json");
+            repo.Inspections = Parse<InspectionsDef>(source, "inspections.json");
+            AddAll(repo, Parse<List<EventDef>>(source, "events.json"), repo._events, repo._eventById, e => e.Id, "events.json");
             foreach (BuildingTypeDef t in repo.Buildings.Types)
                 if (!repo._buildingTypeById.ContainsKey(t.Id)) repo._buildingTypeById[t.Id] = t;
                 else repo._loadIssues.Add($"buildings.json: duplicate building type '{t.Id}'");
@@ -188,6 +195,8 @@ namespace HeadLoss.Core.Data
         public BuildingLayoutDef? FindHandmadeBuilding(string id) => _handmadeById.TryGetValue(id, out var v) ? v : null;
 
         public FluidDef Fluid(string id) => FindFluid(id) ?? throw new KeyNotFoundException($"Unknown fluid '{id}'");
+
+        public EventDef? FindEvent(string id) => _eventById.TryGetValue(id, out var v) ? v : null;
 
         public NetworkDef? FindNetwork(string id) => _networkById.TryGetValue(id, out var v) ? v : null;
         public NetworkDef Network(string id) => FindNetwork(id) ?? throw new KeyNotFoundException($"Unknown network '{id}'");

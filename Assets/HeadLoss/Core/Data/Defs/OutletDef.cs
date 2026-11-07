@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace HeadLoss.Core.Data.Defs
 {
-    /// <summary>Entry in <c>outlets.json</c>.</summary>
+    /// <summary>Entry in <c>outlets.json</c>. <c>fluid</c> names the network the outlet is on (<c>networks.json</c>).</summary>
     public sealed class OutletDef
     {
         public string Id = "";
@@ -10,6 +10,11 @@ namespace HeadLoss.Core.Data.Defs
         public string Fluid = "";
         /// <summary>flow, pressure or heat.</summary>
         public string Measured = "";
+        /// <summary>
+        /// Heat outlets: heating or cooling. Their tier values are factors on the room's load at the design outside temperature
+        /// (<c>13-balancing.md</c> §Outlets: room load ×1.0 / 1.2 / 1.6); the generator writes the watts into each placement.
+        /// </summary>
+        public string LoadBased = "";
         /// <summary>Display unit of min / ideal / max (m3/h, bar, mbar, W).</summary>
         public string Unit = "";
         public string CodeMaxReason = "";

@@ -33,6 +33,8 @@ namespace HeadLoss.Core.Data.Defs
         public FinesDef Fines = new FinesDef();
         public InspectionDef Inspection = new InspectionDef();
         public PrestigeBalancingDef Prestige = new PrestigeBalancingDef();
+        public EventsBalancingDef Events = new EventsBalancingDef();
+        public OutageDef Outage = new OutageDef();
         public DemoDef Demo = new DemoDef();
     }
 
@@ -69,6 +71,8 @@ namespace HeadLoss.Core.Data.Defs
         public double SparkFreeFactor;
         /// <summary>The least a spark-free upgrade costs, $ (the pre-placed panel is otherwise free).</summary>
         public double SparkFreeMinPrice;
+        /// <summary>Leak every gas fitting has all the time, m³/s (<c>10-events.md</c> §Power outage cascade).</summary>
+        public double BackgroundLeakPerFitting;
     }
 
     /// <summary>One-off fines (<c>13-balancing.md</c> §Failures).</summary>
@@ -82,6 +86,10 @@ namespace HeadLoss.Core.Data.Defs
         public double NeighbourGrossHours;
         /// <summary>Damaged neighbour at least this, $ (× its tier factor).</summary>
         public double NeighbourMinimum;
+        /// <summary>Failed inspection: this many minutes of the building's gross income, min.</summary>
+        public double InspectionFailGrossMinutes;
+        /// <summary>Failed inspection at least this, $ (× tier factor).</summary>
+        public double InspectionFailMinimum;
     }
 
     /// <summary>Periodic checks (<c>10-events.md</c> §Inspections). Phase 5: the gas safety certificate.</summary>
@@ -97,6 +105,52 @@ namespace HeadLoss.Core.Data.Defs
         public double GasCertExpiredFactor;
         /// <summary>A reminder appears this long before expiry, h.</summary>
         public double GasCertReminderHours;
+        /// <summary>Random inspection: chance per hour for each online building.</summary>
+        public double ChancePerHour;
+        /// <summary>The inspector's walk to the building, s (cosmetic).</summary>
+        public double InspectorWalkSeconds;
+        /// <summary>Pay multiplier after a pass.</summary>
+        public double PassPayFactor;
+        /// <summary>How long the pass multiplier lasts, min.</summary>
+        public double PassMinutes;
+        /// <summary>Time to fix after a fail before the second fine, min (pauses offline).</summary>
+        public double FixDeadlineMinutes;
+    }
+
+    /// <summary>The event scheduler (<c>10-events.md</c> §Event scheduler).</summary>
+    public sealed class EventsBalancingDef
+    {
+        /// <summary>Scheduler rate, Hz.</summary>
+        public double TickHz;
+        /// <summary>Mean time between events (exponential), h.</summary>
+        public double MeanIntervalHours;
+        /// <summary>Least time between two event starts, min.</summary>
+        public double MinGapMinutes;
+        /// <summary>Active events per district at most.</summary>
+        public int MaxPerDistrict;
+        /// <summary>Active city-wide events at most.</summary>
+        public int MaxCityWide;
+        /// <summary>Events kept in the log.</summary>
+        public int LogSize;
+    }
+
+    /// <summary>The power outage cascade and its protections (<c>10-events.md</c> §Power outage cascade).</summary>
+    public sealed class OutageDef
+    {
+        /// <summary>Gas buildings without ventilation: time before the leak escalation starts at the alarm stage, s.</summary>
+        public double GasSafetyWindowSeconds;
+        /// <summary>A gas storage tank without its chiller warms this fast, K/min.</summary>
+        public double TankWarmRateKPerMinute;
+        /// <summary>Groundwater entering a basement, L/s per 100 m² of basement.</summary>
+        public double GroundwaterLpsPer100M2;
+        /// <summary>Water level that floods a basement panel that is not raised, m.</summary>
+        public double FloodPanelLevelM;
+        /// <summary>A backup generator starts this long after power is lost, s.</summary>
+        public double GeneratorStartSeconds;
+        /// <summary>Generator fuel, $ per kW·s.</summary>
+        public double GeneratorFuelPerKWs;
+        /// <summary>A raised panel costs this share more than the panel.</summary>
+        public double RaisedPanelPriceFactor;
     }
 
     /// <summary>The prestige milestone and reward (<c>03-city.md</c> §Prestige).</summary>
@@ -266,6 +320,20 @@ namespace HeadLoss.Core.Data.Defs
         public double WindFactorMax;
         /// <summary>Period of the wind's slow swing, h.</summary>
         public double WindPeriodHours;
+        /// <summary>Design outside temperature for room heating loads, °C (<c>13-balancing.md</c> §Outlets; climate modifiers shift it).</summary>
+        public double DesignHeatingC;
+        /// <summary>Design outside temperature for room cooling loads, °C.</summary>
+        public double DesignCoolingC;
+        /// <summary>Indoor temperature heat outlets are rated at and heating loads are figured for, °C.</summary>
+        public double HeatingSetpointC;
+        /// <summary>Indoor temperature cooling terminals are rated at and cooling loads are figured for, °C.</summary>
+        public double CoolingSetpointC;
+        /// <summary>Relative humidity per room type, 0–1 ("other" for the rest; the condensation code, <c>05-simulation.md</c> §4).</summary>
+        public Dictionary<string, double> RoomHumidity = new Dictionary<string, double>();
+
+        /// <summary>Relative humidity of a room type, 0–1.</summary>
+        public double HumidityOf(string roomType) =>
+            RoomHumidity.TryGetValue(roomType, out double h) ? h : RoomHumidity.TryGetValue("other", out double o) ? o : 0.45;
     }
 
     /// <summary>Room grid (<c>05-simulation.md</c> §3, <c>13-balancing.md</c> §Room grid).</summary>

@@ -1,0 +1,16 @@
+{
+  "kinds": [
+    {"id": "random-inspection", "displayName": "Inspection", "checks": "An inspector checks the building's codes and its operating limits."},
+    {"id": "energy-rating", "displayName": "Energy rating", "checks": "Electricity used against a clean reference layout delivering the same."},
+    {"id": "gas-safety-certificate", "displayName": "Gas safety certificate", "checks": "No gas leaks, no gas layout violations, stress on every gas pipe below 0.6."}
+  ],
+  "energyRating": [
+    {"grade": "A", "maxScore": 0.6, "payFactor": 1.15},
+    {"grade": "B", "maxScore": 0.8, "payFactor": 1.08},
+    {"grade": "C", "maxScore": 1.0, "payFactor": 1.00},
+    {"grade": "D", "maxScore": 1.2, "payFactor": 0.95},
+    {"grade": "E", "maxScore": 1.5, "payFactor": 0.90},
+    {"grade": "F", "maxScore": 2.0, "payFactor": 0.85},
+    {"grade": "G", "maxScore": 0, "payFactor": 0.80}
+  ]
+}

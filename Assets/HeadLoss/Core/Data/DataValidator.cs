@@ -40,6 +40,9 @@ namespace HeadLoss.Core.Data
             ValidateBuildings(data, errors);
             ValidateUpgrades(data, errors);
             ValidatePrestige(data, errors);
+            ValidateEvents(data, errors);
+            ValidateInspections(data, errors);
+            ValidateThermal(data, errors);
             if (data.Balancing.Progression.UnlockOnline.Count != 4) errors.Add("balancing.json: progression.unlockOnline needs 4 entries (tier 1→2 … 4→5)");
             return errors;
         }
@@ -489,7 +492,104 @@ namespace HeadLoss.Core.Data
                     if (r.Max != 0 && r.Max < r.Ideal) errors.Add($"{w} tier {kv.Key}: code max below ideal");
                     if (o.Measured == "pressure" && !(r.DesignFlowLps > 0)) errors.Add($"{w} tier {kv.Key}: pressure outlets need designFlowLps");
                 }
+                // Heat outlets are rated in watts against the room's load: their tier values are factors on it.
+                bool heat = o.Measured == "heat";
+                if (heat != (o.Unit == "W")) errors.Add($"{w}: heat outlets and only they are measured in W");
+                if (heat != (o.LoadBased == "heating" || o.LoadBased == "cooling")) errors.Add($"{w}: heat outlets need loadBased heating or cooling (and others none)");
             }
+        }
+
+        static readonly HashSet<string> EventScopes = new HashSet<string> { "city", "district", "facility", "building" };
+        static readonly HashSet<string> EventRequires = new HashSet<string> { "heating", "cooling", "power", "online-building" };
+        static readonly HashSet<string> RewardRules = new HashSet<string> { "", "keep-up", "adapt" };
+
+        static void ValidateEvents(DataRepository data, List<string> errors)
+        {
+            EventsBalancingDef b = data.Balancing.Events;
+            Positive("balancing.json events.tickHz", b.TickHz, errors);
+            Positive("balancing.json events.meanIntervalHours", b.MeanIntervalHours, errors);
+            if (b.MinGapMinutes < 0) errors.Add("balancing.json events.minGapMinutes must be ≥ 0");
+            if (b.MaxPerDistrict < 1 || b.MaxCityWide < 1 || b.LogSize < 1) errors.Add("balancing.json events: maxPerDistrict, maxCityWide and logSize must be ≥ 1");
+            if (data.Events.Count == 0) errors.Add("events.json: no events");
+            foreach (EventDef e in data.Events)
+            {
+                string w = $"events.json '{e.Id}'";
+                Id("events.json", e.Id, errors);
+                if (string.IsNullOrWhiteSpace(e.DisplayName) || string.IsNullOrWhiteSpace(e.Banner)) errors.Add($"{w}: displayName and banner are required");
+                if (!EventScopes.Contains(e.Scope)) errors.Add($"{w}: scope '{e.Scope}' unknown");
+                Positive(w + " weight", e.Weight, errors);
+                if (!(e.MinMinutes > 0 && e.MaxMinutes >= e.MinMinutes)) errors.Add($"{w}: need 0 < minMinutes ≤ maxMinutes");
+                foreach (string r in e.Requires) if (!EventRequires.Contains(r)) errors.Add($"{w}: requires '{r}' unknown");
+                foreach (string o in e.RequirementOutlets) if (data.FindOutlet(o) == null) errors.Add($"{w}: requirement outlet '{o}' unknown");
+                foreach (string f in e.Facilities) if (!data.City.Facilities.Exists(x => x.Id == f)) errors.Add($"{w}: facility '{f}' unknown");
+                foreach (string k in e.DistrictKinds) if (!data.City.Districts.Weights.ContainsKey(k)) errors.Add($"{w}: district kind '{k}' unknown");
+                if (e.Facilities.Count > 0 && e.Scope != "facility") errors.Add($"{w}: facilities need facility scope");
+                if (e.DistrictKinds.Count > 0 && e.Scope != "district") errors.Add($"{w}: districtKinds need district scope");
+                if (e.PowerOutage && e.Scope != "district") errors.Add($"{w}: a power outage hits a district");
+                Positive(w + " solarFactor", e.SolarFactor, errors);
+                Positive(w + " requirementFactor", e.RequirementFactor, errors);
+                Positive(w + " facilityFactor", e.FacilityFactor, errors);
+                Positive(w + " rewardPayFactor", e.RewardPayFactor, errors);
+                if (e.ChangeShareMax > 0 && !(e.ChangeShareMin > 0 && e.ChangeShareMax >= e.ChangeShareMin && e.ChangeShareMax <= 1))
+                    errors.Add($"{w}: need 0 < changeShareMin ≤ changeShareMax ≤ 1");
+                if (!RewardRules.Contains(e.RewardRule)) errors.Add($"{w}: rewardRule '{e.RewardRule}' unknown");
+                if ((e.RewardPayFactor != 1) != (e.RewardRule.Length > 0)) errors.Add($"{w}: a reward needs a rewardRule and a rewardPayFactor");
+                if (e.RewardRule == "adapt" && !(e.AdaptMinutes > 0 && e.RewardMinutes > 0)) errors.Add($"{w}: the adapt rule needs adaptMinutes and rewardMinutes");
+            }
+        }
+
+        static void ValidateInspections(DataRepository data, List<string> errors)
+        {
+            InspectionDef i = data.Balancing.Inspection;
+            if (!(i.ChancePerHour > 0 && i.ChancePerHour < 1)) errors.Add("balancing.json inspection.chancePerHour must be in (0, 1)");
+            Positive("balancing.json inspection.passPayFactor", i.PassPayFactor, errors);
+            Positive("balancing.json inspection.passMinutes", i.PassMinutes, errors);
+            Positive("balancing.json inspection.fixDeadlineMinutes", i.FixDeadlineMinutes, errors);
+            if (i.InspectorWalkSeconds < 0) errors.Add("balancing.json inspection.inspectorWalkSeconds must be ≥ 0");
+            Positive("balancing.json fines.inspectionFailGrossMinutes", data.Balancing.Fines.InspectionFailGrossMinutes, errors);
+            Positive("balancing.json fines.inspectionFailMinimum", data.Balancing.Fines.InspectionFailMinimum, errors);
+            var kinds = new HashSet<string>();
+            foreach (InspectionKindDef k in data.Inspections.Kinds)
+            {
+                Id("inspections.json", k.Id, errors);
+                if (!kinds.Add(k.Id)) errors.Add($"inspections.json: duplicate kind '{k.Id}'");
+                if (string.IsNullOrWhiteSpace(k.DisplayName) || string.IsNullOrWhiteSpace(k.Checks)) errors.Add($"inspections.json '{k.Id}': displayName and checks are required");
+            }
+            List<RatingBandDef> bands = data.Inspections.EnergyRating;
+            if (bands.Count == 0) errors.Add("inspections.json: no energy rating bands");
+            for (int n = 0; n < bands.Count; n++)
+            {
+                RatingBandDef r = bands[n];
+                string w = $"inspections.json energy rating '{r.Grade}'";
+                if (string.IsNullOrWhiteSpace(r.Grade)) errors.Add("inspections.json: an energy rating band has no grade");
+                Positive(w + " payFactor", r.PayFactor, errors);
+                bool last = n == bands.Count - 1;
+                if (last != (r.MaxScore == 0)) errors.Add($"{w}: only the last band has no upper limit (maxScore 0)");
+                if (!last && n > 0 && !(r.MaxScore > bands[n - 1].MaxScore)) errors.Add($"{w}: maxScore must rise band by band");
+                if (n > 0 && !(r.PayFactor < bands[n - 1].PayFactor)) errors.Add($"{w}: payFactor must fall band by band");
+            }
+        }
+
+        static void ValidateThermal(DataRepository data, List<string> errors)
+        {
+            ClimateDef c = data.Balancing.Climate;
+            if (!(c.DesignHeatingC < c.HeatingSetpointC)) errors.Add("balancing.json climate: designHeatingC must be below heatingSetpointC");
+            if (!(c.DesignCoolingC > c.CoolingSetpointC)) errors.Add("balancing.json climate: designCoolingC must be above coolingSetpointC");
+            if (!c.RoomHumidity.ContainsKey("other")) errors.Add("balancing.json climate.roomHumidity needs an 'other' entry");
+            foreach (var kv in c.RoomHumidity)
+            {
+                if (kv.Key != "other" && data.FindRoomType(kv.Key) == null) errors.Add($"balancing.json climate.roomHumidity: room type '{kv.Key}' unknown");
+                if (!(kv.Value > 0 && kv.Value < 1)) errors.Add($"balancing.json climate.roomHumidity '{kv.Key}' must be in (0, 1)");
+            }
+            OutageDef o = data.Balancing.Outage;
+            Positive("balancing.json outage.gasSafetyWindowSeconds", o.GasSafetyWindowSeconds, errors);
+            Positive("balancing.json outage.tankWarmRateKPerMinute", o.TankWarmRateKPerMinute, errors);
+            Positive("balancing.json outage.groundwaterLpsPer100M2", o.GroundwaterLpsPer100M2, errors);
+            Positive("balancing.json outage.floodPanelLevelM", o.FloodPanelLevelM, errors);
+            Positive("balancing.json outage.generatorStartSeconds", o.GeneratorStartSeconds, errors);
+            Positive("balancing.json outage.generatorFuelPerKWs", o.GeneratorFuelPerKWs, errors);
+            Positive("balancing.json outage.raisedPanelPriceFactor", o.RaisedPanelPriceFactor, errors);
+            Positive("balancing.json gas.backgroundLeakPerFitting", data.Balancing.Gas.BackgroundLeakPerFitting, errors);
         }
 
         static readonly HashSet<string> CodeKinds = new HashSet<string> { "layout", "operating", "city" };

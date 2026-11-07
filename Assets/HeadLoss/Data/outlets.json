@@ -131,5 +131,58 @@
         "designFlowLps": 0.15
       }
     }
+  },
+  {
+    "id": "radiator",
+    "displayName": "Radiator",
+    "fluid": "heating-water",
+    "measured": "heat",
+    "unit": "W",
+    "loadBased": "heating",
+    "codeMaxReason": "Overheating",
+    "payFactor": 1.5,
+    "grille": "",
+    "grilleFaceAreaM2": 0,
+    "tiers": {
+      "3": {
+        "min": 1.0,
+        "ideal": 1.2,
+        "max": 1.6
+      },
+      "4": {
+        "min": 1.0,
+        "ideal": 1.2,
+        "max": 1.6
+      },
+      "5": {
+        "min": 1.0,
+        "ideal": 1.2,
+        "max": 1.6
+      }
+    }
+  },
+  {
+    "id": "cooling-terminal",
+    "displayName": "Cooling terminal",
+    "fluid": "air",
+    "measured": "heat",
+    "unit": "W",
+    "loadBased": "cooling",
+    "codeMaxReason": "Overcooling",
+    "payFactor": 1.8,
+    "grille": "vent-grille",
+    "grilleFaceAreaM2": 0.04,
+    "tiers": {
+      "4": {
+        "min": 1.0,
+        "ideal": 1.2,
+        "max": 1.6
+      },
+      "5": {
+        "min": 1.0,
+        "ideal": 1.2,
+        "max": 1.6
+      }
+    }
   }
 ]

@@ -1,0 +1,37 @@
+[
+  {
+    "id": "heatwave", "displayName": "Heatwave", "banner": "A heatwave is on: cooling demand is up. Buildings that keep cool earn more while it lasts.",
+    "scope": "city", "weight": 1, "minMinutes": 60, "maxMinutes": 120, "requires": ["cooling"],
+    "outsideTemperatureShiftK": 8, "solarFactor": 1.3, "requirementFactor": 1.4, "requirementOutlets": ["cooling-terminal"],
+    "rewardPayFactor": 1.5, "rewardRule": "keep-up"
+  },
+  {
+    "id": "cold-snap", "displayName": "Cold snap", "banner": "A cold snap has arrived: heating demand is up. Buildings that keep warm earn more while it lasts.",
+    "scope": "city", "weight": 1, "minMinutes": 60, "maxMinutes": 120, "requires": ["heating"],
+    "outsideTemperatureShiftK": -12, "requirementFactor": 1.4, "requirementOutlets": ["radiator"],
+    "rewardPayFactor": 1.5, "rewardRule": "keep-up"
+  },
+  {
+    "id": "plant-maintenance", "displayName": "Plant maintenance", "banner": "The {facility} is under maintenance and runs at reduced output.",
+    "scope": "facility", "weight": 1, "minMinutes": 120, "maxMinutes": 120, "requires": [],
+    "facilities": ["water-treatment-plant", "gas-receiving-station", "district-heating-plant", "industrial-gas-depot"],
+    "facilityFactor": 0.6
+  },
+  {
+    "id": "power-outage", "displayName": "Power outage", "banner": "A substation has failed: {district} has no power for a while.",
+    "scope": "district", "weight": 1, "minMinutes": 15, "maxMinutes": 45, "requires": ["power"],
+    "powerOutage": true
+  },
+  {
+    "id": "new-tenant", "displayName": "New tenant", "banner": "A new tenant has moved into {building}: some of its requirements have changed.",
+    "scope": "building", "weight": 1, "minMinutes": 1440, "maxMinutes": 1440, "requires": ["online-building"],
+    "changeShareMin": 0.3, "changeShareMax": 0.6,
+    "rewardPayFactor": 1.5, "rewardRule": "adapt", "adaptMinutes": 30, "rewardMinutes": 120
+  },
+  {
+    "id": "city-festival", "displayName": "City festival", "banner": "A festival in {district} raises demand. Buildings that keep up are paid double.",
+    "scope": "district", "weight": 1, "minMinutes": 45, "maxMinutes": 90, "requires": [], "districtKinds": ["commercial", "residential"],
+    "requirementFactor": 1.3, "minimumOnly": true,
+    "rewardPayFactor": 2, "rewardRule": "keep-up"
+  }
+]
