@@ -85,8 +85,43 @@ namespace HeadLoss.Game.Buildings
         }
 
         /// <summary>A layout with room types and wall rules from the data files.</summary>
-        public static BuildingLayout From(HeadLoss.Core.Data.DataRepository data, BuildingLayoutDef def) =>
-            new BuildingLayout(def, RoomTypesFrom(data.Buildings), data.Balancing.Building.CoreDrillTier > 0 ? data.Balancing.Building.CoreDrillTier : int.MaxValue);
+        public static BuildingLayout From(HeadLoss.Core.Data.DataRepository data, BuildingLayoutDef def)
+        {
+            var layout = new BuildingLayout(def, RoomTypesFrom(data.Buildings), data.Balancing.Building.CoreDrillTier > 0 ? data.Balancing.Building.CoreDrillTier : int.MaxValue);
+            layout._outletNetwork = new Dictionary<string, string>();
+            foreach (OutletDef o in data.Outlets) layout._outletNetwork[o.Id] = o.Fluid;
+            layout._utilityNetwork = new Dictionary<string, string>();
+            foreach (NetworkDef n in data.Networks) if (n.Utility.Length > 0) layout._utilityNetwork[n.Utility] = n.Id;
+            return layout;
+        }
+
+        /// <summary>Outlet type → network id, and opening utility → network id, from the data (null for layouts built without data).</summary>
+        Dictionary<string, string>? _outletNetwork, _utilityNetwork;
+
+        /// <summary>The network an outlet is on (<c>outlets.json</c>).</summary>
+        public string NetworkOf(OutletPlacementDef o) =>
+            _outletNetwork != null && _outletNetwork.TryGetValue(o.Type, out string? n) ? n : BuildingState.OutletFluid(o.Type);
+
+        /// <summary>The network an entry opening starts ("" for power).</summary>
+        public string NetworkOf(EntryOpeningDef o) =>
+            _utilityNetwork != null ? (_utilityNetwork.TryGetValue(o.Utility, out string? n) ? n : "") : BuildingState.UtilityFluid(o.Utility);
+
+        /// <summary>The networks this layout has outlets or openings for, each once.</summary>
+        public List<string> NetworkIds()
+        {
+            var ids = new List<string>();
+            foreach (EntryOpeningDef o in _openings)
+            {
+                string n = NetworkOf(o);
+                if (n.Length > 0 && !ids.Contains(n)) ids.Add(n);
+            }
+            foreach (OutletPlacementDef o in _outlets)
+            {
+                string n = NetworkOf(o);
+                if (!ids.Contains(n)) ids.Add(n);
+            }
+            return ids;
+        }
 
         /// <param name="roomTypes">Room type flags by id (null = the built-in defaults: shaft, stairwell, protected-room, electrical-room).</param>
         /// <param name="coreDrillTier">Lowest tier that may core-drill interior walls (default: never).</param>

@@ -73,11 +73,31 @@ namespace HeadLoss.Core
         /// <param name="pa">Pa.</param>
         public static string FormatMbar(double pa) => Math.Abs(pa) >= PaPerBar ? FormatBar(pa) : Number(pa / PaPerMbar, 1) + " mbar";
 
-        /// <summary>A pressure in the unit of a fluid: Pa for air, mbar for gas, bar for liquids.</summary>
-        public static string FormatPressure(double pa, string fluid) => fluid == "air" ? FormatPa(pa) : fluid == "natural-gas" ? FormatMbar(pa) : FormatBar(pa);
+        /// <summary>A pressure in the unit of a network without its data (tests, tools): Pa for air, mbar for fuel gas, bar otherwise. The UI uses <see cref="FormatPressureIn"/>.</summary>
+        public static string FormatPressure(double pa, string fluid) =>
+            fluid == "air" || fluid == "air-exhaust" ? FormatPa(pa) : fluid == "natural-gas" || fluid == "propane" ? FormatMbar(pa) : FormatBar(pa);
 
-        /// <summary>A flow in the unit of a fluid: m³/h for air and gas, L/s for liquids.</summary>
-        public static string FormatFlow(double m3s, string fluid) => fluid == "air" || fluid == "natural-gas" ? FormatAirFlow(m3s) : FormatWaterFlow(m3s);
+        /// <summary>A flow in the unit of a network without its data (tests, tools): m³/h for air and fuel gas, L/s otherwise. The UI uses <see cref="FormatFlowIn"/>.</summary>
+        public static string FormatFlow(double m3s, string fluid) =>
+            fluid == "air" || fluid == "air-exhaust" || fluid == "natural-gas" || fluid == "propane" ? FormatAirFlow(m3s) : FormatWaterFlow(m3s);
+
+        /// <summary>A pressure in a display unit (Pa, mbar or bar; <c>networks.json → pressureUnit</c>).</summary>
+        /// <param name="pa">Pressure, Pa.</param>
+        public static string FormatPressureIn(double pa, string unit) => unit switch
+        {
+            "Pa" => FormatPa(pa),
+            "mbar" => FormatMbar(pa),
+            _ => FormatBar(pa),
+        };
+
+        /// <summary>A flow in a display unit (m3/h, L/s or L/min; <c>networks.json → flowUnit</c>).</summary>
+        /// <param name="m3s">Flow, m³/s.</param>
+        public static string FormatFlowIn(double m3s, string unit) => unit switch
+        {
+            "m3/h" => FormatAirFlow(m3s),
+            "L/min" => Number(m3s * 60000, Math.Abs(m3s) < 1e-4 ? 2 : 1) + " L/min",
+            _ => FormatWaterFlow(m3s),
+        };
 
         /// <summary>A calm duration: "45 s", "12 min", "3.5 h", "2 days".</summary>
         /// <param name="seconds">s.</param>

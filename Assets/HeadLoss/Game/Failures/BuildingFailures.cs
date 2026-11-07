@@ -275,9 +275,9 @@ namespace HeadLoss.Game.Failures
         /// <summary>Blast damage on this building (<c>08-failures.md</c>): each segment bursts and each device goes offline with probability = damage; a gas building starts a leak with probability = damage.</summary>
         public void ApplyBlastDamage(double damage, BuildingState committed, double now, string fluidGas = BuildingState.GasFluid)
         {
-            foreach (string fluid in BuildingState.FluidIds)
+            foreach (DuctNetworkState net in committed.Networks)
             {
-                DuctNetworkState net = committed.Net(fluid);
+                string fluid = net.FluidId;
                 foreach (DuctSegment s in net.Segments)
                 {
                     if (Roll() >= damage) continue;
@@ -440,7 +440,7 @@ namespace HeadLoss.Game.Failures
         public Dictionary<string, HashSet<int>> AllBurstSegments(BuildingState state)
         {
             var d = new Dictionary<string, HashSet<int>>();
-            foreach (string f in BuildingState.FluidIds) d[f] = BurstSegments(f, state.Net(f));
+            foreach (DuctNetworkState net in state.Networks) d[net.FluidId] = BurstSegments(net.FluidId, net);
             return d;
         }
 

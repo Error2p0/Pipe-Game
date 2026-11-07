@@ -49,7 +49,7 @@ namespace HeadLoss.Unity.UI
             }
             foreach (var kv in byFluid)
             {
-                FluidDef fluid = data.Fluid(kv.Key);
+                NetworkDef fluid = data.Network(kv.Key);
                 UiKit.Text(scroll, $"{fluid.DisplayName} · {kv.Value.Count} outlets", "hl-section");
                 foreach (OutletPlacementDef o in kv.Value)
                 {

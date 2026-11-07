@@ -28,6 +28,7 @@ namespace HeadLoss.Core.Data
             ValidateGame(data, errors);
             ValidateBalancing(data, errors);
             ValidateFluids(data, errors);
+            ValidateNetworks(data, errors);
             ValidateMaterials(data, errors);
             ValidatePipes(data, errors);
             ValidateFittings(data, errors);
@@ -216,6 +217,49 @@ namespace HeadLoss.Core.Data
                 if (!string.IsNullOrEmpty(fl.Table) && data.FluidTables.TryGetValue(fl.Id, out FluidTableDef table))
                     ValidateTable(data, fl, table, errors);
             }
+        }
+
+        static readonly HashSet<string> Conduits = new HashSet<string> { "duct", "pipe" };
+        static readonly HashSet<string> PressureUnits = new HashSet<string> { "Pa", "mbar", "bar" };
+        static readonly HashSet<string> FlowUnits = new HashSet<string> { "m3/h", "L/s", "L/min" };
+
+        /// <summary>An entry opening utility: one that starts a network, or power.</summary>
+        static bool IsUtility(DataRepository data, string utility) => utility == "power" || (utility.Length > 0 && data.NetworkForUtility(utility).Length > 0);
+
+        static void ValidateNetworks(DataRepository data, List<string> errors)
+        {
+            if (data.Networks.Count == 0) errors.Add("networks.json: no networks");
+            var utilities = new HashSet<string>();
+            foreach (NetworkDef n in data.Networks)
+            {
+                string w = $"networks.json '{n.Id}'";
+                Id("networks.json", n.Id, errors);
+                FluidDef? fl = data.FindFluid(n.Fluid);
+                if (fl == null) errors.Add($"{w}: fluid '{n.Fluid}' unknown");
+                if (fl != null && fl.Id != n.Id && data.FindNetwork(fl.Id) == null) errors.Add($"{w}: fluid '{fl.Id}' has no network of its own id");
+                if (string.IsNullOrWhiteSpace(n.DisplayName) || string.IsNullOrWhiteSpace(n.ShortName)) errors.Add($"{w}: displayName and shortName are required");
+                if (!Conduits.Contains(n.Conduit)) errors.Add($"{w}: conduit '{n.Conduit}' unknown");
+                if (!PressureUnits.Contains(n.PressureUnit)) errors.Add($"{w}: pressureUnit '{n.PressureUnit}' unknown");
+                if (!FlowUnits.Contains(n.FlowUnit)) errors.Add($"{w}: flowUnit '{n.FlowUnit}' unknown");
+                Tier(w, n.Tier, errors);
+                if (n.Utility.Length > 0 && !utilities.Add(n.Utility)) errors.Add($"{w}: utility '{n.Utility}' starts two networks");
+                if (n.Utility == "power") errors.Add($"{w}: utility 'power' has no network");
+                if (n.Colour.Length > 0) Colour(w + " colour", n.Colour, errors);
+                if (n.LinePattern.Length > 0 && !LinePatterns.Contains(n.LinePattern)) errors.Add($"{w}: linePattern '{n.LinePattern}' unknown");
+                MaterialDef? m = data.FindMaterial(n.DefaultMaterial);
+                if (m == null) errors.Add($"{w}: defaultMaterial '{n.DefaultMaterial}' unknown");
+                else if (!m.Fluids.Contains(n.Fluid)) errors.Add($"{w}: defaultMaterial '{m.Id}' does not carry {n.Fluid}");
+                else if ((m.Kind == "duct") != n.IsDuct) errors.Add($"{w}: defaultMaterial '{m.Id}' is a {m.Kind}, the network uses {n.Conduit}s");
+                if (m != null && !SizeExists(data, m.Kind, n.DefaultSizeMm)) errors.Add($"{w}: defaultSizeMm {n.DefaultSizeMm} is not a {m.Kind} size");
+            }
+        }
+
+        static bool SizeExists(DataRepository data, string kind, double mm)
+        {
+            foreach (PipeFamilyDef f in data.PipeFamilies)
+                if (f.Kind == kind)
+                    foreach (PipeSizeDef s in f.Sizes) if (s.DiameterMm == mm) return true;
+            return false;
         }
 
         static void ValidateTable(DataRepository data, FluidDef fluid, FluidTableDef t, List<string> errors)
@@ -427,7 +471,7 @@ namespace HeadLoss.Core.Data
             {
                 string w = $"outlets.json '{o.Id}'";
                 Id("outlets.json", o.Id, errors);
-                if (data.FindFluid(o.Fluid) == null) errors.Add($"{w}: fluid '{o.Fluid}' unknown");
+                if (data.FindNetwork(o.Fluid) == null) errors.Add($"{w}: network '{o.Fluid}' unknown (outlets name the network they are on)");
                 if (!Measured.Contains(o.Measured)) errors.Add($"{w}: measured '{o.Measured}' unknown");
                 if (!OutletUnits.Contains(o.Unit)) errors.Add($"{w}: unit '{o.Unit}' unknown");
                 Positive(w + " payFactor", o.PayFactor, errors);
@@ -492,7 +536,7 @@ namespace HeadLoss.Core.Data
                 {
                     Id(w + " entryOpenings", o.Id, errors);
                     openingIds.Add(o.Id);
-                    if (!Utilities.Contains(o.Utility)) errors.Add($"{w}: opening '{o.Id}' utility '{o.Utility}' unknown");
+                    if (!IsUtility(data, o.Utility)) errors.Add($"{w}: opening '{o.Id}' utility '{o.Utility}' unknown");
                     if (!Facings.Contains(o.Facing)) errors.Add($"{w}: opening '{o.Id}' facing '{o.Facing}' unknown");
                     // On an outside wall: the tile is in a room and the one beyond its facing wall is not (L and U shapes
                     // have outside walls inside the bounding box).

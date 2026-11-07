@@ -25,7 +25,7 @@ namespace HeadLoss.Game.Networks
     /// <summary>A building network ready to solve, plus the maps back to the player's layout.</summary>
     public sealed class CompiledNetwork
     {
-        /// <summary>Fluid id (air, water).</summary>
+        /// <summary>Network id (<c>networks.json</c>; the fluid id except for the air exhaust).</summary>
         public string Fluid = "air";
         public NetworkGraph Graph = new NetworkGraph();
         /// <summary>Duct segment id → graph link index.</summary>
@@ -98,6 +98,16 @@ namespace HeadLoss.Game.Networks
         public bool GasConnected;
         /// <summary>Gas: connection pressure from the city solve, Pa gauge.</summary>
         public double GasPressurePa;
+        /// <summary>City connections of the other networks (propane, special gases, …) by network id: connected, Pa gauge.</summary>
+        public IReadOnlyDictionary<string, (bool connected, double pressurePa)>? Supplies;
+
+        /// <summary>A network's city connection: connected and its pressure, Pa gauge.</summary>
+        public (bool connected, double pressurePa) SupplyFor(string network)
+        {
+            if (network == "water") return (WaterConnected, WaterPressurePa);
+            if (network == Buildings.BuildingState.GasFluid) return (GasConnected, GasPressurePa);
+            return Supplies != null && Supplies.TryGetValue(network, out var s) ? s : (false, 0);
+        }
         /// <summary>Gas leaks to open: orifice links into the room (<c>05-simulation.md</c> §1.1).</summary>
         public IReadOnlyList<Failures.LeakState>? Leaks;
         /// <summary>Automatic shutoff valves closed now (by the alarm or on power loss), tiles.</summary>
@@ -127,8 +137,12 @@ namespace HeadLoss.Game.Networks
 
         public static CompiledNetwork Compile(BuildingLayout layout, BuildingState state, DataRepository data, string fluid, CompileOptions o)
         {
-            bool water = fluid != "air";
-            bool gas = fluid == BuildingState.GasFluid;
+            // "water" below means any piped network (liquid or gas): taps and gas outlets are demand nodes, the city connection a
+            // fixed pressure. Ducts (air supply and exhaust) have fans from the outside and vents into rooms.
+            NetworkDef? def0 = data.FindNetwork(fluid);
+            FluidDef fluidDef = data.FluidOf(fluid);
+            bool water = def0 != null ? !def0.IsDuct : fluid != "air";
+            bool gas = water && fluidDef.IdealGas;
             double tWater = Units.CToK(gas ? data.Balancing.Gas.SupplyTemperatureC : data.Balancing.Water.MainsTemperatureC);
             double SegT(int id) => water ? tWater : o.SegmentTemperatureK != null && o.SegmentTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
             double NodeT(int id) => water ? tWater : o.NodeTemperatureK != null && o.NodeTemperatureK.TryGetValue(id, out double t) ? t : o.AirTemperatureK;
@@ -218,10 +232,11 @@ namespace HeadLoss.Game.Networks
                 }
 
                 // Water and gas: city (fixed, connection pressure) → [pump or regulator] → connection → drop up to the ceiling pipe.
-                if (!(gas ? o.GasConnected : o.WaterConnected)) continue;
+                (bool connected, double supplyPa) = o.SupplyFor(fluid);
+                if (!connected) continue;
                 DuctSegment? first = FirstSegment(n);
                 double z = FloorLayer(n.Floor);
-                int city = g.AddFixed(gas ? o.GasPressurePa : o.WaterPressurePa, z, $"city-{n.AnchorId}");
+                int city = g.AddFixed(supplyPa, z, $"city-{n.AnchorId}");
                 c.SupplyNode = city;
                 int connection = city;
                 bool damaged = IsDamaged(o, Failures.DamageKeys.Opening(n.AnchorId));
@@ -387,7 +402,7 @@ namespace HeadLoss.Game.Networks
                     c.OutletNode[n.AnchorId] = tap;
                 }
                 // Dead ends on water pipes are capped: they carry no flow (D71).
-                if (gas && o.Leaks != null)
+                if (fluid == BuildingState.GasFluid && o.Leaks != null)
                 {
                     // A leak is an orifice to the room at its tile: Q = C_d·A·sqrt(2Δp/ρ), a power law with n = 0.5.
                     GasDef gd = data.Balancing.Gas;
@@ -408,7 +423,7 @@ namespace HeadLoss.Game.Networks
             AssignFittings(net, data, c, segLink, water);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
             if (c.SupplyNode >= 0) MarkIsolated(net, c);
-            if (water && c.SupplyNode >= 0) LoadSpin(c, gas ? o.GasPressurePa : o.WaterPressurePa);
+            if (water && c.SupplyNode >= 0) LoadSpin(c, o.SupplyFor(fluid).pressurePa);
             return c;
         }
 
@@ -420,7 +435,7 @@ namespace HeadLoss.Game.Networks
 
         /// <summary>A gas's density at atmospheric pressure, kg/m³ (leak orifices, the energy of a cloud).</summary>
         public static double IdealGasDensity(DataRepository data, string fluid, double temperatureK) =>
-            HeadLoss.Sim.Fluids.IdealGas.Density(data.Balancing.Physics.AtmosphericPressurePa, data.Fluid(fluid).MolarMass, temperatureK, data.Balancing.Physics.GasConstant);
+            HeadLoss.Sim.Fluids.IdealGas.Density(data.Balancing.Physics.AtmosphericPressurePa, data.FluidOf(fluid).MolarMass, temperatureK, data.Balancing.Physics.GasConstant);
 
         /// <summary>The graph node a leak at a tile opens from: the duct node there, or the end of the segment that covers it.</summary>
         static int LeakNode(DuctNetworkState net, TilePos tile, CompiledNetwork c)

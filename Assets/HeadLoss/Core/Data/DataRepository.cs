@@ -26,6 +26,8 @@ namespace HeadLoss.Core.Data
         public UpgradesDef Upgrades { get; private set; } = new UpgradesDef();
         public PrestigeDef Prestige { get; private set; } = new PrestigeDef();
         public IReadOnlyList<FluidDef> Fluids => _fluids;
+        /// <summary>Building network systems in display order (<c>networks.json</c>).</summary>
+        public IReadOnlyList<NetworkDef> Networks => _networks;
         public IReadOnlyList<MaterialDef> Materials => _materials;
         public IReadOnlyList<PipeFamilyDef> PipeFamilies => _pipeFamilies;
         public IReadOnlyList<FittingDef> Fittings => _fittings;
@@ -44,6 +46,7 @@ namespace HeadLoss.Core.Data
         public IReadOnlyList<string> LoadIssues => _loadIssues;
 
         readonly List<FluidDef> _fluids = new List<FluidDef>();
+        readonly List<NetworkDef> _networks = new List<NetworkDef>();
         readonly List<MaterialDef> _materials = new List<MaterialDef>();
         readonly List<PipeFamilyDef> _pipeFamilies = new List<PipeFamilyDef>();
         readonly List<FittingDef> _fittings = new List<FittingDef>();
@@ -55,6 +58,7 @@ namespace HeadLoss.Core.Data
         readonly List<string> _loadIssues = new List<string>();
 
         readonly Dictionary<string, FluidDef> _fluidById = new Dictionary<string, FluidDef>();
+        readonly Dictionary<string, NetworkDef> _networkById = new Dictionary<string, NetworkDef>();
         readonly Dictionary<string, MaterialDef> _materialById = new Dictionary<string, MaterialDef>();
         readonly Dictionary<string, PipeFamilyDef> _familyById = new Dictionary<string, PipeFamilyDef>();
         readonly Dictionary<string, FittingDef> _fittingById = new Dictionary<string, FittingDef>();
@@ -93,6 +97,7 @@ namespace HeadLoss.Core.Data
                 if (!repo._roomTypeById.ContainsKey(t.Id)) repo._roomTypeById[t.Id] = t;
                 else repo._loadIssues.Add($"buildings.json: duplicate room type '{t.Id}'");
             AddAll(repo, Parse<List<FluidDef>>(source, "fluids.json"), repo._fluids, repo._fluidById, f => f.Id, "fluids.json");
+            AddAll(repo, Parse<List<NetworkDef>>(source, "networks.json"), repo._networks, repo._networkById, n => n.Id, "networks.json");
             AddAll(repo, Parse<List<MaterialDef>>(source, "materials.json"), repo._materials, repo._materialById, m => m.Id, "materials.json");
             AddAll(repo, Parse<List<PipeFamilyDef>>(source, "pipes.json"), repo._pipeFamilies, repo._familyById, p => p.Id, "pipes.json");
             AddAll(repo, Parse<List<FittingDef>>(source, "fittings.json"), repo._fittings, repo._fittingById, f => f.Id, "fittings.json");
@@ -183,6 +188,22 @@ namespace HeadLoss.Core.Data
         public BuildingLayoutDef? FindHandmadeBuilding(string id) => _handmadeById.TryGetValue(id, out var v) ? v : null;
 
         public FluidDef Fluid(string id) => FindFluid(id) ?? throw new KeyNotFoundException($"Unknown fluid '{id}'");
+
+        public NetworkDef? FindNetwork(string id) => _networkById.TryGetValue(id, out var v) ? v : null;
+        public NetworkDef Network(string id) => FindNetwork(id) ?? throw new KeyNotFoundException($"Unknown network '{id}'");
+        /// <summary>The fluid a network carries (its id when it is not a network: older callers pass fluid ids).</summary>
+        public string FluidIdOf(string networkId) => FindNetwork(networkId)?.Fluid ?? networkId;
+        /// <summary>The fluid a network carries.</summary>
+        public FluidDef FluidOf(string networkId) => Fluid(FluidIdOf(networkId));
+        /// <summary>The network an entry opening of this utility starts ("" for openings without one: power).</summary>
+        public string NetworkForUtility(string utility)
+        {
+            if (utility.Length == 0) return "";
+            foreach (NetworkDef n in _networks) if (n.Utility == utility) return n.Id;
+            return "";
+        }
+        /// <summary>The network an outlet type is on (its <c>fluid</c> in <c>outlets.json</c>).</summary>
+        public string NetworkOfOutlet(string outletType) => Outlet(outletType).Fluid;
         public MaterialDef Material(string id) => FindMaterial(id) ?? throw new KeyNotFoundException($"Unknown material '{id}'");
         public PipeFamilyDef PipeFamily(string id) => FindPipeFamily(id) ?? throw new KeyNotFoundException($"Unknown pipe family '{id}'");
         public FittingDef Fitting(string id) => FindFitting(id) ?? throw new KeyNotFoundException($"Unknown fitting '{id}'");

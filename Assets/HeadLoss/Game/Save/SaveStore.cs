@@ -180,7 +180,16 @@ namespace HeadLoss.Game.Save
         {
             int dropped = 0;
             BuildingState fresh = BuildingState.CreateFor(layout);
-            foreach (string fluid in BuildingState.FluidIds) dropped += SanitizeNetwork(s.Net(fluid), fresh.Net(fluid), layout, data);
+            // Networks the data no longer has go; every network the layout has anchors for is checked against a fresh one.
+            foreach (DuctNetworkState gone in s.Networks.FindAll(n => data.FindNetwork(n.FluidId) == null))
+            {
+                dropped += gone.Nodes.Count + gone.Segments.Count;
+                s.Networks.Remove(gone);
+            }
+            var ids = new List<string>();
+            foreach (DuctNetworkState n in s.Networks) ids.Add(n.FluidId);
+            foreach (DuctNetworkState n in fresh.Networks) if (!ids.Contains(n.FluidId)) ids.Add(n.FluidId);
+            foreach (string id in ids) dropped += SanitizeNetwork(s.Net(id), fresh.Net(id), layout, data);
             dropped += s.Equipment.RemoveAll(e => data.FindEquipment(e.EquipmentId) == null || layout.FindOpening(e.OpeningId) == null);
             dropped += s.Safety.RemoveAll(d => data.FindEquipment(d.EquipmentId) == null || !layout.IsInside(d.Pos));
             // Pre-placed equipment the layout starts with (the basic panel since Phase 4) is added when missing, for free.
@@ -205,7 +214,7 @@ namespace HeadLoss.Game.Save
             dropped += net.Segments.RemoveAll(seg =>
             {
                 DuctNode? a = net.FindNode(seg.NodeA), b = net.FindNode(seg.NodeB);
-                if (a == null || b == null || data.FindMaterial(seg.MaterialId)?.Fluids.Contains(net.FluidId) != true) return true;
+                if (a == null || b == null || data.FindMaterial(seg.MaterialId)?.Fluids.Contains(data.FluidIdOf(net.FluidId)) != true) return true;
                 int axes = (a.X != b.X ? 1 : 0) + (a.Y != b.Y ? 1 : 0) + (a.Floor != b.Floor ? 1 : 0);
                 if (axes != 1) return true;
                 for (TilePos t = a.Pos; t != b.Pos; t = t.Toward(b.Pos))

@@ -26,15 +26,22 @@ namespace HeadLoss.Game.Buildings
         public static bool Opening(DataRepository data, EntryOpeningDef opening, EquipmentDef def) =>
             def.Placement == "intake" && def.Category == CategoryFor(opening.Utility);
 
-        /// <summary>True when an inline part (fitting or equipment) works on a network of this fluid.</summary>
+        /// <summary>
+        /// True when an inline part (fitting or equipment) works on this network. An item's <c>fluids</c> list names fluids (any
+        /// network carrying one fits, so an air part fits the exhaust too) or network ids.
+        /// </summary>
         public static bool InlinePart(DataRepository data, string partId, string fluid)
         {
             EquipmentDef? e = data.FindEquipment(partId);
-            if (e != null) return e.Placement == "inline" && e.Fluids.Contains(fluid);
+            if (e != null) return e.Placement == "inline" && Carries(data, e.Fluids, fluid);
             FittingDef? f = data.FindFitting(partId);
             if (f == null) return false;
-            return f.Fluids.Count == 0 ? fluid == "air" : f.Fluids.Contains(fluid);
+            return f.Fluids.Count == 0 ? data.FluidIdOf(fluid) == "air" : Carries(data, f.Fluids, fluid);
         }
+
+        /// <summary>True when a <c>fluids</c> list names this network or the fluid it carries.</summary>
+        public static bool Carries(DataRepository data, System.Collections.Generic.List<string> fluids, string network) =>
+            fluids.Contains(network) || fluids.Contains(data.FluidIdOf(network));
 
         /// <summary>Unit step from a facade opening into the building.</summary>
         public static (int dx, int dy) Inward(string facing) => facing switch

@@ -12,6 +12,7 @@ namespace HeadLoss.Unity.View
         public float RoomFillAlpha;
         readonly Dictionary<string, Color> _roomFills = new Dictionary<string, Color>();
         readonly Dictionary<string, Color> _fluids = new Dictionary<string, Color>();
+        readonly Dictionary<string, string> _patterns = new Dictionary<string, string>();
         readonly Dictionary<string, Color[]> _ramps = new Dictionary<string, Color[]>();
 
         /// <summary>The theme the colours come from (light or dark, settings).</summary>
@@ -31,6 +32,12 @@ namespace HeadLoss.Unity.View
             RoomFillAlpha = (float)t.RoomFillAlpha;
             foreach (var kv in t.RoomFills) _roomFills[kv.Key] = Parse(kv.Value);
             foreach (var f in data.Fluids) _fluids[f.Id] = Parse(f.Colour);
+            // A network takes its fluid's colour unless it has its own (the air exhaust).
+            foreach (var n in data.Networks)
+            {
+                _fluids[n.Id] = Parse(n.Colour.Length > 0 ? n.Colour : data.Fluid(n.Fluid).Colour);
+                _patterns[n.Id] = n.LinePattern.Length > 0 ? n.LinePattern : data.Fluid(n.Fluid).LinePattern;
+            }
             foreach (var kv in data.Balancing.Heatmap.Palettes)
             {
                 var stops = new Color[kv.Value.Count];
@@ -52,7 +59,11 @@ namespace HeadLoss.Unity.View
             return c;
         }
 
+        /// <summary>Plain-view colour of a network (or a fluid).</summary>
         public Color Fluid(string id) => _fluids.TryGetValue(id, out Color c) ? c : Walls;
+
+        /// <summary>Line pattern of a network: solid, dashed, dotted or double (colour is never the only cue).</summary>
+        public string Pattern(string network) => _patterns.TryGetValue(network, out string p) ? p : "solid";
 
         /// <summary>Samples a palette ramp at t ∈ [0, 1] (linear between evenly spaced stops).</summary>
         public Color Ramp(string palette, float t)

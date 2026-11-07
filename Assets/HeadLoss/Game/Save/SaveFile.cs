@@ -26,9 +26,12 @@ namespace HeadLoss.Game.Save
     /// <summary>JSON for saves: public fields only (properties are derived), camelCase, invariant.</summary>
     public static class SaveSerializer
     {
-        public const int CurrentSaveVersion = 4;
-        /// <summary>Generator version written into saves (2: the Phase 3 city and building generators; 3: Phase 4 floors and water; 4: Phase 5 gas in tier 3).</summary>
-        public const int CurrentGeneratorVersion = 4;
+        public const int CurrentSaveVersion = 5;
+        /// <summary>
+        /// Generator version written into saves (2: the Phase 3 city and building generators; 3: Phase 4 floors and water; 4: Phase 5
+        /// gas in tier 3; 5: Phase 6 heating in tier 3 and the tier 4–5 buildings).
+        /// </summary>
+        public const int CurrentGeneratorVersion = 5;
 
         sealed class FieldsOnlyResolver : CamelCasePropertyNamesContractResolver
         {
@@ -84,7 +87,33 @@ namespace HeadLoss.Game.Save
             [1] = V1ToV2,
             [2] = V2ToV3,
             [3] = V3ToV4,
+            [4] = V4ToV5,
         };
+
+        /// <summary>The building networks a version-4 state kept as fields, in their order.</summary>
+        static readonly string[] V4NetworkFields = { "air", "water", "gas" };
+
+        /// <summary>
+        /// Phase 5 → Phase 6: a building state keeps its networks in one list (<c>networks</c>) instead of the fields <c>air</c>,
+        /// <c>water</c> and <c>gas</c>, so it can hold the Phase 6 ones (hot water, heating, exhaust, special gases). Each network
+        /// already names itself (<c>fluidId</c>), and those names are the new network ids, so nothing else moves.
+        /// </summary>
+        static void V4ToV5(JObject o)
+        {
+            if (!(o["gameState"] is JObject game) || !(game["buildings"] is JArray buildings)) return;
+            foreach (JToken b in buildings)
+                foreach (string which in new[] { "committed", "design" })
+                {
+                    if (!(b[which] is JObject state)) continue;
+                    var list = new JArray();
+                    foreach (string field in V4NetworkFields)
+                    {
+                        if (state[field] is JObject net) list.Add(net);
+                        state.Remove(field);
+                    }
+                    state["networks"] = list;
+                }
+        }
 
         /// <summary>
         /// Phase 4 → Phase 5: gas, leaks, ruins and prestige are new fields with empty defaults, so nothing moves. Lifetime

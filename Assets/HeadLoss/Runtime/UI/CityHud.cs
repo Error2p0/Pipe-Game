@@ -561,7 +561,7 @@ namespace HeadLoss.Unity.UI
             var sb = new StringBuilder();
             sb.Append($"{h.WidthM} × {h.HeightM} m · {h.Floors} floor{(h.Floors == 1 ? "" : "s")}");
             var fluids = new List<string>();
-            foreach (string f in h.Fluids) fluids.Add(_ctx.Data.Fluid(f).DisplayName);
+            foreach (string f in h.Fluids) fluids.Add(_ctx.Data.FindNetwork(f)?.DisplayName ?? _ctx.Data.Fluid(f).DisplayName);
             sb.Append($"\nNeeds {string.Join(", ", fluids)}");
             if (h.Available)
             {

@@ -76,9 +76,13 @@ namespace HeadLoss.Game.Buildings
         public bool SameSpec(DuctSegment o) => DiameterMm == o.DiameterMm && MaterialId == o.MaterialId && Sealing == o.Sealing && Insulation == o.Insulation;
     }
 
-    /// <summary>The player's layout for one network (one fluid) in one building.</summary>
+    /// <summary>The player's layout for one network (one fluid system, <c>networks.json</c>) in one building.</summary>
     public sealed class DuctNetworkState
     {
+        /// <summary>
+        /// The network id (<c>networks.json</c>). It equals the fluid id for every network except the air exhaust, so code that
+        /// names a network by its fluid ("water", "natural-gas") keeps working; the physics reads the fluid through the data.
+        /// </summary>
         public string FluidId = "air";
         public List<DuctNode> Nodes = new List<DuctNode>();
         public List<DuctSegment> Segments = new List<DuctSegment>();
@@ -95,6 +99,9 @@ namespace HeadLoss.Game.Buildings
             foreach (DuctSegment s in Segments) if (s.NodeA == nodeId || s.NodeB == nodeId) d++;
             return d;
         }
+
+        /// <summary>Nothing drawn and nothing anchored.</summary>
+        public bool IsEmpty => Nodes.Count == 0 && Segments.Count == 0;
 
         public DuctNetworkState Clone()
         {
@@ -145,11 +152,11 @@ namespace HeadLoss.Game.Buildings
     public sealed class BuildingState
     {
         public string BuildingId = "";
-        public DuctNetworkState Air = new DuctNetworkState();
-        /// <summary>Cold water network (tier 2+).</summary>
-        public DuctNetworkState Water = new DuctNetworkState { FluidId = "water" };
-        /// <summary>Natural gas network (tier 3+).</summary>
-        public DuctNetworkState Gas = new DuctNetworkState { FluidId = GasFluid };
+        /// <summary>
+        /// Every network the player has drawn on or that has anchors (one per network id, <c>networks.json</c>). A network that
+        /// is asked for and missing is added empty, so the list only holds what a building uses.
+        /// </summary>
+        public List<DuctNetworkState> Networks = new List<DuctNetworkState>();
         public List<EquipmentState> Equipment = new List<EquipmentState>();
         /// <summary>Gas detectors and passive vents.</summary>
         public List<SafetyDevice> Safety = new List<SafetyDevice>();
@@ -157,43 +164,68 @@ namespace HeadLoss.Game.Buildings
         /// <summary>Fluid id of the gas network.</summary>
         public const string GasFluid = "natural-gas";
 
-        /// <summary>Fluid ids of the building networks, in solve order.</summary>
-        public static readonly string[] FluidIds = { "air", "water", GasFluid };
+        /// <summary>The air supply network.</summary>
+        public DuctNetworkState Air => Net("air");
+        /// <summary>Cold water network (tier 2+).</summary>
+        public DuctNetworkState Water => Net("water");
+        /// <summary>Natural gas network (tier 3+).</summary>
+        public DuctNetworkState Gas => Net(GasFluid);
 
-        /// <summary>The network fluid of an entry opening's utility ("" when it has no network: power, heating).</summary>
+        /// <summary>The network of an entry opening's utility before data is at hand (layouts built without data, old callers); "" for power.</summary>
         public static string UtilityFluid(string utility) => utility switch
         {
             "air" => "air",
             "water" => "water",
             "gas" => GasFluid,
-            _ => "",
+            "heating" => "heating-water",
+            "exhaust" => "air-exhaust",
+            "power" => "",
+            "" => "",
+            _ => utility,
         };
 
         public EquipmentState? EquipmentAt(string openingId) => Equipment.Find(e => e.OpeningId == openingId);
 
-        /// <summary>The network of a fluid.</summary>
-        public DuctNetworkState Net(string fluidId) => fluidId switch
+        /// <summary>The network with this id (added empty when the building has none yet).</summary>
+        public DuctNetworkState Net(string networkId)
         {
-            "air" => Air,
-            "water" => Water,
-            GasFluid => Gas,
-            _ => throw new System.ArgumentException($"No building network for '{fluidId}'"),
-        };
+            if (networkId.Length == 0) throw new System.ArgumentException("No network id");
+            foreach (DuctNetworkState n in Networks) if (n.FluidId == networkId) return n;
+            var created = new DuctNetworkState { FluidId = networkId };
+            // A fixed order (air, water, gas, then by id) whatever order the networks were added in, so anything that walks
+            // the networks (failure rolls, fingerprints, saves) does it the same way every time.
+            int at = 0;
+            while (at < Networks.Count && Before(Networks[at].FluidId, networkId)) at++;
+            Networks.Insert(at, created);
+            return created;
+        }
 
-        /// <summary>Every network (air, water).</summary>
-        public IEnumerable<DuctNetworkState> Networks
+        static int Rank(string id) => id == "air" ? 0 : id == "water" ? 1 : id == GasFluid ? 2 : 3;
+
+        static bool Before(string a, string b)
         {
-            get
-            {
-                yield return Air;
-                yield return Water;
-                yield return Gas;
-            }
+            int ra = Rank(a), rb = Rank(b);
+            return ra != rb ? ra < rb : string.CompareOrdinal(a, b) < 0;
+        }
+
+        /// <summary>Replaces the network with the same id (or adds it).</summary>
+        public void SetNet(DuctNetworkState net)
+        {
+            DuctNetworkState old = Net(net.FluidId);
+            Networks[Networks.IndexOf(old)] = net;
+        }
+
+        /// <summary>The network with this id, or null when the building has none (never adds one).</summary>
+        public DuctNetworkState? FindNet(string networkId)
+        {
+            foreach (DuctNetworkState n in Networks) if (n.FluidId == networkId) return n;
+            return null;
         }
 
         public BuildingState Clone()
         {
-            var c = new BuildingState { BuildingId = BuildingId, Air = Air.Clone(), Water = Water.Clone(), Gas = Gas.Clone() };
+            var c = new BuildingState { BuildingId = BuildingId };
+            foreach (DuctNetworkState n in Networks) c.Networks.Add(n.Clone());
             foreach (EquipmentState e in Equipment) c.Equipment.Add(e.Clone());
             foreach (SafetyDevice d in Safety) c.Safety.Add(d.Clone());
             return c;
@@ -208,7 +240,7 @@ namespace HeadLoss.Game.Buildings
             var parts = new List<string>();
             foreach (DuctNetworkState net in Networks)
             {
-                string w = net == Air ? "" : net.FluidId + ":";
+                string w = net.FluidId == "air" ? "" : net.FluidId + ":";
                 foreach (DuctSegment s in net.Segments)
                 {
                     TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
@@ -231,8 +263,13 @@ namespace HeadLoss.Game.Buildings
             return string.Join(";", parts);
         }
 
-        /// <summary>The network fluid of an outlet type (taps are water, gas stoves and burners natural gas, the rest air for now).</summary>
-        public static string OutletFluid(string outletType) => outletType.Contains("water-tap") ? "water" : outletType.StartsWith("gas-", System.StringComparison.Ordinal) ? GasFluid : "air";
+        /// <summary>
+        /// The network of an outlet type before data is at hand (layouts built without data). Layouts built from data use
+        /// <see cref="BuildingLayout.NetworkOf(HeadLoss.Core.Data.Defs.OutletPlacementDef)"/>, which reads <c>outlets.json</c>.
+        /// </summary>
+        public static string OutletFluid(string outletType) =>
+            outletType == "hot-water-tap" ? "hot-water" : outletType.Contains("water-tap") ? "water" : outletType == "radiator" ? "heating-water"
+            : outletType.StartsWith("gas-", System.StringComparison.Ordinal) ? GasFluid : "air";
 
         /// <summary>A fresh state for a layout: anchor nodes at openings and outlets, initial equipment.</summary>
         public static BuildingState CreateFor(BuildingLayout layout)
@@ -240,14 +277,14 @@ namespace HeadLoss.Game.Buildings
             var s = new BuildingState { BuildingId = layout.Id };
             foreach (var o in layout.EntryOpenings)
             {
-                string fluid = UtilityFluid(o.Utility);
+                string fluid = layout.NetworkOf(o);
                 if (fluid.Length == 0) continue;
                 DuctNetworkState net = s.Net(fluid);
                 net.Nodes.Add(new DuctNode { Id = net.NextNodeId++, X = o.X, Y = o.Y, Floor = o.Floor, Kind = DuctNodeKind.Intake, AnchorId = o.Id });
             }
             foreach (var o in layout.Outlets)
             {
-                DuctNetworkState net = s.Net(OutletFluid(o.Type));
+                DuctNetworkState net = s.Net(layout.NetworkOf(o));
                 net.Nodes.Add(new DuctNode { Id = net.NextNodeId++, X = o.X, Y = o.Y, Floor = o.Floor, Kind = DuctNodeKind.Outlet, AnchorId = o.Id });
             }
             foreach (var e in layout.InitialEquipment)

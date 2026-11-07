@@ -268,10 +268,16 @@ namespace HeadLoss.Unity.UI
             foreach (OutletPlacementDef _ in _s.Layout.Outlets) _ventLabels.Add(WorldLabel());
         }
 
+        /// <summary>A pressure in a network's display unit.</summary>
+        string Pressure(double pa, string network) => Units.FormatPressureIn(pa, _data.FindNetwork(network)?.PressureUnit ?? "bar");
+
+        /// <summary>A flow in a network's display unit.</summary>
+        string Flow(double m3s, string network) => Units.FormatFlowIn(m3s, _data.FindNetwork(network)?.FlowUnit ?? "L/s");
+
         /// <summary>The rating of what would be drawn (larger pipes are rated lower).</summary>
         void RefreshRating()
         {
-            _rating.text = _materials.Count == 0 ? "" : $"Rated {Units.FormatPressure(_data.Material(_ix.DrawMaterialId).RatedPressure(_ix.DrawDiameterMm), View.Fluid)}";
+            _rating.text = _materials.Count == 0 ? "" : $"Rated {Pressure(_data.Material(_ix.DrawMaterialId).RatedPressure(_ix.DrawDiameterMm), View.Fluid)}";
         }
 
         /// <summary>Network tabs, floor tabs and the layer switcher, always visible (<c>11-ui-visuals-audio.md</c> §Building controls).</summary>
@@ -284,7 +290,7 @@ namespace HeadLoss.Unity.UI
                 foreach (string f in View.Fluids)
                 {
                     string fluid = f;
-                    _fluidButtons.Add((f, _ui.Button(row, _data.Fluid(f).DisplayName, () => _ix.SetFluid(fluid))));
+                    _fluidButtons.Add((f, _ui.Button(row, _data.Network(f).ShortName, () => _ix.SetFluid(fluid))));
                 }
             }
             if (_s.Layout.Floors > 1)
@@ -425,7 +431,7 @@ namespace HeadLoss.Unity.UI
             var matChoices = new List<string>();
             foreach (MaterialDef m in _data.Materials)
             {
-                if (!m.Fluids.Contains(fluid) || !_s.ItemUnlocked(m.Id)) continue;
+                if (!m.Fluids.Contains(_data.FluidIdOf(fluid)) || !_s.ItemUnlocked(m.Id)) continue;
                 _materials.Add(m.Id);
                 matChoices.Add(m.DisplayName);
             }
@@ -693,8 +699,8 @@ namespace HeadLoss.Unity.UI
         {
             if (_hm.Mode == HeatmapMode.Plain)
             {
-                FluidDef shown = _data.Fluid(View.Fluid);
-                _legendTitle.text = $"Plain · {shown.DisplayName} ({shown.LinePattern} line)";
+                NetworkDef shown = _data.Network(View.Fluid);
+                _legendTitle.text = $"Plain · {shown.DisplayName} ({_p.Pattern(View.Fluid)} line)";
                 _legendBar.style.backgroundImage = StyleKeyword.None;
                 _legendBar.style.backgroundColor = _p.Fluid(View.Fluid);
                 _legendTicks.style.display = DisplayStyle.None;
@@ -895,12 +901,12 @@ namespace HeadLoss.Unity.UI
             if (fs == null || !fs.Compiled.SegmentLink.TryGetValue(id, out int k)) return Line(i, "Solving…");
             SolveResult r = fs.Result;
             NetworkLink l = fs.Compiled.Graph.Links[k];
-            i = Line(i, $"Flow  {Units.FormatFlow(System.Math.Abs(r.Flow[k]), fluid)}");
+            i = Line(i, $"Flow  {Flow(System.Math.Abs(r.Flow[k]), fluid)}");
             i = Line(i, $"Velocity  {Units.FormatVelocity(System.Math.Abs(r.Velocity[k]))}");
             double pIn = r.Flow[k] >= 0 ? r.PressureFrom(fs.Compiled.Graph, k) : r.PressureTo(fs.Compiled.Graph, k);
             double pOut = r.Flow[k] >= 0 ? r.PressureTo(fs.Compiled.Graph, k) : r.PressureFrom(fs.Compiled.Graph, k);
-            i = Line(i, $"Pressure  {Units.FormatPressure(pIn, fluid)} → {Units.FormatPressure(pOut, fluid)}");
-            i = Line(i, $"Loss  friction {Units.FormatPressure(System.Math.Abs(r.DpFriction[k]), fluid)} · fittings {Units.FormatPressure(System.Math.Abs(r.DpFittings[k]), fluid)} · elevation {Units.FormatPressure(r.DpElevation[k], fluid)}");
+            i = Line(i, $"Pressure  {Pressure(pIn, fluid)} → {Pressure(pOut, fluid)}");
+            i = Line(i, $"Loss  friction {Pressure(System.Math.Abs(r.DpFriction[k]), fluid)} · fittings {Pressure(System.Math.Abs(r.DpFittings[k]), fluid)} · elevation {Pressure(r.DpElevation[k], fluid)}");
             string regime = r.Reynolds[k] <= _data.Balancing.Physics.LaminarReynolds ? "laminar" : r.Reynolds[k] >= _data.Balancing.Physics.TurbulentReynolds ? "turbulent" : "transitional";
             i = Line(i, $"Re  {r.Reynolds[k]:0} ({regime}) · f {r.FrictionFactor[k]:0.0000}");
             i = Line(i, $"Length  {l.Length:0} m · ΣK {l.SumK:0.00} · {Units.FormatMoney(Pricing.SegmentPerMetre(_data, seg), _symbol)}/m");
@@ -929,11 +935,11 @@ namespace HeadLoss.Unity.UI
             double x = f.RatingRatio(fs, net, seg, 0);
             double rated = _data.Material(seg.MaterialId).RatedPressure(seg.DiameterMm);
             string weep = stress >= _data.Balancing.Failure.WeepThreshold ? " · weeping" : "";
-            i = Line(i, $"Stress  {stress:0.00}{weep} · {x:0.00} × rating ({Units.FormatPressure(rated, fluid)})");
+            i = Line(i, $"Stress  {stress:0.00}{weep} · {x:0.00} × rating ({Pressure(rated, fluid)})");
             _stressTrack.style.display = DisplayStyle.Flex;
             _stressFill.style.width = Length.Percent(Mathf.Clamp01((float)stress) * 100);
             _stressFill.style.backgroundColor = stress >= _data.Balancing.Failure.WeepThreshold ? _p.Warning : _p.Good;
-            if (surge > 0) i = Line(i, $"Surge: +{Units.FormatPressure(surge, fluid)}");
+            if (surge > 0) i = Line(i, $"Surge: +{Pressure(surge, fluid)}");
             if (_s.Game.City?.Utilities.EngineeringSoftware == true)
             {
                 double rate = f.StressRate(x);
@@ -977,7 +983,7 @@ namespace HeadLoss.Unity.UI
                 any = true;
                 double dp = FittingLoss(fs, f);
                 string part = f.Kind == FittingKind.TeeRun ? " (run)" : f.Kind == FittingKind.TeeBranch ? " (branch)" : "";
-                i = Line(i, $"{_data.Fitting(f.FittingId).DisplayName}{part}  K {f.K:0.00} · loses {Units.FormatPressure(dp, fluid)}");
+                i = Line(i, $"{_data.Fitting(f.FittingId).DisplayName}{part}  K {f.K:0.00} · loses {Pressure(dp, fluid)}");
             }
             if (!any) i = Line(i, "No loss here");
             if (elbow) i = Line(i, n.SmoothFittings ? "Long-radius: gentle turn, low loss." : "Sharp: abrupt turn, high loss.");
@@ -1084,7 +1090,7 @@ namespace HeadLoss.Unity.UI
         {
             SolveResult r = fs.Result;
             bool pump = def.Category == "water-mover";
-            i = Line(i, $"Flow  {Units.FormatFlow(r.Flow[k], fs.Fluid)}");
+            i = Line(i, $"Flow  {Flow(r.Flow[k], fs.Fluid)}");
             if (pump)
             {
                 double rhoG = r.Density[k] * _data.Balancing.Physics.Gravity;
@@ -1157,8 +1163,8 @@ namespace HeadLoss.Unity.UI
             else i = Line(i, $"Open  {n.Opening * 100:0} % · K {valve.K / (n.Opening * n.Opening):0.0#}");
             if (!solved) return Line(i, "Solving…");
             SolveResult r = fs!.Result;
-            i = Line(i, $"Flow  {Units.FormatFlow(System.Math.Abs(r.Flow[k]), fluid)}");
-            i = Line(i, $"Pressure lost  {Units.FormatPressure(System.Math.Abs(r.DpFittings[k]), fluid)}");
+            i = Line(i, $"Flow  {Flow(System.Math.Abs(r.Flow[k]), fluid)}");
+            i = Line(i, $"Pressure lost  {Pressure(System.Math.Abs(r.DpFittings[k]), fluid)}");
             if (valve.Model == "valve" && valve.MinOpening < 1)
                 i = Line(i, $"Drag the Open slider to send {FluidWord(fluid)} to other branches. Changing the opening is free and works at once, no Commit needed. To put it somewhere else, Remove it and place a new one.");
             return i;
@@ -1214,7 +1220,7 @@ namespace HeadLoss.Unity.UI
             else if (st.Zone == OutletZone.Isolated) i = Line(i, "Isolated by a closed shutoff: it pays nothing, but does not keep the building offline.");
             else
             {
-                string flow = def.Measured == "pressure" ? $" while drawing {Units.FormatFlow(NetworkCompiler.DesignFlow(_data, _s.Layout, o), def.Fluid)}" : "";
+                string flow = def.Measured == "pressure" ? $" while drawing {Flow(NetworkCompiler.DesignFlow(_data, _s.Layout, o), def.Fluid)}" : "";
                 i = Line(i, $"Delivery  {UiKit.FormatDelivery(def, st.Delivery)}{flow}");
                 i = Line(i, $"Zone  {UiKit.ZoneWord(st.Zone)} · ×{st.Multiplier:0.00} · {Units.FormatMoneyRate(st.BaseRate * st.Multiplier, _symbol)}");
                 if (st.Zone == OutletZone.AboveCodeMax) i = Line(i, $"Above code maximum: {def.CodeMaxReason.ToLowerInvariant()}. It pays nothing until the delivery comes down{(def.Fluid == BuildingState.GasFluid ? ": place a regulator at the gas connection." : def.Measured == "pressure" ? ": a pressure regulator on the branch does it." : ".")}");
@@ -1252,8 +1258,8 @@ namespace HeadLoss.Unity.UI
             }
             var mats = new List<(string, string)>();
             foreach (MaterialDef m in _data.Materials)
-                if (m.Fluids.Contains(fluid) && _s.ItemUnlocked(m.Id))
-                    mats.Add((m.Id, $"{m.DisplayName} · {Units.FormatMoney(Pricing.PerMetre(_data, m.Id, first.DiameterMm), _symbol)}/m · rated {Units.FormatPressure(m.RatedPressure(first.DiameterMm), fluid)}"));
+                if (m.Fluids.Contains(_data.FluidIdOf(fluid)) && _s.ItemUnlocked(m.Id))
+                    mats.Add((m.Id, $"{m.DisplayName} · {Units.FormatMoney(Pricing.PerMetre(_data, m.Id, first.DiameterMm), _symbol)}/m · rated {Pressure(m.RatedPressure(first.DiameterMm), fluid)}"));
             Picker("Material", mats, first.MaterialId, id => new SetSegmentSpecCommand(ids, materialId: id, fluid: fluid));
             if (fluid == "air")
             {
@@ -1328,7 +1334,7 @@ namespace HeadLoss.Unity.UI
             if (DuctEditor.IsRiser(built, seg)) metres *= _data.Balancing.Building.FloorHeight;
             var options = new List<(string id, string name)> { ("", "Repair as it was") };
             foreach (MaterialDef m in _data.Materials)
-                if (m.Id != seg.MaterialId && m.Fluids.Contains(fluid) && _s.ItemUnlocked(m.Id)) options.Add((m.Id, $"Fit {m.DisplayName.ToLowerInvariant()} · rated {Units.FormatPressure(m.RatedPressure(seg.DiameterMm), fluid)}"));
+                if (m.Id != seg.MaterialId && m.Fluids.Contains(_data.FluidIdOf(fluid)) && _s.ItemUnlocked(m.Id)) options.Add((m.Id, $"Fit {m.DisplayName.ToLowerInvariant()} · rated {Pressure(m.RatedPressure(seg.DiameterMm), fluid)}"));
             string upgrade = "";
             if (options.Count > 1)
             {
@@ -1723,7 +1729,7 @@ namespace HeadLoss.Unity.UI
                     if (f.Kind == FittingKind.Entry) continue;
                     DuctNode? n = net.FindNode(f.NodeId);
                     if (n == null || !pathTiles.Contains(n.Pos)) continue;
-                    string s = $"K {f.K:0.0#} · {Units.FormatPressure(FittingLoss(fs, f), View.Fluid)}";
+                    string s = $"K {f.K:0.0#} · {Pressure(FittingLoss(fs, f), View.Fluid)}";
                     byNode[f.NodeId] = byNode.TryGetValue(f.NodeId, out string prev) ? prev + "\n" + s : s;
                 }
                 foreach (var kv in byNode)

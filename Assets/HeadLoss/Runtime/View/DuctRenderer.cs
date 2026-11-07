@@ -400,13 +400,29 @@ namespace HeadLoss.Unity.View
                     if (_shades.TryGetValue(s.Id, out Shade shade)) DrawBlended(m, s, from, to, shade, Col(s.Id).a);
                     else m.Line(from, to, s.Width, ZDuct, Col(s.Id));
                 }
-                // Gas runs dotted, so colour is never the only cue (06-fluids.md).
-                if (v.Fluid != BuildingState.GasFluid) continue;
+                // Each network has its line pattern, so colour is never the only cue (06-fluids.md): dotted, dashed (gaps across
+                // the line) or double (a paper stripe down the middle).
+                string pattern = _palette!.Pattern(v.Fluid);
+                if (pattern == "solid") continue;
                 float length = Vector2.Distance(s.A, s.B);
-                Color dot = _palette!.Paper;
-                dot.a = 0.8f * fade * (v.Active ? 1f : (float)_drawing!.OtherNetworkOpacity);
-                for (float d = 0.2f; d < length; d += 0.4f)
-                    m.Disc(Vector2.Lerp(s.A, s.B, d / length), s.Width * 0.22f, 8, ZCap - 0.004f, dot);
+                if (length < 1e-4f) continue;
+                Color paper = _palette.Paper;
+                paper.a = 0.8f * fade * (v.Active ? 1f : (float)_drawing!.OtherNetworkOpacity);
+                Vector2 along = (s.B - s.A) / length;
+                switch (pattern)
+                {
+                    case "dotted":
+                        for (float d = 0.2f; d < length; d += 0.4f)
+                            m.Disc(Vector2.Lerp(s.A, s.B, d / length), s.Width * 0.22f, 8, ZCap - 0.004f, paper);
+                        break;
+                    case "dashed":
+                        for (float d = 0.35f; d < length - 0.05f; d += 0.5f)
+                            m.Line(s.A + along * (d - 0.05f), s.A + along * (d + 0.05f), s.Width * 1.02f, ZCap - 0.004f, paper);
+                        break;
+                    case "double":
+                        m.Line(from, to, s.Width * 0.3f, ZCap - 0.004f, paper);
+                        break;
+                }
             }
             // Bends and joints take the joint's value, so the segments on either side run into them.
             Color JointCol(int node, int seg)

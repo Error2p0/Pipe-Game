@@ -1,0 +1,13 @@
+[
+  {"id": "air", "fluid": "air", "displayName": "Air supply", "shortName": "Air", "utility": "air", "conduit": "duct", "pressureUnit": "Pa", "flowUnit": "m3/h", "tier": 1, "defaultMaterial": "galvanized-duct", "defaultSizeMm": 125},
+  {"id": "air-exhaust", "fluid": "air", "displayName": "Exhaust air", "shortName": "Exhaust", "utility": "exhaust", "conduit": "duct", "pressureUnit": "Pa", "flowUnit": "m3/h", "tier": 3, "colour": "#8C9DB0", "linePattern": "dashed", "defaultMaterial": "galvanized-duct", "defaultSizeMm": 125},
+  {"id": "water", "fluid": "water", "displayName": "Cold water", "shortName": "Water", "utility": "water", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/s", "tier": 2, "defaultMaterial": "pvc", "defaultSizeMm": 22},
+  {"id": "hot-water", "fluid": "hot-water", "displayName": "Hot water", "shortName": "Hot water", "utility": "", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/s", "tier": 3, "defaultMaterial": "copper", "defaultSizeMm": 22},
+  {"id": "heating-water", "fluid": "heating-water", "displayName": "Heating", "shortName": "Heating", "utility": "heating", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/s", "tier": 3, "closedLoop": true, "defaultMaterial": "copper", "defaultSizeMm": 22},
+  {"id": "natural-gas", "fluid": "natural-gas", "displayName": "Natural gas", "shortName": "Gas", "utility": "gas", "conduit": "pipe", "pressureUnit": "mbar", "flowUnit": "m3/h", "tier": 3, "defaultMaterial": "copper", "defaultSizeMm": 22},
+  {"id": "propane", "fluid": "propane", "displayName": "Propane", "shortName": "Propane", "utility": "propane", "conduit": "pipe", "pressureUnit": "mbar", "flowUnit": "m3/h", "tier": 5, "defaultMaterial": "steel", "defaultSizeMm": 22},
+  {"id": "oxygen", "fluid": "oxygen", "displayName": "Oxygen", "shortName": "O₂", "utility": "oxygen", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/min", "tier": 5, "defaultMaterial": "stainless", "defaultSizeMm": 15},
+  {"id": "nitrogen", "fluid": "nitrogen", "displayName": "Nitrogen", "shortName": "N₂", "utility": "nitrogen", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/min", "tier": 5, "defaultMaterial": "stainless", "defaultSizeMm": 15},
+  {"id": "co2", "fluid": "co2", "displayName": "CO₂", "shortName": "CO₂", "utility": "co2", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/min", "tier": 5, "defaultMaterial": "stainless", "defaultSizeMm": 15},
+  {"id": "hydrogen", "fluid": "hydrogen", "displayName": "Hydrogen", "shortName": "H₂", "utility": "hydrogen", "conduit": "pipe", "pressureUnit": "bar", "flowUnit": "L/min", "tier": 5, "defaultMaterial": "stainless", "defaultSizeMm": 15}
+]

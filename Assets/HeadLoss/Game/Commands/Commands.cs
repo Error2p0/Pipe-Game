@@ -222,7 +222,7 @@ namespace HeadLoss.Game.Commands
         {
             foreach (string? id in new[] { _material, _sealing, _insulation })
                 if (id != null && !s.ItemUnlocked(id)) return false;
-            if (_material != null && s.Data.FindMaterial(_material)?.Fluids.Contains(_fluid) != true) return false;
+            if (_material != null && s.Data.FindMaterial(_material)?.Fluids.Contains(s.Data.FluidIdOf(_fluid)) != true) return false;
             if (_sealing != null && (_fluid != "air" || _sealing.Length > 0 && s.Data.FindSealing(_sealing) == null)) return false;
             if (_insulation != null && _insulation.Length > 0 && s.Data.FindInsulation(_insulation) == null) return false;
             BuildingState before = s.State.Clone();

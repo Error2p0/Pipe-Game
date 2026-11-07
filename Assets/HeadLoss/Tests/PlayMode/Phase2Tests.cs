@@ -67,7 +67,7 @@ namespace HeadLoss.PlayMode.Tests
         /// <summary>Puts the auto-router's reference ducts into the design (equipment unchanged).</summary>
         static void DrawReference(BuildingSession s)
         {
-            s.Record.Design.Air = ReferenceLayout.Build(s.Data, s.Layout).Air.Clone();
+            s.Record.Design.SetNet(ReferenceLayout.Build(s.Data, s.Layout).Air.Clone());
             s.MarkDirty();
         }
 

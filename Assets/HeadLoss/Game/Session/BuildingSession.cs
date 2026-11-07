@@ -33,43 +33,67 @@ namespace HeadLoss.Game.Session
     /// <summary>A building's compiled networks and their solves, always swapped together.</summary>
     public sealed class NetworkSnapshot
     {
-        /// <summary>The air network (always present).</summary>
-        public readonly FluidSolve Air;
-        /// <summary>The water network (null when the building has none).</summary>
-        public readonly FluidSolve? Water;
-        /// <summary>The gas network (null when the building has none).</summary>
-        public readonly FluidSolve? Gas;
+        /// <summary>Every solved network, the air supply first, then in solve order.</summary>
+        public readonly IReadOnlyList<FluidSolve> All;
         /// <summary>The state the snapshot was solved from (a private copy).</summary>
         public BuildingState State;
 
-        public NetworkSnapshot(FluidSolve air, FluidSolve? water, BuildingState state, FluidSolve? gas = null)
+        /// <param name="solves">The air supply's solve first.</param>
+        public NetworkSnapshot(IReadOnlyList<FluidSolve> solves, BuildingState state)
         {
-            Air = air;
-            Water = water;
-            Gas = gas;
+            if (solves.Count == 0 || solves[0].Fluid != "air") throw new ArgumentException("A snapshot starts with the air supply");
+            All = solves;
             State = state;
         }
+
+        /// <summary>The Phase 4–5 networks (tests, the auto-router).</summary>
+        public NetworkSnapshot(FluidSolve air, FluidSolve? water, BuildingState state, FluidSolve? gas = null)
+            : this(Collect(air, water, gas), state) { }
+
+        static List<FluidSolve> Collect(FluidSolve air, FluidSolve? water, FluidSolve? gas)
+        {
+            var l = new List<FluidSolve> { air };
+            if (water != null) l.Add(water);
+            if (gas != null) l.Add(gas);
+            return l;
+        }
+
+        /// <summary>The air supply network (always present).</summary>
+        public FluidSolve Air => All[0];
+        /// <summary>The cold water network (null when the building has none).</summary>
+        public FluidSolve? Water => For("water");
+        /// <summary>The natural gas network (null when the building has none).</summary>
+        public FluidSolve? Gas => For(BuildingState.GasFluid);
 
         /// <summary>Air network (the Phase 1–3 fields).</summary>
         public CompiledNetwork Compiled => Air.Compiled;
         public SolveResult Result => Air.Result;
 
-        /// <summary>The solve of a fluid's network, or null.</summary>
-        public FluidSolve? For(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : fluid == BuildingState.GasFluid ? Gas : null;
+        /// <summary>The solve of a network, or null.</summary>
+        public FluidSolve? For(string network)
+        {
+            foreach (FluidSolve fs in All) if (fs.Fluid == network) return fs;
+            return null;
+        }
 
-        /// <summary>Every solved network.</summary>
-        public IReadOnlyList<FluidSolve> All
+        public bool Converged
         {
             get
             {
-                if (Water != null && Gas != null) return new[] { Air, Water, Gas };
-                if (Water != null) return new[] { Air, Water };
-                return Gas != null ? new[] { Air, Gas } : new[] { Air };
+                foreach (FluidSolve fs in All) if (!fs.Result.Converged) return false;
+                return true;
             }
         }
 
-        public bool Converged => Air.Result.Converged && (Water == null || Water.Result.Converged) && (Gas == null || Gas.Result.Converged);
-        public double SolveMilliseconds => Air.Result.SolveMilliseconds + (Water?.Result.SolveMilliseconds ?? 0) + (Gas?.Result.SolveMilliseconds ?? 0);
+        public double SolveMilliseconds
+        {
+            get
+            {
+                double ms = 0;
+                foreach (FluidSolve fs in All) ms += fs.Result.SolveMilliseconds;
+                return ms;
+            }
+        }
     }
 
     /// <summary>The building's city water connection (<c>03-city.md</c> §City network solve).</summary>
@@ -88,17 +112,19 @@ namespace HeadLoss.Game.Session
         public static readonly WaterSupply None = new WaterSupply(false, 0);
     }
 
-    /// <summary>A pair of solvers (one per fluid) so each keeps its structure cache across drift re-solves.</summary>
+    /// <summary>One solver per network so each keeps its structure cache across drift re-solves.</summary>
     sealed class SolverSet
     {
-        public readonly NetworkSolver Air, Water, Gas;
-        public SolverSet(SolverSettings s)
+        readonly SolverSettings _settings;
+        readonly Dictionary<string, NetworkSolver> _solvers = new Dictionary<string, NetworkSolver>();
+
+        public SolverSet(SolverSettings s) => _settings = s;
+
+        public NetworkSolver For(string network)
         {
-            Air = new NetworkSolver(s);
-            Water = new NetworkSolver(s);
-            Gas = new NetworkSolver(s);
+            if (!_solvers.TryGetValue(network, out NetworkSolver? solver)) _solvers[network] = solver = new NetworkSolver(_settings);
+            return solver;
         }
-        public NetworkSolver For(string fluid) => fluid == "air" ? Air : fluid == "water" ? Water : Gas;
     }
 
     /// <summary>Result of previewing a run while it is being drawn ("simulate before you buy").</summary>
@@ -181,9 +207,24 @@ namespace HeadLoss.Game.Session
         /// <summary>The city gas connection (set by the city solve; fixtures without a city get the reference pressure).</summary>
         public WaterSupply GasSupply { get; set; }
         /// <summary>The layout has a water network (taps or a water connection).</summary>
-        public bool HasWater { get; }
+        public bool HasWater => HasNetwork("water");
         /// <summary>The layout has a gas network (gas outlets or a gas connection).</summary>
-        public bool HasGas { get; }
+        public bool HasGas => HasNetwork(BuildingState.GasFluid);
+        /// <summary>The networks this building has, in solve order (the air supply first, then <c>networks.json</c> order).</summary>
+        public IReadOnlyList<string> NetworkIds => _networkIds;
+        /// <summary>The building has this network (outlets on it or an opening that starts it).</summary>
+        public bool HasNetwork(string network) => _networkIds.Contains(network);
+        readonly List<string> _networkIds = new List<string>();
+        readonly Dictionary<string, IFluidProperties> _properties = new Dictionary<string, IFluidProperties>();
+
+        /// <summary>Property tables of the fluid a network carries.</summary>
+        public IFluidProperties Properties(string network)
+        {
+            string fluid = Data.FluidIdOf(network);
+            if (!_properties.TryGetValue(fluid, out IFluidProperties? p))
+                _properties[fluid] = p = new TableFluid(Data.Fluid(fluid), Data.FluidTables[fluid], Data.Balancing.Physics.GasConstant);
+            return p;
+        }
         /// <summary>Outside conditions (shared by the city's buildings).</summary>
         public Climate Climate { get; }
         /// <summary>Rooms and duct temperatures (<c>05-simulation.md</c> §3–4).</summary>
@@ -221,11 +262,12 @@ namespace HeadLoss.Game.Session
             _offlineSolver = new SolverSet(_settings);
             Climate = climate ?? Climate.Fixed(data, data.Balancing.Physics.DefaultAirTemperatureC);
             Rooms = new BuildingClimate(data, layout, Climate);
-            Air = new TableFluid(data.Fluid("air"), data.FluidTables["air"], data.Balancing.Physics.GasConstant);
-            Water = new TableFluid(data.Fluid("water"), data.FluidTables["water"], data.Balancing.Physics.GasConstant);
-            GasProperties = new TableFluid(data.Fluid(BuildingState.GasFluid), data.FluidTables[BuildingState.GasFluid], data.Balancing.Physics.GasConstant);
-            HasWater = layout.OpeningFor("water") != null || layout.Outlets.Count != 0 && HasOutlets(layout, "water");
-            HasGas = layout.OpeningFor("gas") != null || HasOutlets(layout, BuildingState.GasFluid);
+            _networkIds.Add("air");
+            List<string> used = layout.NetworkIds();
+            foreach (NetworkDef n in data.Networks) if (n.Id != "air" && used.Contains(n.Id)) _networkIds.Add(n.Id);
+            Air = Properties("air");
+            Water = Properties("water");
+            GasProperties = Properties(BuildingState.GasFluid);
             Supply = new WaterSupply(true, ReferenceWaterPressure(data));
             GasSupply = new WaterSupply(true, ReferenceGasPressure(data));
             Failures = new Failures.BuildingFailures(data, layout, record, Seeds.Derive(0x0FA1_0000UL, layout.Id))
@@ -240,12 +282,6 @@ namespace HeadLoss.Game.Session
             CommittedEvaluation = DesignEvaluation;
             RefreshPending();
             SettleSpin();
-        }
-
-        static bool HasOutlets(BuildingLayout layout, string fluid)
-        {
-            foreach (var o in layout.Outlets) if (BuildingState.OutletFluid(o.Type) == fluid) return true;
-            return false;
         }
 
         /// <summary>Gas leaks, alarm, explosion timer and the certificate.</summary>
@@ -405,7 +441,7 @@ namespace HeadLoss.Game.Session
             double q = 0;
             foreach (OutletPlacementDef o in Layout.Outlets)
             {
-                if (BuildingState.OutletFluid(o.Type) != BuildingState.GasFluid) continue;
+                if (Layout.NetworkOf(o) != BuildingState.GasFluid) continue;
                 DuctNode? n = Committed.Gas.Nodes.Find(x => x.Kind == DuctNodeKind.Outlet && x.AnchorId == o.Id);
                 if (n != null && Committed.Gas.Degree(n.Id) > 0) q += NetworkCompiler.DesignFlow(Data, Layout, o);
             }
@@ -423,7 +459,7 @@ namespace HeadLoss.Game.Session
             double q = 0;
             foreach (OutletPlacementDef o in Layout.Outlets)
             {
-                if (BuildingState.OutletFluid(o.Type) != "water") continue;
+                if (Layout.NetworkOf(o) != "water") continue;
                 DuctNode? n = Committed.Water.Nodes.Find(x => x.Kind == DuctNodeKind.Outlet && x.AnchorId == o.Id);
                 if (n != null && Committed.Water.Degree(n.Id) > 0) q += NetworkCompiler.DesignFlow(Data, Layout, o);
             }
@@ -618,10 +654,9 @@ namespace HeadLoss.Game.Session
         /// <summary>Compiles and solves a state with the given solvers (pure; safe on a worker thread).</summary>
         NetworkSnapshot SolveState(BuildingState state, NetworkSnapshot? warmFrom, SolverSet solvers, CompileOptions options)
         {
-            FluidSolve air = SolveFluid(state, "air", warmFrom?.Air, solvers.Air, options, Air);
-            FluidSolve? water = HasWater ? SolveFluid(state, "water", warmFrom?.Water, solvers.Water, options, Water) : null;
-            FluidSolve? gas = HasGas ? SolveFluid(state, BuildingState.GasFluid, warmFrom?.Gas, solvers.Gas, options, GasProperties) : null;
-            return new NetworkSnapshot(air, water, state, gas);
+            var solves = new List<FluidSolve>(_networkIds.Count);
+            foreach (string id in _networkIds) solves.Add(SolveFluid(state, id, warmFrom?.For(id), solvers.For(id), options, Properties(id)));
+            return new NetworkSnapshot(solves, state);
         }
 
         FluidSolve SolveFluid(BuildingState state, string fluid, FluidSolve? warmFrom, NetworkSolver solver, CompileOptions options, IFluidProperties props)
@@ -753,9 +788,9 @@ namespace HeadLoss.Game.Session
 
         void ReportNonFinite(NetworkSnapshot snap)
         {
-            foreach (FluidSolve? fs in new[] { snap.Air, snap.Water, snap.Gas })
+            foreach (FluidSolve fs in snap.All)
             {
-                if (_solveProblemReported || fs == null || !fs.Result.NonFinite) continue;
+                if (_solveProblemReported || !fs.Result.NonFinite) continue;
                 _solveProblemReported = true;
                 var f = Record.Failures;
                 SolveProblem?.Invoke($"{Record.BuildingId} (tier {Layout.Tier}), {fs.Fluid}: non-finite solve, {fs.Compiled.Graph.Nodes.Count} nodes, {fs.Compiled.Graph.Links.Count} links, water {Supply.PressurePa:0} Pa, gas {GasSupply.PressurePa:0} Pa, power speed {PowerSpeed:0.###}, crank {CrankSpeed:0.###}, air {AirTemperatureK:0.#} K, leaks {f.Leaks.Count}, bursts {f.Bursts.Count}, damaged {f.DamagedEquipment.Count}");
@@ -844,7 +879,7 @@ namespace HeadLoss.Game.Session
             DrawError e = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree);
             if (e != DrawError.None) return e;
             MaterialDef? m = Data.FindMaterial(materialId);
-            if (m == null || !m.Fluids.Contains(fluid)) return DrawError.WrongMaterial;
+            if (m == null || !m.Fluids.Contains(Data.FluidIdOf(fluid))) return DrawError.WrongMaterial;
             if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
                 return DrawError.NoCeilingSpace;
             if (!Unlocked(Progression.Tech.SizeTier(Data, materialId, diameterMm)) || !ItemUnlocked(materialId)

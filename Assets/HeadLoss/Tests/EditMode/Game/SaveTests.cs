@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Commands;
@@ -228,6 +229,43 @@ namespace HeadLoss.Game.Tests
             Assert.AreEqual(30, g.FindBuilding(one.Id)!.SpentTotal, 1e-9);
             Assert.AreEqual(SaveSerializer.CurrentGeneratorVersion, g.GeneratorVersion);
             Assert.IsTrue(ctx.Notes.Count > 0);
+        }
+
+        /// <summary>Phase 5 saves (v4): a state's air, water and gas fields become its list of networks, nothing else moves.</summary>
+        [Test]
+        public void Migration_V4_MovesTheNetworkFieldsIntoAList()
+        {
+            string Net(string fluid, int nodes) =>
+                $"{{ \"fluidId\": \"{fluid}\", \"nodes\": [{string.Join(",", System.Linq.Enumerable.Range(1, nodes).Select(i => $"{{ \"id\": {i}, \"x\": {i}, \"y\": 1 }}"))}], \"segments\": [], \"nextNodeId\": {nodes + 1}, \"nextSegmentId\": 1 }}";
+            string state = $"{{ \"buildingId\": \"plot-7\", \"air\": {Net("air", 2)}, \"water\": {Net("water", 3)}, \"gas\": {Net("natural-gas", 1)}, \"equipment\": [] }}";
+            string json = $"{{ \"saveVersion\": 4, \"gameState\": {{ \"buildings\": [ {{ \"buildingId\": \"plot-7\", \"committed\": {state}, \"design\": {state} }} ] }} }}";
+            Newtonsoft.Json.Linq.JObject o = SaveMigrator.Migrate(SaveSerializer.Parse(json), out int from);
+            Assert.AreEqual(4, from);
+            GameState g = SaveSerializer.FromJObject(o).GameState;
+            foreach (BuildingState s in new[] { g.Buildings[0].Committed, g.Buildings[0].Design })
+            {
+                Assert.AreEqual(3, s.Networks.Count);
+                Assert.AreEqual(2, s.Air.Nodes.Count);
+                Assert.AreEqual(3, s.Water.Nodes.Count);
+                Assert.AreEqual(1, s.Gas.Nodes.Count);
+                Assert.AreEqual(4, s.Water.NextNodeId);
+            }
+            Assert.IsNull(o["gameState"]!["buildings"]![0]!["committed"]!["air"], "the old fields are gone");
+        }
+
+        /// <summary>Networks are kept in one order (air, water, gas, then by id) whatever order they were added in.</summary>
+        [Test]
+        public void Networks_KeepAFixedOrder()
+        {
+            var s = new BuildingState();
+            s.Net("heating-water");
+            s.Net(BuildingState.GasFluid);
+            s.Net("air-exhaust");
+            s.Net("water");
+            s.Net("air");
+            CollectionAssert.AreEqual(new[] { "air", "water", BuildingState.GasFluid, "air-exhaust", "heating-water" }, s.Networks.ConvertAll(n => n.FluidId));
+            Assert.AreSame(s.Water, s.Net("water"), "asking again returns the same network");
+            Assert.AreEqual(5, s.Clone().Networks.Count);
         }
 
         [Test]

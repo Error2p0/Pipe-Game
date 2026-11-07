@@ -52,7 +52,7 @@ namespace HeadLoss.Unity
             _palette = palette;
             _previousStepper = session.Rooms.Stepper;
             if (roomStepper != null) session.Rooms.Stepper = roomStepper;
-            ViewState = new BuildingViewState(session.Layout, session.HasWater, session.HasGas)
+            ViewState = new BuildingViewState(session.Layout, session.NetworkIds)
             {
                 WallCavityAvailable = session.Unlocked(session.Data.Balancing.Building.WallCavityTier) && session.Layout.Tier >= session.Data.Balancing.Building.WallCavityTier,
             };

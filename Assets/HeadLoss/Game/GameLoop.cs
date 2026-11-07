@@ -96,8 +96,9 @@ namespace HeadLoss.Game
         }
 
         /// <summary>
-        /// Phase 4 rebuilt tier 2+ buildings (floors, water) and Phase 5 tier 3 ones (gas): a save from an older generator gets
-        /// back what it spent on them and they start fresh (D83). Other layouts are unchanged and keep their edits.
+        /// Phase 4 rebuilt tier 2+ buildings (floors, water), Phase 5 tier 3 ones (gas) and Phase 6 tier 3+ ones (heating, D137): a
+        /// save from an older generator gets back what it spent on them and they start fresh (D83). Other layouts are unchanged and
+        /// keep their edits. Tiers 4–5 had no buildings before Phase 6 (D104), so tier 3 is the lowest rebuilt from version 3 on.
         /// </summary>
         void RegenerateOlder(GameState game)
         {

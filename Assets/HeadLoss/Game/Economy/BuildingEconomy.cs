@@ -178,7 +178,7 @@ namespace HeadLoss.Game.Economy
                     st.Connected = true;
                     st.Delivery = solve.Result.NodeActive[node] ? System.Math.Max(0, solve.Result.NodePressure[node]) : 0;
                 }
-                bool risky = data.Fluid(def.Fluid).Risky;
+                bool risky = data.FluidOf(def.Fluid).Risky;
                 st.Multiplier = Payout.Multiplier(st.Requirement, st.Delivery, risky, e, out st.Zone);
                 if (!st.Connected) st.Zone = OutletZone.NotConnected;
                 if (solve != null && solve.Compiled.IsolatedOutlets.Contains(placement.Id))

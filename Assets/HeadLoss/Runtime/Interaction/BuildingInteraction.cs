@@ -113,9 +113,9 @@ namespace HeadLoss.Unity.Interaction
             _views = views;
             View = view;
             _drawing = session.Data.Balancing.Drawing;
+            // Each network starts with its own size and material (networks.json); the air supply keeps the drawing defaults.
+            foreach (var n in session.Data.Networks) _drawChoice[n.Id] = (n.DefaultSizeMm, n.DefaultMaterial);
             _drawChoice["air"] = (_drawing.DefaultDuctSizeMm, _drawing.DefaultMaterial);
-            _drawChoice["water"] = (22, "pvc");
-            _drawChoice[BuildingState.GasFluid] = (22, "copper");
         }
 
         TilePos TileAt(Vector2 world) => new TilePos(Mathf.FloorToInt(world.x), Mathf.FloorToInt(world.y), View.Floor);
