@@ -28,6 +28,12 @@ namespace HeadLoss.Game.Session
         }
 
         public string Fluid => Compiled.Fluid;
+
+        /// <summary>
+        /// Heat outlets on this network: heat delivered, W (radiators: given to the room; cooling terminals: taken out of it), rated at
+        /// the setpoint (<c>02-economy.md</c>: "for heating/cooling outlets it is heat delivered in W"). Filled with the solve.
+        /// </summary>
+        public readonly Dictionary<string, double> OutletHeat = new Dictionary<string, double>();
     }
 
     /// <summary>A building's compiled networks and their solves, always swapped together.</summary>
@@ -666,7 +672,9 @@ namespace HeadLoss.Game.Session
             var sw = Stopwatch.StartNew();
             SolveResult result = solver.Solve(compiled.Graph, props, same ? warmFrom!.Result.Flow : null, same ? warmFrom!.Result.Status : null);
             result.SolveMilliseconds = sw.Elapsed.TotalMilliseconds;
-            return new FluidSolve(compiled, result);
+            var fs = new FluidSolve(compiled, result);
+            Thermal.HeatDelivery.FillAirTerminals(Data, Layout, fs, props);
+            return fs;
         }
 
         (NetworkSnapshot, NetworkSnapshot?) SolveBoth(BuildingState design, BuildingState? committed, NetworkSnapshot? warmD, NetworkSnapshot? warmC,

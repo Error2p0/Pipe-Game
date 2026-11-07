@@ -30,6 +30,7 @@ namespace HeadLoss.Game.Thermal
                 if (m == null) continue;
                 _shift += m.OutsideTemperatureShift;
                 if (m.WallU > 0) WallUOverride = m.WallU;
+                if (m.HeatingFactor > 0) HeatingFactor *= m.HeatingFactor;
             }
         }
 
@@ -39,6 +40,15 @@ namespace HeadLoss.Game.Thermal
 
         /// <summary>Exterior wall U-value set by a city modifier, W/(m²·K) (0 = the data default).</summary>
         public double WallUOverride { get; }
+
+        /// <summary>Shift of every outside temperature by the city's modifiers, K (the design temperatures move with it).</summary>
+        public double TemperatureShiftK => _shift;
+
+        /// <summary>Multiplier on heating loads from the city's modifiers (<c>cold-climate</c> ×1.5).</summary>
+        public double HeatingFactor { get; } = 1;
+
+        /// <summary>Exterior wall U-value in force, W/(m²·K).</summary>
+        public double WallU => WallUOverride > 0 ? WallUOverride : _def.WallU;
 
         /// <summary>Outside air temperature now, °C.</summary>
         public double OutsideTemperatureC => FixedTemperatureC ?? OutsideTemperatureAt(LocalHour);

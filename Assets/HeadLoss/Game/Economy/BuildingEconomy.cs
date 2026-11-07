@@ -168,7 +168,16 @@ namespace HeadLoss.Game.Economy
                 };
                 FluidSolve? solve = null;
                 if (solves != null) foreach (FluidSolve fs in solves) if (fs.Fluid == def.Fluid) solve = fs;
-                if (solve != null && solve.Compiled.OutletLink.TryGetValue(placement.Id, out int link))
+                if (def.Measured == "heat")
+                {
+                    // Radiators and cooling terminals deliver heat, W (02 §Payout multiplier formula).
+                    if (solve != null && solve.OutletHeat.TryGetValue(placement.Id, out double heat))
+                    {
+                        st.Connected = true;
+                        st.Delivery = System.Math.Max(0, heat);
+                    }
+                }
+                else if (solve != null && solve.Compiled.OutletLink.TryGetValue(placement.Id, out int link))
                 {
                     st.Connected = true;
                     st.Delivery = System.Math.Max(0, solve.Result.Flow[link]);
