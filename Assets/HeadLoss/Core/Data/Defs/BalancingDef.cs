@@ -528,6 +528,8 @@ namespace HeadLoss.Core.Data.Defs
         public int CoreDrillTier;
         /// <summary>Tier at which the wall cavity layer unlocks.</summary>
         public int WallCavityTier;
+        /// <summary>Largest pipe the wall cavity takes, mm (<c>04</c>: 22 mm).</summary>
+        public double WallCavityMaxDiameterMm;
     }
 
     public sealed class HeatmapDef
@@ -593,6 +595,8 @@ namespace HeadLoss.Core.Data.Defs
 
     public sealed class DrawingDef
     {
+        /// <summary>Wall cavity pipes are drawn this share of a ceiling pipe's width (D170).</summary>
+        public double CavityWidthFactor = 0.6;
         /// <summary>Opacity of the pipes on the floors above and below the one on show, 0–1.</summary>
         public double GhostOpacity;
         /// <summary>Opacity of the networks not in focus on the floor on show, their parts included, 0–1.</summary>

@@ -116,11 +116,14 @@ namespace HeadLoss.Game.Commands
         readonly string _materialId;
         readonly bool _smoothElbows;
         readonly string _fluid;
+        readonly bool _cavity;
 
         /// <param name="diameterMm">mm.</param>
         /// <param name="fluid">Network to draw on (air, water).</param>
-        public PlaceRunCommand(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
+        /// <param name="cavity">Draw in the wall cavity (tier 4, D170).</param>
+        public PlaceRunCommand(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air", bool cavity = false)
         {
+            _cavity = cavity;
             _fluid = fluid;
             _path = new List<TilePos>(path);
             _diameterMm = diameterMm;
@@ -133,9 +136,9 @@ namespace HeadLoss.Game.Commands
 
         protected override bool Apply(BuildingSession s)
         {
-            LastError = s.ValidateRun(_fluid, _path, _diameterMm, _materialId, _smoothElbows);
+            LastError = s.ValidateRun(_fluid, _path, _diameterMm, _materialId, _smoothElbows, _cavity);
             if (LastError != DrawError.None) return false;
-            DuctEditor.PlaceRun(s.State.Net(_fluid), _path, _diameterMm, _materialId, _smoothElbows);
+            DuctEditor.PlaceRun(s.State.Net(_fluid), _path, _diameterMm, _materialId, _smoothElbows, _cavity);
             return true;
         }
     }

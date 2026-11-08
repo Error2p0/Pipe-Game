@@ -1156,14 +1156,20 @@ namespace HeadLoss.Game.Session
         public int CeilingCapacityOverride { get; set; }
 
         /// <summary>Every rule a new run must pass: geometry, ceiling space, the material's fluid and unlocks.</summary>
-        public DrawError ValidateRun(string fluid, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
+        /// <param name="cavity">A wall cavity run (D170): small pipes along walls, outside the ceiling's capacity.</param>
+        public DrawError ValidateRun(string fluid, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, bool cavity = false)
         {
             DuctNetworkState net = State.Net(fluid);
             DrawError e = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree);
             if (e != DrawError.None) return e;
             MaterialDef? m = Data.FindMaterial(materialId);
             if (m == null || !m.Fluids.Contains(Data.FluidIdOf(fluid))) return DrawError.WrongMaterial;
-            if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
+            if (cavity)
+            {
+                e = ValidateCavity(net, path, diameterMm, materialId);
+                if (e != DrawError.None) return e;
+            }
+            else if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
                 return DrawError.NoCeilingSpace;
             if (!Unlocked(Progression.Tech.SizeTier(Data, materialId, diameterMm)) || !ItemUnlocked(materialId)
                 || (smoothElbows && !Unlocked(Progression.Tech.SmoothFittingsTier(Data))))
@@ -1246,16 +1252,29 @@ namespace HeadLoss.Game.Session
             else _nextRateTry = Game.PlayTimeSeconds + 60;
         }
 
+        /// <summary>The wall cavity is open in this building: its tier reached and unlocked (<c>04</c>: tier 4).</summary>
+        public bool CavityAvailable => Layout.Tier >= Data.Balancing.Building.WallCavityTier && Unlocked(Data.Balancing.Building.WallCavityTier);
+
+        /// <summary>The wall cavity's own rules for a run (D170): open here, a small pipe, along walls, a free cavity.</summary>
+        DrawError ValidateCavity(DuctNetworkState net, IReadOnlyList<TilePos> path, double diameterMm, string materialId)
+        {
+            if (!CavityAvailable) return DrawError.CavityLocked;
+            if (Data.Material(materialId).Kind != "pipe" || diameterMm > Data.Balancing.Building.WallCavityMaxDiameterMm || CapacityUnits(materialId, diameterMm, "") != 1)
+                return DrawError.TooBigForCavity;
+            return DuctEditor.ValidateCavity(State, net, Layout, path);
+        }
+
         /// <summary>Validates a run in progress and solves the networks as if it were placed (state untouched).</summary>
-        public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
+        public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air", bool cavity = false)
         {
             DuctNetworkState net = State.Net(fluid);
             var p = new DrawPreview { Error = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree) };
-            if (p.Error == DrawError.None && !DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
+            if (p.Error == DrawError.None && cavity) p.Error = ValidateCavity(net, path, diameterMm, materialId);
+            else if (p.Error == DrawError.None && !DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
                 p.Error = DrawError.NoCeilingSpace;
             if (p.Error != DrawError.None) return p;
             BuildingState copy = State.Clone();
-            DuctEditor.PlaceRun(copy.Net(fluid), path, diameterMm, materialId, smoothElbows);
+            DuctEditor.PlaceRun(copy.Net(fluid), path, diameterMm, materialId, smoothElbows, cavity);
             p.Snapshot = SolveCopy(copy);
             return p;
         }

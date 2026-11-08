@@ -925,7 +925,7 @@ namespace HeadLoss.Unity.UI
             if (seg == null) return i;
             MaterialDef mat = _data.Material(seg.MaterialId);
             bool air = fluid == "air", riser = DuctEditor.IsRiser(net, seg);
-            string word = riser ? "Riser" : air ? "Duct" : "Pipe";
+            string word = riser ? "Riser" : seg.Cavity ? "Wall cavity pipe" : air ? "Duct" : "Pipe";
             _readoutTitle.text = $"{word} · {seg.DiameterMm:0} mm {mat.DisplayName.ToLowerInvariant()}";
             string? burst = BurstEdge(fluid, net, seg);
             if (burst != null)

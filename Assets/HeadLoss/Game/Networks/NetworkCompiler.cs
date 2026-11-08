@@ -185,10 +185,17 @@ namespace HeadLoss.Game.Networks
             var burst = o.BurstSegments != null && o.BurstSegments.TryGetValue(fluid, out HashSet<int>? bs) ? bs : new HashSet<int>();
 
             var inlineOut = new Dictionary<int, int>();
+            // A node only wall cavity pipes meet sits at the cavity's height (D170); where they meet a ceiling pipe, the ceiling's.
+            var cavityOnly = new Dictionary<int, bool>();
+            foreach (DuctSegment s in net.Segments)
+                foreach (int end in new[] { s.NodeA, s.NodeB })
+                    cavityOnly[end] = cavityOnly.TryGetValue(end, out bool had) ? had && s.Cavity : s.Cavity;
+            double NodeZ(DuctNode n) => water && cavityOnly.TryGetValue(n.Id, out bool cav) && cav && n.Kind == DuctNodeKind.Free
+                ? n.Floor * bb.FloorHeight + bb.WallCavityLayerOffset : Ceiling(n.Floor);
             foreach (DuctNode n in net.Nodes)
             {
-                c.NodeIndex[n.Id] = g.AddJunction(Ceiling(n.Floor), $"n{n.Id}");
-                if (n.Kind == DuctNodeKind.Inline) inlineOut[n.Id] = g.AddJunction(Ceiling(n.Floor), $"n{n.Id}-out");
+                c.NodeIndex[n.Id] = g.AddJunction(NodeZ(n), $"n{n.Id}");
+                if (n.Kind == DuctNodeKind.Inline) inlineOut[n.Id] = g.AddJunction(NodeZ(n), $"n{n.Id}-out");
             }
 
             int Endpoint(DuctNode n, TilePos other)

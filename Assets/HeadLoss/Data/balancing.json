@@ -31,7 +31,8 @@
     "ceilingCapacityByTier": [4, 4, 4, 6, 6],
     "coreDrillPrice": 20,
     "coreDrillTier": 2,
-    "wallCavityTier": 4
+    "wallCavityTier": 4,
+    "wallCavityMaxDiameterMm": 22
   },
   "heatmap": {
     "jointBlendMetres": 1.5,
@@ -138,6 +139,7 @@
     "defaultDuctFamily": "round-duct",
     "defaultDuctSizeMm": 125,
     "maxNodeDegree": 4,
+    "cavityWidthFactor": 0.6,
     "ductDisplayWidthBase": 0.1,
     "ductDisplayWidthFactor": 0.6
   },

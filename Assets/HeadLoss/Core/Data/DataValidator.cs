@@ -480,7 +480,7 @@ namespace HeadLoss.Core.Data
                     Positive(w + " panelLimitKW", e.PanelLimitKW, errors);
                     continue;
                 }
-                if (e.Category == "gas-supply")
+                if (e.Category == "gas-supply" && e.Curve.Count == 0)  // a regulator; boosters are pumps with a curve
                 {
                     Positive(w + " setpointPa", e.SetpointPa, errors);
                     Positive(w + " regulatorK", e.RegulatorK, errors);

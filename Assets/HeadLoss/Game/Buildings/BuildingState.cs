@@ -72,6 +72,8 @@ namespace HeadLoss.Game.Buildings
         public string Sealing = "";
         /// <summary>Insulation id from <c>upgrades.json</c> ("" = none).</summary>
         public string Insulation = "";
+        /// <summary>Runs in the wall cavity (tier 4, <c>04</c>): small pipes along walls, outside the ceiling's capacity (D170).</summary>
+        public bool Cavity;
 
         public int Other(int node) => node == NodeA ? NodeB : NodeA;
         public DuctSegment Clone() => (DuctSegment)MemberwiseClone();
@@ -79,11 +81,11 @@ namespace HeadLoss.Game.Buildings
         /// <summary>A new segment between two nodes with this one's size, material and upgrades.</summary>
         public DuctSegment Like(int id, int nodeA, int nodeB) => new DuctSegment
         {
-            Id = id, NodeA = nodeA, NodeB = nodeB, DiameterMm = DiameterMm, MaterialId = MaterialId, Sealing = Sealing, Insulation = Insulation,
+            Id = id, NodeA = nodeA, NodeB = nodeB, DiameterMm = DiameterMm, MaterialId = MaterialId, Sealing = Sealing, Insulation = Insulation, Cavity = Cavity,
         };
 
         /// <summary>Same size, material and upgrades (two such segments in a straight line merge into one).</summary>
-        public bool SameSpec(DuctSegment o) => DiameterMm == o.DiameterMm && MaterialId == o.MaterialId && Sealing == o.Sealing && Insulation == o.Insulation;
+        public bool SameSpec(DuctSegment o) => DiameterMm == o.DiameterMm && MaterialId == o.MaterialId && Sealing == o.Sealing && Insulation == o.Insulation && Cavity == o.Cavity;
     }
 
     /// <summary>The player's layout for one network (one fluid system, <c>networks.json</c>) in one building.</summary>
@@ -261,7 +263,7 @@ namespace HeadLoss.Game.Buildings
                     TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
                     if (a.F > b.F || (a.F == b.F && (a.X > b.X || (a.X == b.X && a.Y > b.Y)))) (a, b) = (b, a);
                     string fa = a.F == 0 && b.F == 0 ? "" : $"f{a.F},{b.F},";
-                    parts.Add($"{w}s{fa}{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}");
+                    parts.Add($"{w}s{fa}{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}{(s.Cavity ? ",cavity" : "")}");
                 }
                 foreach (DuctNode n in net.Nodes)
                 {

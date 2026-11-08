@@ -44,6 +44,9 @@ namespace HeadLoss.Unity.Interaction
         readonly DrawingDef _drawing;
         /// <summary>Floor, layer and network on show.</summary>
         public BuildingViewState View { get; }
+
+        /// <summary>Runs drawn with the wall layer on show go into the wall cavity (D170).</summary>
+        public bool DrawInCavity => View.Layer == ViewLayer.WallCavity;
         /// <summary>Size and material last chosen per network.</summary>
         readonly Dictionary<string, (double size, string material)> _drawChoice = new Dictionary<string, (double, string)>();
 
@@ -416,7 +419,7 @@ namespace HeadLoss.Unity.Interaction
 
         void RefreshPreview()
         {
-            Preview = _path.Count >= 2 ? _session.Preview(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows, View.Fluid) : null;
+            Preview = _path.Count >= 2 ? _session.Preview(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows, View.Fluid, DrawInCavity) : null;
             Hint = Preview != null && Preview.Error != DrawError.None ? DuctEditor.Describe(Preview.Error) : "";
             Revision++;
         }
@@ -424,7 +427,7 @@ namespace HeadLoss.Unity.Interaction
         void CommitRun()
         {
             if (Preview != null && Preview.Error == DrawError.None)
-                _session.Execute(new PlaceRunCommand(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows, View.Fluid));
+                _session.Execute(new PlaceRunCommand(_path, DrawDiameterMm, DrawMaterialId, DrawSmoothElbows, View.Fluid, DrawInCavity));
             CancelGesture();
         }
 
