@@ -23,6 +23,10 @@ namespace HeadLoss.Game.Buildings
         public bool PanelTripped;
         /// <summary>Pipe stress, bursts and repairs (<c>08-failures.md</c>).</summary>
         public Failures.FailureState Failures = new Failures.FailureState();
+        /// <summary>A smart building controller is installed (<c>07-equipment.md</c>).</summary>
+        public bool SmartController;
+        /// <summary>What the controller changed, newest last (the last <c>logSize</c> lines).</summary>
+        public System.Collections.Generic.List<string> ControllerLog = new System.Collections.Generic.List<string>();
         /// <summary>Random inspections and the energy rating (<c>10-events.md</c> §Inspections).</summary>
         public Inspections.InspectionState Inspection = new Inspections.InspectionState();
 

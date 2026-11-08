@@ -2,6 +2,7 @@ using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.City;
 using HeadLoss.Game.Commands;
+using HeadLoss.Game.Economy;
 using HeadLoss.Game.Generation;
 using HeadLoss.Game.Session;
 using NUnit.Framework;
@@ -55,5 +56,76 @@ namespace HeadLoss.Game.Tests
             Assert.IsTrue(office.Execute(new SetIntakeEquipmentCommand(FloorPlanGenerator.PowerId, "panel-large")));
             CollectionAssert.AreEquivalent(new[] { "warehouse", "factory", "lab-building" }, Data.EquipmentItem("transformer-room").BuildingTypes);
         }
-    }
+    
+        // ---------- smart building controller (07) ----------
+
+        /// <summary>The small house as its reference layout with every damper half shut: online, but throttled harder than it needs.</summary>
+        static BuildingSession Throttled()
+        {
+            var ctx = new GameContext(Data, GameContext.NewFixtureGame(Data, "small-house"));
+            BuildingSession s = ctx.Building!;
+            s.Record.Design = ReferenceLayout.Build(Data, s.Layout);
+            s.MarkDirty();
+            s.Game.Wallet = 1e6;
+            s.Record.EverOnline = true;
+            Assert.IsTrue(s.Commit());
+            s.SolveNow();
+            foreach (DuctNode n in s.Committed.Air.Nodes)
+                if (n.Kind == DuctNodeKind.Inline && n.PartId == "damper") n.Opening = System.Math.Max(0.3, n.Opening * 0.7);
+            s.Record.Design = s.Committed.Clone();
+            s.MarkDirty();
+            s.SolveNow();
+            return s;
+        }
+
+        [Test]
+        public void SmartController_NeverWorse_KeepsTheLimits_At40SolvesMost()
+        {
+            BuildingSession s = Throttled();
+            Assume.That(s.CommittedEvaluation.Online, "the throttled house still meets its minimums");
+            Assert.IsTrue(s.BuySmartController());
+            double before = s.SteadyState(20).Net;
+            MetaUpgradeDef def = s.ControllerDef!;
+            System.Collections.Generic.List<ControllerChange> changes = SmartController.Run(Data, s.Committed, def, s.CaptureEvaluator(), 1, 1, out int solves);
+            Assert.LessOrEqual(solves, def.MaxSolves);
+            Assert.IsNotEmpty(changes, "dampers shut harder than needed get opened");
+            s.RunControllerNow();
+            s.SolveNow();
+            BuildingEvaluation after = s.SteadyState(20);
+            Assert.GreaterOrEqual(after.Net, before - 1e-9, "a change is kept only when it raises net income");
+            Assert.AreEqual(0, after.BelowMinimum);
+            Assert.AreEqual(0, after.AboveCodeMax);
+            Assert.IsNotEmpty(s.Record.ControllerLog);
+            Assert.IsFalse(s.HasPendingDesign, "settings, not a design change");
+        }
+
+        [Test]
+        public void SmartController_RunsOnAWorkerEvery30Seconds()
+        {
+            BuildingSession s = Throttled();
+            Assume.That(s.CommittedEvaluation.Online);
+            Assert.IsTrue(s.BuySmartController());
+            int logged = s.Record.ControllerLog.Count;
+            Assert.AreEqual(0, logged);
+            for (int i = 0; i < 4000 && s.Record.ControllerLog.Count == logged; i++)
+            {
+                s.Tick(0.05);
+                if (i % 50 == 0) System.Threading.Thread.Sleep(1);
+            }
+            Assert.Greater(s.Record.ControllerLog.Count, logged, "a run started and its changes landed");
+            Assert.Greater(s.CommittedEvaluation.PowerW, 0);
+        }
+
+        [Test]
+        public void SmartController_CostsItsPriceOnce_AndDraws20W()
+        {
+            BuildingSession s = Throttled();
+            double wallet = s.Game.Wallet, power = s.CommittedEvaluation.PowerW;
+            Assert.IsTrue(s.BuySmartController());
+            Assert.AreEqual(wallet - 3000, s.Game.Wallet, 1e-9);
+            Assert.IsFalse(s.BuySmartController(), "once per building");
+            s.SolveNow();
+            Assert.AreEqual(power + 20, s.CommittedEvaluation.PowerW, 0.5);
+        }
+}
 }

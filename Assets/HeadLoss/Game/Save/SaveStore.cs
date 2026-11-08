@@ -172,6 +172,7 @@ namespace HeadLoss.Game.Save
                 BuildingLayout layout = known[r.BuildingId];
                 r.Inspection ??= new Inspections.InspectionState();
                 r.Inspection.Findings ??= new List<string>();
+                r.ControllerLog ??= new List<string>();
                 // A grade the data no longer has is worked out again.
                 if (r.Inspection.Grade.Length > 0 && !data.Inspections.EnergyRating.Exists(b => b.Grade == r.Inspection.Grade))
                 {

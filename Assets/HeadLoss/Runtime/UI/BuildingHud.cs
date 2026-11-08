@@ -55,7 +55,8 @@ namespace HeadLoss.Unity.UI
         readonly List<(int floor, Button button)> _floorButtons = new List<(int, Button)>();
         Button _layerFloor = null!, _layerCeiling = null!, _layerCavity = null!;
         Label _ductHeader = null!, _partsHeader = null!, _protectHeader = null!;
-        Button _sensors = null!, _contract = null!, _crewChoice = null!;
+        Button _sensors = null!, _contract = null!, _crewChoice = null!, _controller = null!;
+        Label _controllerLog = null!;
         readonly List<(string id, Button button)> _safetyButtons = new List<(string, Button)>();
         VisualElement _leaks = null!, _leakRows = null!, _speciesRow = null!;
         Label _leakHead = null!, _legendNote = null!;
@@ -358,6 +359,8 @@ namespace HeadLoss.Unity.UI
             _sensors = _ui.Button(tools, "", () => _s.BuyLeakSensors(View.Fluid));
             _contract = _ui.Button(tools, "", () => _s.SetMaintenanceContract(!_s.Record.Failures.MaintenanceContract, _s.Record.Failures.PreferEmergency));
             _crewChoice = _ui.Button(tools, "", () => _s.SetMaintenanceContract(_s.Record.Failures.MaintenanceContract, !_s.Record.Failures.PreferEmergency));
+            _controller = _ui.Button(tools, "", () => _s.BuySmartController());
+            _controllerLog = UiKit.Text(tools, "", "hl-subtitle");
             foreach (string id in _data.Game.Toolbox.Safety)
             {
                 string part = id;
@@ -589,6 +592,17 @@ namespace HeadLoss.Unity.UI
                 StyleButton(_contract, _s.Record.Failures.MaintenanceContract);
                 _crewChoice.style.display = _s.Record.Failures.MaintenanceContract ? DisplayStyle.Flex : DisplayStyle.None;
                 _crewChoice.text = _s.Record.Failures.PreferEmergency ? "While away: emergency crew" : "While away: standard crew";
+            }
+            if (_s.ControllerDef is MetaUpgradeDef controller)
+            {
+                bool owned = _s.Record.SmartController, ok = _s.Unlocked(controller.Tier);
+                _controller.text = owned ? $"Smart controller on · {controller.PowerW:0} W" : ok ? $"Smart building controller · {Units.FormatMoney(controller.Price, _symbol)}" : $"Smart building controller · tier {controller.Tier}";
+                _controller.SetEnabled(ok && !owned);
+                StyleButton(_controller, owned);
+                List<string> log = _s.Record.ControllerLog;
+                string last = owned && log.Count > 0 ? "Last changes: " + string.Join(" · ", log.GetRange(System.Math.Max(0, log.Count - 3), System.Math.Min(3, log.Count))) : owned ? "Tuning every 30 s; nothing to change yet." : "";
+                if (_controllerLog.text != last) _controllerLog.text = last;
+                _controllerLog.style.display = last.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
             foreach ((string f, Button b) in _fluidButtons) StyleButton(b, f == View.Fluid);
             foreach ((int f, Button b) in _floorButtons) StyleButton(b, f == View.Floor);
