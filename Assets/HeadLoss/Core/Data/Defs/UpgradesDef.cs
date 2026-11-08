@@ -28,6 +28,14 @@ namespace HeadLoss.Core.Data.Defs
         public double PremiumFraction;
         /// <summary>Insurance: multiplier on fines.</summary>
         public double FineFactor = 1;
+        /// <summary>Smart building controller (<c>07</c>): its own electrical draw, W, how often it runs, s, the most solves a run, the
+        /// opening and speed steps it tries, and how many changes its log keeps.</summary>
+        public double PowerW;
+        public double IntervalSeconds;
+        public int MaxSolves;
+        public double OpeningStep;
+        public double SpeedStep;
+        public int LogSize;
         public string Notes = "";
     }
 

@@ -1,3 +1,4 @@
+using HeadLoss.Core.Data.Defs;
 using System.Collections.Generic;
 using HeadLoss.Core;
 using HeadLoss.Game.Buildings;
@@ -206,6 +207,32 @@ namespace HeadLoss.Game.Tests
             // Surges fade after their duration.
             t.Tick(t.Data.Balancing.Failure.HammerDurationSeconds + 0.1);
             Assert.AreEqual(0, t.Failures.SurgePa("water"));
+        }
+
+        [Test]
+        public void Hammer_TheVsPumpSetsBuiltInTankDampsSurges()
+        {
+            // 07: the variable-speed pump set has a pressure tank built in; the same building with the tank switched off in the data surges more.
+            EquipmentDef vs = GameTestUtil.Data.EquipmentItem("vs-pump-set");
+            Assert.IsTrue(vs.BuiltInPressureTank);
+            double Surge(bool tank)
+            {
+                vs.BuiltInPressureTank = tank;
+                BuildingSession s = Built();
+                Assert.IsTrue(s.Execute(new SetIntakeEquipmentCommand("water", "vs-pump-set")));
+                Assert.IsTrue(s.Commit(), s.CheckCommit().Reason);
+                s.SolveNow();
+                Assert.IsTrue(s.Execute(new SetInlineOnCommand(new TilePos(8, 2), false, "water")));
+                s.SolveNow();
+                return s.Failures.SurgePa("water");
+            }
+            try
+            {
+                double without = Surge(false), with = Surge(true);
+                Assert.Greater(without, 0);
+                Assert.AreEqual(without * GameTestUtil.Data.Balancing.Failure.AccumulatorSurgeFactor, with, without * 0.05);
+            }
+            finally { vs.BuiltInPressureTank = true; }
         }
 
         [Test]

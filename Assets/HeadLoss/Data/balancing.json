@@ -28,9 +28,11 @@
     "wallCavityLayerOffset": 1.5,
     "budgetCapFactor": 1.6,
     "ceilingCapacity": 4,
+    "ceilingCapacityByTier": [4, 4, 4, 6, 6],
     "coreDrillPrice": 20,
     "coreDrillTier": 2,
-    "wallCavityTier": 4
+    "wallCavityTier": 4,
+    "wallCavityMaxDiameterMm": 22
   },
   "heatmap": {
     "jointBlendMetres": 1.5,
@@ -137,6 +139,7 @@
     "defaultDuctFamily": "round-duct",
     "defaultDuctSizeMm": 125,
     "maxNodeDegree": 4,
+    "cavityWidthFactor": 0.6,
     "ductDisplayWidthBase": 0.1,
     "ductDisplayWidthFactor": 0.6
   },
@@ -264,7 +267,8 @@
     "balancingPasses": 80,
     "balanceTarget": 0.4,
     "coreDrillPenalty": 4,
-    "gasVelocity": 3.0
+    "gasVelocity": 3.0,
+    "freeCeilingFromTier": 4
   },
   "difficulty": {
     "demandReferenceM3h": 120,
@@ -344,7 +348,8 @@
     "weibullBeta": 3,
     "weibullEta": 1,
     "weepThreshold": 0.6,
-    "ageingRate": 0,
+    "ageingRate": 8.3e-08,
+    "ageingFromTier": 4,
     "repairStandardSeconds": 7200,
     "repairEmergencySeconds": 180,
     "repairEmergencyFactor": 5,

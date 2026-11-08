@@ -121,7 +121,8 @@
     ],
     "buildingTypes": [],
     "parameters": {
-      "maxCo2Ppm": 1000
+      "maxCo2Ppm": 1000,
+      "ventShareOfIdeal": 0.8
     },
     "reason": "A room above 1 000 ppm CO₂ gets nothing for its air outlets until its air is fresher.",
     "why": "Ventilation standards: the fresh air a room needs grows with the people in it, not just with its outlets."

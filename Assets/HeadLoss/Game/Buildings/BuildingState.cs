@@ -48,9 +48,15 @@ namespace HeadLoss.Game.Buildings
         public double Speed = 1;
         /// <summary>Inline electrical parts: the spark-free variant (not an ignition source).</summary>
         public bool SparkFree;
-
+        /// <summary>A gas manifold: the branches whose valve is closed, by the direction they leave in (e, w, n, s, up, down).</summary>
+        public List<string> ClosedBranches = new List<string>();
         public TilePos Pos => new TilePos(X, Y, Floor);
-        public DuctNode Clone() => (DuctNode)MemberwiseClone();
+        public DuctNode Clone()
+        {
+            var c = (DuctNode)MemberwiseClone();
+            c.ClosedBranches = new List<string>(ClosedBranches);
+            return c;
+        }
     }
 
     /// <summary>A straight duct run between two nodes.</summary>
@@ -66,6 +72,8 @@ namespace HeadLoss.Game.Buildings
         public string Sealing = "";
         /// <summary>Insulation id from <c>upgrades.json</c> ("" = none).</summary>
         public string Insulation = "";
+        /// <summary>Runs in the wall cavity (tier 4, <c>04</c>): small pipes along walls, outside the ceiling's capacity (D170).</summary>
+        public bool Cavity;
 
         public int Other(int node) => node == NodeA ? NodeB : NodeA;
         public DuctSegment Clone() => (DuctSegment)MemberwiseClone();
@@ -73,11 +81,11 @@ namespace HeadLoss.Game.Buildings
         /// <summary>A new segment between two nodes with this one's size, material and upgrades.</summary>
         public DuctSegment Like(int id, int nodeA, int nodeB) => new DuctSegment
         {
-            Id = id, NodeA = nodeA, NodeB = nodeB, DiameterMm = DiameterMm, MaterialId = MaterialId, Sealing = Sealing, Insulation = Insulation,
+            Id = id, NodeA = nodeA, NodeB = nodeB, DiameterMm = DiameterMm, MaterialId = MaterialId, Sealing = Sealing, Insulation = Insulation, Cavity = Cavity,
         };
 
         /// <summary>Same size, material and upgrades (two such segments in a straight line merge into one).</summary>
-        public bool SameSpec(DuctSegment o) => DiameterMm == o.DiameterMm && MaterialId == o.MaterialId && Sealing == o.Sealing && Insulation == o.Insulation;
+        public bool SameSpec(DuctSegment o) => DiameterMm == o.DiameterMm && MaterialId == o.MaterialId && Sealing == o.Sealing && Insulation == o.Insulation && Cavity == o.Cavity;
     }
 
     /// <summary>The player's layout for one network (one fluid system, <c>networks.json</c>) in one building.</summary>
@@ -128,6 +136,8 @@ namespace HeadLoss.Game.Buildings
         public bool Vsd;
         /// <summary>The spark-free variant: not an ignition source (<c>07-equipment.md</c> §Safety gear).</summary>
         public bool SparkFree;
+        /// <summary>Gas regulator outlet pressure set by the player, Pa (0 = its default).</summary>
+        public double SetpointPa;
 
         public EquipmentState Clone() => (EquipmentState)MemberwiseClone();
     }
@@ -253,18 +263,19 @@ namespace HeadLoss.Game.Buildings
                     TilePos a = net.FindNode(s.NodeA)!.Pos, b = net.FindNode(s.NodeB)!.Pos;
                     if (a.F > b.F || (a.F == b.F && (a.X > b.X || (a.X == b.X && a.Y > b.Y)))) (a, b) = (b, a);
                     string fa = a.F == 0 && b.F == 0 ? "" : $"f{a.F},{b.F},";
-                    parts.Add($"{w}s{fa}{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}");
+                    parts.Add($"{w}s{fa}{a.X},{a.Y},{b.X},{b.Y},{s.DiameterMm},{s.MaterialId},{s.Sealing},{s.Insulation}{(s.Cavity ? ",cavity" : "")}");
                 }
                 foreach (DuctNode n in net.Nodes)
                 {
-                    if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
+                    if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings && n.PartId.Length == 0) continue;
                     string f = n.Floor == 0 ? "" : $"f{n.Floor},";
                     string set = n.Setting == 0 ? "" : $",{n.Setting}";
                     string spark = n.SparkFree ? ",spark" : "";
-                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}{spark}");
+                    string closed = n.ClosedBranches.Count == 0 ? "" : ",closed:" + string.Join("/", n.ClosedBranches);
+                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}{spark}{closed}");
                 }
             }
-            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}");
+            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}{(e.SetpointPa > 0 ? $",set{e.SetpointPa}" : "")}");
             foreach (SafetyDevice d in Safety) parts.Add($"d{d.EquipmentId},{d.X},{d.Y},{d.Floor},{d.Facing},{d.High}");
             foreach (PlacedDevice d in Devices) parts.Add($"x{d.Key},{d.Facing},{d.On},{d.SetpointC}");
             parts.Sort(System.StringComparer.Ordinal);

@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 did tasks 4 and 6 (report: `docs/dev/phase-6.1-report.md`). Next: task 3 (tier 4 shell, no heating yet).
+Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 did tasks 4 and 6 (report: `docs/dev/phase-6.1-report.md`). Session 6.2 did the tier 4 shell of task 3 (report: `docs/dev/phase-6.2-report.md`); "Tier 4 opens" waits for the finish pass (D135). Next: task 1 (hot water and heating).
 
 ## Phase 1 · Physics core
 
@@ -159,15 +159,15 @@ Started 2026-11-07.
   - [ ] `heat-recovery-unit` and `hr-unit-high-eff`, with both networks running through them.
   - [ ] `industrial-ahu` slots: filter, heat recovery, `heating-coil`, `cooling-coil`.
 - [ ] 3. Tier 4 (`04`, `07`, `13`)
-  - [ ] Warehouse and office: footprints, 1–6 floors, L and U shapes, 40% chance of a basement, room programs, codes, occupants and machines.
-  - [ ] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`).
-  - [ ] Indoor air quality at generation (D155): occupied rooms get vents for their people, the router aims at each room's CO₂, and the solvability check includes the code.
-  - [ ] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it.
-  - [ ] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only.
-  - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
-  - [ ] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set`.
-  - [ ] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (`07`; D110 covers the fixed 25 mbar only).
-  - [ ] Slow ageing on, tier 4+ (D134): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
+  - [x] Warehouse and office: footprints, L and U shapes, 40% chance of a basement, room programs (D163), codes, occupants and machines. Offices 2–4 floors on ≤ 24 × 16 m, warehouses 1–2 floors (D162).
+  - [x] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`). Router fixes (D164), deeper ceilings from tier 4 (D165). The gas manifold joins the references when it is built.
+  - [x] Indoor air quality at generation (D155): occupied rooms get vents for their people, the router aims at each room's CO₂, and the solvability check includes the code.
+  - [x] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it (D170).
+  - [x] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only (D167).
+  - [x] `smart-building-controller` (D169): re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
+  - [x] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set` (its built-in pressure tank now counts). D168.
+  - [x] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (a live setting in 1 mbar steps, like a valve setting) (`07`; D110 covers the fixed 25 mbar only).
+  - [x] Slow ageing on, tier 4+ (D134, rate in D166): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
   - [ ] Tier 4 opens (D104 lifts): unlocks, tree, milestone and tests that assume tier 3 is the top.
 - [x] 4. Indoor air quality code (`09`, `05` §3)
   - [x] 1 000 ppm room mean CO₂: every air outlet in that room pays 0, on the sheet and in the code list, with tests. Tiers 4–5 (D155); zone "CO₂ too high" (D156).

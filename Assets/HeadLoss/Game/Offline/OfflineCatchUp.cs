@@ -111,6 +111,8 @@ namespace HeadLoss.Game.Offline
                     return true;
                 };
                 s.Failures.DispatchContract(s.Committed);
+                // 12 §Offline catch-up, step 1: the smart controller runs one optimisation first.
+                if (s.Record.SmartController && s.RunControllerNow().Count > 0) s.SolveNow();
             }
             GameLoop.FinesPerSecond(ctx, out double finesPerSecond);
             var gasRooms = new Dictionary<BuildingSession, OfflineGas>();

@@ -35,6 +35,14 @@ namespace HeadLoss.Game.Buildings
         NoFloorSpace,
         /// <summary>A passive vent needs an outside wall.</summary>
         NotOnOutsideWall,
+        /// <summary>A wall cavity pipe runs only along walls.</summary>
+        NotAlongWall,
+        /// <summary>The wall cavity takes small pipes only (≤ 22 mm, one capacity unit), no ducts.</summary>
+        TooBigForCavity,
+        /// <summary>The wall cavity here already holds a pipe.</summary>
+        CavityFull,
+        /// <summary>The wall cavity is not unlocked in this building (tier 4).</summary>
+        CavityLocked,
     }
 
     /// <summary>What occupies a tile of the duct layer.</summary>
@@ -78,6 +86,10 @@ namespace HeadLoss.Game.Buildings
             DrawError.Blocked => "A column, the stairwell or a protected room is in the way",
             DrawError.NotInShaft => "Risers run only through shafts",
             DrawError.NoCeilingSpace => "Not enough ceiling space here",
+            DrawError.NotAlongWall => "Wall cavity pipes run along walls only",
+            DrawError.TooBigForCavity => "The wall cavity takes small pipes only (22 mm at most)",
+            DrawError.CavityFull => "The wall cavity here already holds a pipe",
+            DrawError.CavityLocked => "The wall cavity opens at tier 4",
             DrawError.WrongMaterial => "That material does not carry this fluid",
             DrawError.WrongNetwork => "That part does not fit this network",
             DrawError.NoFloorSpace => "Not enough floor space here",
@@ -240,6 +252,7 @@ namespace HeadLoss.Game.Buildings
             var mine = new Dictionary<TilePos, int>();
             foreach (DuctSegment s in net.Segments)
             {
+                if (s.Cavity) continue;  // the wall cavity has its own room (D170)
                 int u = units(net, s);
                 foreach (TilePos t in Tiles(net, s))
                     if (!mine.TryGetValue(t, out int have) || have < u) mine[t] = u;
@@ -255,9 +268,49 @@ namespace HeadLoss.Game.Buildings
             return n;
         }
 
+        /// <summary>A tile with a wall on at least one side: the building's edge or another room (a wall cavity tile).</summary>
+        public static bool AlongWall(BuildingLayout layout, TilePos t)
+        {
+            int room = layout.RoomIndexAt(t);
+            if (room < 0) return false;
+            foreach ((int dx, int dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+            {
+                var n = new TilePos(t.X + dx, t.Y + dy, t.F);
+                if (!layout.InFootprint(n) || layout.RoomIndexAt(n) != room) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// The wall cavity rules for a run (D170): every tile along a wall, one floor, and no tile whose cavity another pipe
+        /// (of any network) already runs through, except where the run joins its own network.
+        /// </summary>
+        public static DrawError ValidateCavity(BuildingState state, DuctNetworkState net, BuildingLayout layout, IReadOnlyList<TilePos> path)
+        {
+            for (int i = 0; i < path.Count; i++)
+            {
+                if (path[i].F != path[0].F) return DrawError.NotAlongWall;
+                if (!AlongWall(layout, path[i])) return DrawError.NotAlongWall;
+            }
+            foreach (DuctNetworkState n in state.Networks)
+                foreach (DuctSegment s in n.Segments)
+                {
+                    if (!s.Cavity) continue;
+                    List<TilePos> tiles = Tiles(n, s);
+                    for (int i = 0; i < path.Count; i++)
+                    {
+                        if (!tiles.Contains(path[i])) continue;
+                        bool joint = n == net && (i == 0 || i == path.Count - 1);
+                        if (!joint) return DrawError.CavityFull;
+                    }
+                }
+            return DrawError.None;
+        }
+
         /// <summary>Places a validated run. Corners get elbow nodes with <paramref name="smoothElbows"/>.</summary>
         /// <param name="diameterMm">Duct size, mm.</param>
-        public static void PlaceRun(DuctNetworkState net, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
+        /// <param name="cavity">The run is in the wall cavity (D170).</param>
+        public static void PlaceRun(DuctNetworkState net, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, bool cavity = false)
         {
             // Tiles where the run meets the existing network on its way (crossings) become junctions.
             var crossings = new HashSet<TilePos>();
@@ -274,7 +327,7 @@ namespace HeadLoss.Game.Buildings
             }
             keys.Add(endNode);
             for (int i = 0; i < keys.Count - 1; i++)
-                net.Segments.Add(new DuctSegment { Id = net.NextSegmentId++, NodeA = keys[i], NodeB = keys[i + 1], DiameterMm = diameterMm, MaterialId = materialId });
+                net.Segments.Add(new DuctSegment { Id = net.NextSegmentId++, NodeA = keys[i], NodeB = keys[i + 1], DiameterMm = diameterMm, MaterialId = materialId, Cavity = cavity });
             Normalize(net);
         }
 

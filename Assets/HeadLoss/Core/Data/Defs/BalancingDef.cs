@@ -215,8 +215,10 @@ namespace HeadLoss.Core.Data.Defs
         public double WeibullEta;
         /// <summary>Stress at which a segment weeps (and leak sensors alert).</summary>
         public double WeepThreshold;
-        /// <summary>Optional slow ageing below rating, stress per second (0 = off, the default).</summary>
+        /// <summary>Slow ageing below rating, stress per second (from <see cref="AgeingFromTier"/>, D166).</summary>
         public double AgeingRate;
+        /// <summary>Slow ageing applies from this tier (<c>08-failures.md</c>: tier 4+).</summary>
+        public int AgeingFromTier;
         /// <summary>Standard crew repair time, s.</summary>
         public double RepairStandardSeconds;
         /// <summary>Emergency crew repair time, s.</summary>
@@ -407,6 +409,8 @@ namespace HeadLoss.Core.Data.Defs
     /// <summary>Auto-router for reference layouts (<c>04-buildings.md</c> §Auto-router).</summary>
     public sealed class AutoRouterDef
     {
+        /// <summary>From this tier, a reference layout with pipes keeps one unit of every ceiling tile free (D164).</summary>
+        public int FreeCeilingFromTier;
         /// <summary>Duct sizing velocity limit on trunks (serving two or more outlets), m/s.</summary>
         public double AirTrunkVelocity;
         /// <summary>Duct sizing velocity limit on branches (one outlet), m/s.</summary>
@@ -505,12 +509,27 @@ namespace HeadLoss.Core.Data.Defs
         public double BudgetCapFactor;
         /// <summary>Ceiling capacity units per tile (the old-buildings modifier lowers it).</summary>
         public int CeilingCapacity;
+        /// <summary>Ceiling capacity units per tile by tier, 1-based tier at index tier − 1 (D165: deeper ceilings from tier 4).</summary>
+        public List<int> CeilingCapacityByTier = new List<int>();
+
+        /// <summary>
+        /// Capacity units per ceiling tile in a building of a tier. A city modifier's capacity (old buildings: 3) is taken as
+        /// that many units fewer than the default (4), so every tier loses the same one unit.
+        /// </summary>
+        /// <param name="modifierCapacity">The city modifier's capacity, 0 = none.</param>
+        public int CeilingCapacityFor(int tier, int modifierCapacity = 0)
+        {
+            int baseUnits = tier >= 1 && tier <= CeilingCapacityByTier.Count ? CeilingCapacityByTier[tier - 1] : CeilingCapacity;
+            return modifierCapacity > 0 ? System.Math.Max(1, baseUnits - (CeilingCapacity - modifierCapacity)) : baseUnits;
+        }
         /// <summary>Core drilling a wall tile to pass a pipe (tier 2+), $ each.</summary>
         public double CoreDrillPrice;
         /// <summary>Lowest tier that may core-drill walls.</summary>
         public int CoreDrillTier;
         /// <summary>Tier at which the wall cavity layer unlocks.</summary>
         public int WallCavityTier;
+        /// <summary>Largest pipe the wall cavity takes, mm (<c>04</c>: 22 mm).</summary>
+        public double WallCavityMaxDiameterMm;
     }
 
     public sealed class HeatmapDef
@@ -576,6 +595,8 @@ namespace HeadLoss.Core.Data.Defs
 
     public sealed class DrawingDef
     {
+        /// <summary>Wall cavity pipes are drawn this share of a ceiling pipe's width (D170).</summary>
+        public double CavityWidthFactor = 0.6;
         /// <summary>Opacity of the pipes on the floors above and below the one on show, 0–1.</summary>
         public double GhostOpacity;
         /// <summary>Opacity of the networks not in focus on the floor on show, their parts included, 0–1.</summary>

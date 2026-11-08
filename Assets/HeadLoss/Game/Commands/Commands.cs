@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
+using HeadLoss.Game.Networks;
 using HeadLoss.Game.Progression;
 using HeadLoss.Game.Session;
 
@@ -115,11 +116,14 @@ namespace HeadLoss.Game.Commands
         readonly string _materialId;
         readonly bool _smoothElbows;
         readonly string _fluid;
+        readonly bool _cavity;
 
         /// <param name="diameterMm">mm.</param>
         /// <param name="fluid">Network to draw on (air, water).</param>
-        public PlaceRunCommand(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
+        /// <param name="cavity">Draw in the wall cavity (tier 4, D170).</param>
+        public PlaceRunCommand(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air", bool cavity = false)
         {
+            _cavity = cavity;
             _fluid = fluid;
             _path = new List<TilePos>(path);
             _diameterMm = diameterMm;
@@ -132,9 +136,9 @@ namespace HeadLoss.Game.Commands
 
         protected override bool Apply(BuildingSession s)
         {
-            LastError = s.ValidateRun(_fluid, _path, _diameterMm, _materialId, _smoothElbows);
+            LastError = s.ValidateRun(_fluid, _path, _diameterMm, _materialId, _smoothElbows, _cavity);
             if (LastError != DrawError.None) return false;
-            DuctEditor.PlaceRun(s.State.Net(_fluid), _path, _diameterMm, _materialId, _smoothElbows);
+            DuctEditor.PlaceRun(s.State.Net(_fluid), _path, _diameterMm, _materialId, _smoothElbows, _cavity);
             return true;
         }
     }
@@ -310,7 +314,7 @@ namespace HeadLoss.Game.Commands
                 return true;
             }
             EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
-            if (def == null || def.Placement != "intake" || !s.ItemUnlocked(_equipmentId)) return false;
+            if (def == null || def.Placement != "intake" || !s.ItemUnlocked(_equipmentId) || !def.AllowedIn(s.Layout.BuildingType)) return false;
             if (!EquipmentFits.Opening(s.Data, s.Layout.FindOpening(_openingId)!, def)) return false;
             LastError = EquipmentFits.FloorSpace(s, _openingId, def, out _);
             if (LastError != DrawError.None) return false;
@@ -703,6 +707,70 @@ namespace HeadLoss.Game.Commands
         }
     }
 
+    /// <summary>
+    /// Sets the outlet pressure of the gas regulator at a connection (<c>07</c>: 18–30 mbar from tier 4): live and free like a
+    /// valve setting, applied to the design and to what is built; consecutive moves merge into one undo step.
+    /// </summary>
+    public sealed class SetRegulatorSetpointCommand : OperationalCommand
+    {
+        readonly string _openingId;
+        double _pa;
+        double _wasDesign, _wasCommitted;
+        bool _hadCommitted;
+
+        public SetRegulatorSetpointCommand(string openingId, double pa)
+        {
+            _openingId = openingId;
+            _pa = pa;
+        }
+
+        public override string Description => $"Set {_pa / 100:0} mbar";
+
+        /// <summary>Whether the regulator's setpoint can be changed in this building's tier.</summary>
+        public static bool Adjustable(EquipmentDef def, int tier) => def.SetpointFromTier > 0 && tier >= def.SetpointFromTier && def.SetpointMaxPa > def.SetpointMinPa;
+
+        public static double Snap(EquipmentDef def, double pa)
+        {
+            double v = System.Math.Max(def.SetpointMinPa, System.Math.Min(def.SetpointMaxPa, pa));
+            return def.SetpointStepPa > 0 ? System.Math.Round(v / def.SetpointStepPa) * def.SetpointStepPa : v;
+        }
+
+        public override bool Execute(BuildingSession s)
+        {
+            EquipmentState? e = s.State.EquipmentAt(_openingId);
+            if (e == null) return false;
+            EquipmentDef def = s.Data.EquipmentItem(e.EquipmentId);
+            if (def.Category != "gas-supply" || !Adjustable(def, s.Layout.Tier)) return false;
+            double v = Snap(def, _pa);
+            double current = e.SetpointPa > 0 ? e.SetpointPa : def.SetpointPa;
+            if (System.Math.Abs(current - v) < 1e-9) return false;
+            _pa = v;
+            EquipmentState? c = s.CommittedTwin(e);
+            _wasDesign = e.SetpointPa;
+            e.SetpointPa = v;
+            _hadCommitted = c != null;
+            if (c != null)
+            {
+                _wasCommitted = c.SetpointPa;
+                c.SetpointPa = v;
+            }
+            return true;
+        }
+
+        public override void Undo(BuildingSession s)
+        {
+            if (s.State.EquipmentAt(_openingId) is EquipmentState e) e.SetpointPa = _wasDesign;
+            if (_hadCommitted && s.Committed.EquipmentAt(_openingId) is EquipmentState c) c.SetpointPa = _wasCommitted;
+        }
+
+        public override bool TryMerge(ICommand next)
+        {
+            if (!(next is SetRegulatorSetpointCommand d) || d._openingId != _openingId || d._hadCommitted != _hadCommitted) return false;
+            _pa = d._pa;
+            return true;
+        }
+    }
+
     /// <summary>Sets the speed of an inline fan with a variable-speed drive (live, free, merging like the intake version).</summary>
     public sealed class SetInlineSpeedCommand : OperationalCommand
     {
@@ -918,6 +986,89 @@ namespace HeadLoss.Game.Commands
             if (!(next is SetValveSettingCommand d) || d._tile != _tile || d._fluid != _fluid || d._hadCommitted != _hadCommitted) return false;
             _setting = d._setting;
             return true;
+        }
+    }
+
+    /// <summary>Fits a gas manifold on a gas junction, or takes it off (<c>07</c>, D168). A design change: it is bought on Commit.</summary>
+    public sealed class FitManifoldCommand : DesignCommand
+    {
+        readonly int _nodeId;
+        readonly string _fluid;
+        readonly bool _fit;
+
+        public FitManifoldCommand(int nodeId, bool fit, string fluid)
+        {
+            _nodeId = nodeId;
+            _fit = fit;
+            _fluid = fluid;
+        }
+
+        public override string Description => _fit ? "Fit gas manifold" : "Remove gas manifold";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            DuctNetworkState net = s.State.Net(_fluid);
+            DuctNode? n = net.FindNode(_nodeId);
+            if (n == null) return false;
+            if (!_fit)
+            {
+                if (!GasManifold.Is(n)) return false;
+                n.PartId = "";
+                n.ClosedBranches.Clear();
+                return true;
+            }
+            EquipmentDef? def = s.Data.FindEquipment(GasManifold.Id);
+            if (def == null || GasManifold.Is(n) || !GasManifold.CanFit(s.Data, net, n) || !s.ItemUnlocked(GasManifold.Id)) return false;
+            if (def.MaxBranches > 0 && net.Degree(n.Id) > def.MaxBranches) return false;
+            n.PartId = GasManifold.Id;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Opens or closes one branch valve of a gas manifold: live and free like a shutoff, on the design and on what is built
+    /// (D168). A closed branch is cut off and its outlets are exempt from the minimum check (<c>07</c> §Shutoff semantics).
+    /// </summary>
+    public sealed class SetManifoldBranchCommand : OperationalCommand
+    {
+        readonly TilePos _tile;
+        readonly string _direction;
+        readonly bool _closed;
+        readonly string _fluid;
+        bool _hadCommitted;
+
+        public SetManifoldBranchCommand(TilePos tile, string direction, bool closed, string fluid)
+        {
+            _tile = tile;
+            _direction = direction;
+            _closed = closed;
+            _fluid = fluid;
+        }
+
+        public override string Description => $"{(_closed ? "Close" : "Open")} {GasManifold.DirectionName(_direction).ToLowerInvariant()} branch";
+
+        static bool Set(DuctNode n, string dir, bool closed)
+        {
+            bool has = n.ClosedBranches.Contains(dir);
+            if (has == closed) return false;
+            if (closed) n.ClosedBranches.Add(dir);
+            else n.ClosedBranches.Remove(dir);
+            return true;
+        }
+
+        public override bool Execute(BuildingSession s)
+        {
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
+            if (n == null || !GasManifold.Is(n) || !Set(n, _direction, _closed)) return false;
+            DuctNode? c = s.Committed.Net(_fluid).NodeAt(_tile);
+            _hadCommitted = c != null && GasManifold.Is(c) && Set(c, _direction, _closed);
+            return true;
+        }
+
+        public override void Undo(BuildingSession s)
+        {
+            if (s.State.Net(_fluid).NodeAt(_tile) is DuctNode n) Set(n, _direction, !_closed);
+            if (_hadCommitted && s.Committed.Net(_fluid).NodeAt(_tile) is DuctNode c) Set(c, _direction, !_closed);
         }
     }
 

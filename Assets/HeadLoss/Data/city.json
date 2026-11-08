@@ -48,7 +48,7 @@
   },
   "modifiers": [
     { "id": "cold-climate", "displayName": "Cold climate", "description": "Outside temperature 10 °C lower; heating matters more.", "outsideTemperatureShift": -10, "heatingFactor": 1.5, "ceilingCapacity": 0 },
-    { "id": "old-buildings", "displayName": "Old buildings", "description": "Strict ceiling space: 3 capacity units per tile instead of 4.", "outsideTemperatureShift": 0, "heatingFactor": 1, "ceilingCapacity": 3, "wallU": 1.2 }
+    { "id": "old-buildings", "displayName": "Old buildings", "description": "Strict ceiling space: one capacity unit less per tile (3 instead of 4, and 5 instead of 6 from tier 4).", "outsideTemperatureShift": 0, "heatingFactor": 1, "ceilingCapacity": 3, "wallU": 1.2 }
   ],
   "maxModifiers": 2,
   "names": {

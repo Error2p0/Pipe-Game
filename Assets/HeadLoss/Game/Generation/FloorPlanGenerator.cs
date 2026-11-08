@@ -69,6 +69,9 @@ namespace HeadLoss.Game.Generation
             int w = rng.NextInt(min[0], max[0] + 1), h = rng.NextInt(min[1], max[1] + 1);
             if (rng.Chance(0.5)) (w, h) = (h, w);
             int floors = type.FloorsMin > 0 ? rng.NextInt(type.FloorsMin, type.FloorsMax + 1) : rng.NextInt(tier.FloorsMin, tier.FloorsMax + 1);
+            // Tier 4+: one basement (floor −1) with basementChance (04 §Grid). No draw below that tier, so older tiers keep their seeds.
+            bool basement = type.Tier >= gen.BasementFromTier && rng.Chance(gen.BasementChance);
+            int lowest = basement ? -1 : 0, total = floors + (basement ? 1 : 0);
             bool alongX = w >= h;
             int longLen = alongX ? w : h, shortLen = alongX ? h : w;
 
@@ -78,11 +81,11 @@ namespace HeadLoss.Game.Generation
             var b = new BuildingLayoutDef
             {
                 Id = req.Id, DisplayName = type.DisplayName, Tier = type.Tier, BuildingType = type.Id, StreetSide = req.StreetSide,
-                Width = w, Height = h, Floors = floors, ReferenceCrankSpeed = type.ReferenceCrankSpeed,
+                Width = w, Height = h, Floors = total, LowestFloor = lowest, ReferenceCrankSpeed = type.ReferenceCrankSpeed,
             };
 
             // Core band: stairwell, shafts and a hall, the same on every floor (multi-floor buildings only).
-            int bw = floors > 1 ? gen.CoreBandWidth : 0;
+            int bw = total > 1 ? gen.CoreBandWidth : 0;
             bool bandAtStart = rng.Chance(0.5);
             var bandRooms = new List<(string type, Rect r)>();
             if (bw > 0)
@@ -144,7 +147,7 @@ namespace HeadLoss.Game.Generation
             }
             if (free.Count == 0) free.Add(Map(restL, 0, restLen, shortLen));
 
-            for (int f = 0; f < floors; f++)
+            for (int f = lowest; f < floors; f++)
             {
                 foreach (var (t, r) in bandRooms) AddRoom(b, t, r, f, outletCounts, 0);
                 var slots = SlotsFor(data, type, f, floors, rng);
@@ -203,7 +206,7 @@ namespace HeadLoss.Game.Generation
             outletCounts.Add(outlets);
         }
 
-        /// <summary>The program's rooms for one floor (floor hints: ground, upper, each).</summary>
+        /// <summary>The program's rooms for one floor (floor hints: ground, upper, each above ground, basement).</summary>
         static List<Slot> SlotsFor(DataRepository data, BuildingTypeDef type, int floor, int floors, Rng rng)
         {
             var slots = new List<Slot>();
@@ -211,8 +214,9 @@ namespace HeadLoss.Game.Generation
             {
                 bool here = p.Floor switch
                 {
-                    "each" => true,
-                    "upper" => floor > 0 || floors == 1,
+                    "each" => floor >= 0,
+                    "upper" => floor > 0 || (floors == 1 && floor == 0),
+                    "basement" => floor < 0,
                     _ => floor == 0,
                 };
                 if (!here) continue;
@@ -241,7 +245,14 @@ namespace HeadLoss.Game.Generation
 
         static bool Finish(DataRepository data, BuildingTypeDef type, BuildingLayoutDef b, Rng rng, Rng openings, List<int> outletCounts)
         {
-            for (int f = 0; f < b.Floors; f++) if (!Doors(data, b, f, rng)) return false;
+            for (int f = b.LowestFloor; f < b.LowestFloor + b.Floors; f++) if (!Doors(data, b, f, rng)) return false;
+            // People first: where the indoor air quality code is in force, they set the vent count (D155).
+            foreach (RoomDef r in b.Rooms)
+            {
+                RoomTypeDef t = data.RoomType(r.Type);
+                r.Occupants = t.Occupants + t.OccupantsPerM2 * r.Width * r.Height;
+                r.MachinesW = t.MachinesW;
+            }
             Outlets(data, b, rng, outletCounts);
             if (b.Outlets.Count == 0) return false;
             BuildingTierDef tier = data.BuildingTier(type.Tier);
@@ -250,16 +261,15 @@ namespace HeadLoss.Game.Generation
             if (water && !PlaceOpening(data, type, b, openings, "water", WaterId, tier.ReferenceWaterEquipment)) return false;
             bool gas = b.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == BuildingState.GasFluid);
             if (gas && !PlaceOpening(data, type, b, openings, "gas", GasId, tier.ReferenceGasEquipment)) return false;
-            if (!PlaceOpening(data, type, b, openings, "power", PowerId, new List<string> { "panel-basic" })) return false;
+            // Floor space at the power connection for the largest panel this building may take (a transformer room in
+            // industrial buildings, 07); other buildings keep the basic panel's.
+            var panels = new List<string> { "panel-basic" };
+            foreach (EquipmentDef e in data.Equipment)
+                if (e.Category == "panel" && e.BuildingTypes.Contains(type.Id)) panels.Add(e.Id);
+            if (!PlaceOpening(data, type, b, openings, "power", PowerId, panels)) return false;
             Windows(data, b);
             Columns(data, b, rng);
             FireWalls(data, b);
-            foreach (RoomDef r in b.Rooms)
-            {
-                RoomTypeDef t = data.RoomType(r.Type);
-                r.Occupants = t.Occupants + t.OccupantsPerM2 * r.Width * r.Height;
-                r.MachinesW = t.MachinesW;
-            }
             foreach (CodeDef c in data.Codes)
                 if (c.Tiers.Contains(type.Tier) || type.Codes.Contains(c.Id)) b.Codes.Add(c.Id);
             foreach (string e in type.InitialEquipment)
@@ -346,6 +356,8 @@ namespace HeadLoss.Game.Generation
         {
             BuildingGenerationDef gen = data.Buildings.Generation;
             int vents = 0, taps = 0, stoves = 0;
+            bool airQuality = false;
+            foreach (CodeDef c in data.Codes) if (c.Id == Codes.IndoorAirQuality.CodeId && c.Tiers.Contains(b.Tier)) airQuality = true;
             for (int ri = 0; ri < b.Rooms.Count; ri++)
             {
                 RoomDef r = b.Rooms[ri];
@@ -361,6 +373,10 @@ namespace HeadLoss.Game.Generation
                     int area = r.Width * r.Height;
                     int count = rule.AreaPerOutlet > 0 ? Math.Max(rule.Min, (int)Math.Ceiling(area / rule.AreaPerOutlet)) : rule.Min;
                     if (!tap && outletCounts[ri] > 0) count = outletCounts[ri];
+                    // Enough vents that each needs at most a share of its ideal flow for the room's people (D155).
+                    if (!tap && airQuality && r.Occupants > 0)
+                        count = Math.Max(count, (int)Math.Ceiling(Codes.IndoorAirQuality.RequiredSupply(data, r.Occupants)
+                            / (Codes.IndoorAirQuality.VentShareOfIdeal(data) * req.Ideal * Economy.OutletRequirement.ToSiFactor(outlet.Unit)) - 1e-9));
                     count = Math.Min(count, Math.Max(1, area / 4));
                     List<(int x, int y)> spots = tap ? WallTiles(b, r) : new List<(int, int)>();
                     bool alongX = r.Width >= r.Height;
@@ -533,7 +549,8 @@ namespace HeadLoss.Game.Generation
             int spacing = data.Buildings.Generation.WindowSpacing;
             foreach (RoomDef r in b.Rooms)
             {
-                if (IsCore(data, r)) continue;
+                // Below ground: no windows.
+                if (IsCore(data, r) || r.Floor < 0) continue;
                 foreach ((string side, int dx, int dy) in Sides)
                 {
                     var run = new List<(int x, int y)>();

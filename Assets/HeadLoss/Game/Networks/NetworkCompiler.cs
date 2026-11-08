@@ -185,10 +185,17 @@ namespace HeadLoss.Game.Networks
             var burst = o.BurstSegments != null && o.BurstSegments.TryGetValue(fluid, out HashSet<int>? bs) ? bs : new HashSet<int>();
 
             var inlineOut = new Dictionary<int, int>();
+            // A node only wall cavity pipes meet sits at the cavity's height (D170); where they meet a ceiling pipe, the ceiling's.
+            var cavityOnly = new Dictionary<int, bool>();
+            foreach (DuctSegment s in net.Segments)
+                foreach (int end in new[] { s.NodeA, s.NodeB })
+                    cavityOnly[end] = cavityOnly.TryGetValue(end, out bool had) ? had && s.Cavity : s.Cavity;
+            double NodeZ(DuctNode n) => water && cavityOnly.TryGetValue(n.Id, out bool cav) && cav && n.Kind == DuctNodeKind.Free
+                ? n.Floor * bb.FloorHeight + bb.WallCavityLayerOffset : Ceiling(n.Floor);
             foreach (DuctNode n in net.Nodes)
             {
-                c.NodeIndex[n.Id] = g.AddJunction(Ceiling(n.Floor), $"n{n.Id}");
-                if (n.Kind == DuctNodeKind.Inline) inlineOut[n.Id] = g.AddJunction(Ceiling(n.Floor), $"n{n.Id}-out");
+                c.NodeIndex[n.Id] = g.AddJunction(NodeZ(n), $"n{n.Id}");
+                if (n.Kind == DuctNodeKind.Inline) inlineOut[n.Id] = g.AddJunction(NodeZ(n), $"n{n.Id}-out");
             }
 
             int Endpoint(DuctNode n, TilePos other)
@@ -266,11 +273,11 @@ namespace HeadLoss.Game.Networks
                 c.SupplyNode = city;
                 int connection = city;
                 bool damaged = IsDamaged(o, Failures.DamageKeys.Opening(n.AnchorId));
-                if (gas && def != null && def.Category == "gas-supply" && first != null)
+                if (gas && def != null && def.Category == "gas-supply" && def.SetpointPa > 0 && first != null)
                 {
                     // A damaged regulator lets no gas through.
                     connection = g.AddJunction(z, $"connection-{n.AnchorId}");
-                    int reg = g.AddRegulator(city, connection, def.RegulatorK, InnerD(first), def.SetpointPa, def.Id);
+                    int reg = g.AddRegulator(city, connection, def.RegulatorK, InnerD(first), eq != null && eq.SetpointPa > 0 ? eq.SetpointPa : def.SetpointPa, def.Id);
                     g.Links[reg].Temperature = tWater;
                     if (damaged) g.Links[reg].Closed = true;
                 }
@@ -450,6 +457,13 @@ namespace HeadLoss.Game.Networks
 
             AssignFittings(net, data, c, segLink, water);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
+            // A gas manifold's closed branch valves cut their branches off, like a closed shutoff (D168).
+            foreach (DuctNode mn in net.Nodes)
+            {
+                if (!GasManifold.Is(mn) || mn.ClosedBranches.Count == 0) continue;
+                foreach ((DuctSegment seg, string dir) in GasManifold.Branches(net, mn))
+                    if (mn.ClosedBranches.Contains(dir) && c.SegmentLink.TryGetValue(seg.Id, out int ml)) g.Links[ml].Closed = true;
+            }
             if (c.SupplyNode >= 0) MarkIsolated(net, c);
             if (water && c.SupplyNode >= 0) LoadSpin(c, o.SupplyFor(fluid).pressurePa);
             return c;

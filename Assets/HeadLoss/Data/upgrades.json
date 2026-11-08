@@ -90,6 +90,20 @@
       "price": 0,
       "premiumFraction": 0.02,
       "notes": "Bursts are repaired automatically while you are away, for 2% of the building's gross income per cycle"
+    },
+    {
+      "id": "smart-building-controller",
+      "displayName": "Smart building controller",
+      "tier": 3,
+      "kind": "per-building",
+      "price": 3000,
+      "powerW": 20,
+      "intervalSeconds": 30,
+      "maxSolves": 40,
+      "openingStep": 0.05,
+      "speedStep": 0.02,
+      "logSize": 20,
+      "notes": "Re-balances dampers, balancing valves and variable speeds every 30 s (and once when you come back) for the best net income, without letting an outlet fall short"
     }
   ]
 }

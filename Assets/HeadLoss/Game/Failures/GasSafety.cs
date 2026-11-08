@@ -175,6 +175,10 @@ namespace HeadLoss.Game.Failures
             if (!over)
                 foreach (SafetyDevice d in _s.Committed.Safety)
                     if (d.EquipmentId == GasSafetyIds.Detector && GasAt(d.Pos) >= G.AlarmDetectorFraction * Lfl) { over = true; break; }
+            // A gas manifold's built-in detector watches its own tile (07).
+            if (!over)
+                foreach (DuctNode m in Networks.GasManifold.All(Data, _s.Committed))
+                    if (GasAt(m.Pos) >= G.AlarmDetectorFraction * Lfl) { over = true; break; }
             if (!over) { E.Detecting = 0; return; }
             E.Detecting += dt;
             if (E.Detecting >= G.DetectionSeconds * Progression.PrestigeEffects.RepairTimeFactor(Data, _s.Game)) RaiseAlarm();

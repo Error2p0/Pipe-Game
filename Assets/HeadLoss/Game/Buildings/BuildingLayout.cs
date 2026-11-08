@@ -32,6 +32,10 @@ namespace HeadLoss.Game.Buildings
         public int Height { get; }
         /// <summary>Number of floors.</summary>
         public int Floors { get; }
+        /// <summary>Capacity units per ceiling tile: the layout's own (a city modifier) or its tier's (D165).</summary>
+        public int CeilingCapacity(Core.Data.DataRepository data) =>
+            Def.CeilingCapacity > 0 ? Def.CeilingCapacity : data.Balancing.Building.CeilingCapacityFor(Tier);
+
         /// <summary>Lowest floor index (−1 with a basement).</summary>
         public int LowestFloor { get; }
         /// <summary>Highest floor index.</summary>

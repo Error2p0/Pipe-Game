@@ -82,7 +82,7 @@ namespace HeadLoss.Unity.View
             foreach (DuctSegment s in net.Segments)
             {
                 DuctNode na = net.FindNode(s.NodeA)!, nb = net.FindNode(s.NodeB)!;
-                float w = WidthFor(s.DiameterMm, drawing, pipe);
+                float w = WidthFor(s.DiameterMm, drawing, pipe) * (s.Cavity ? (float)drawing.CavityWidthFactor : 1f);
                 if (na.Floor != nb.Floor)
                 {
                     int lo = System.Math.Min(na.Floor, nb.Floor), hi = System.Math.Max(na.Floor, nb.Floor);
@@ -110,7 +110,7 @@ namespace HeadLoss.Unity.View
                     if (s.NodeA != n.Id && s.NodeB != n.Id) continue;
                     if (count == 0) first = s; else if (count == 1) second = s;
                     count++;
-                    float w = WidthFor(s.DiameterMm, drawing, pipe);
+                    float w = WidthFor(s.DiameterMm, drawing, pipe) * (s.Cavity ? (float)drawing.CavityWidthFactor : 1f);
                     if (w > maxWidth) { maxWidth = w; widest = s; }
                 }
                 if (count == 0 || widest == null) continue;

@@ -539,6 +539,105 @@ namespace HeadLoss.Game.Session
             return true;
         }
 
+        // ---------- smart building controller (07) ----------
+
+        /// <summary>The controller's data (null when the data has none).</summary>
+        public MetaUpgradeDef? ControllerDef => Data.Upgrades.Meta.Find(m => m.Id == "smart-building-controller");
+
+        System.Threading.Tasks.Task<List<ControllerChange>>? _controllerRun;
+        string _controllerBuilt = "";
+        double _sinceControl;
+
+        /// <summary>Raised on the main thread when a controller run changed settings (its log lines).</summary>
+        public event Action<IReadOnlyList<string>>? ControllerChanged;
+
+        /// <summary>Buys the controller for this building (one-off, its tier unlocked).</summary>
+        public bool BuySmartController()
+        {
+            MetaUpgradeDef? def = ControllerDef;
+            if (def == null || Record.SmartController || !Unlocked(def.Tier) || Game.Debt > 0 || !Game.CanAfford(def.Price)) return false;
+            Game.Wallet -= def.Price;
+            Record.SpentTotal += def.Price;
+            Record.SmartController = true;
+            _sinceControl = def.IntervalSeconds;
+            MarkDirty();
+            return true;
+        }
+
+        /// <summary>
+        /// Steady evaluation for a worker: the conditions now are captured here; each call solves a state with its own solvers
+        /// (crank at 0, devices at full speed) and evaluates it with the codes.
+        /// </summary>
+        public Func<BuildingState, BuildingEvaluation> CaptureEvaluator()
+        {
+            CompileOptions options = OptionsFor(0, AirTemperatureK, Rooms.SegmentTemperatureK, Rooms.NodeTemperatureK, true);
+            var solvers = new SolverSet(_settings);
+            NetworkSnapshot? warm = CommittedSnapshot;
+            bool airQuality = _airQuality;
+            return state =>
+            {
+                NetworkSnapshot snap = SolveState(state, warm, solvers, options);
+                warm = snap;
+                BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
+                ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, state, snap));
+                if (airQuality) Codes.IndoorAirQuality.Apply(Data, Layout, ev, state, snap);
+                return ev;
+            };
+        }
+
+        double PayFactorNow() =>
+            HeadLoss.Game.Inspections.EnergyRating.PayFactor(Data, Record.Inspection.Grade) * Inspections.PayFactor * Progression.PrestigeEffects.PayFactor(Data, Game)
+            * (GasSafety.CertificateExpired ? Data.Balancing.Inspection.GasCertExpiredFactor : 1);
+
+        /// <summary>Every <c>intervalSeconds</c> a run starts on a worker; its changes land when it finishes, unless what is built changed meanwhile.</summary>
+        void TickController(double dt)
+        {
+            MetaUpgradeDef? def = ControllerDef;
+            if (!Record.SmartController || def == null) return;
+            if (_controllerRun != null)
+            {
+                if (!_controllerRun.IsCompleted) return;
+                List<ControllerChange> changes = _controllerRun.Status == System.Threading.Tasks.TaskStatus.RanToCompletion ? _controllerRun.Result : new List<ControllerChange>();
+                _controllerRun = null;
+                if (Committed.Fingerprint() == _controllerBuilt) ApplyController(changes);
+                return;
+            }
+            _sinceControl += dt;
+            if (_sinceControl < def.IntervalSeconds || Settling) return;
+            _sinceControl = 0;
+            Func<BuildingState, BuildingEvaluation> evaluate = CaptureEvaluator();
+            BuildingState built = Committed.Clone();
+            _controllerBuilt = Committed.Fingerprint();
+            double pay = PayFactorNow(), power = Progression.PrestigeEffects.ElectricityFactor(Data, Game);
+            _controllerRun = System.Threading.Tasks.Task.Run(() => SmartController.Run(Data, built, def, evaluate, pay, power, out _));
+        }
+
+        /// <summary>Runs the controller now on the calling thread (the start of the offline catch-up, tests). Returns the changes applied.</summary>
+        public List<ControllerChange> RunControllerNow()
+        {
+            MetaUpgradeDef? def = ControllerDef;
+            if (!Record.SmartController || def == null) return new List<ControllerChange>();
+            _controllerRun = null;
+            List<ControllerChange> changes = SmartController.Run(Data, Committed, def, CaptureEvaluator(), PayFactorNow(), Progression.PrestigeEffects.ElectricityFactor(Data, Game), out _);
+            ApplyController(changes);
+            return changes;
+        }
+
+        /// <summary>Applies a run's changes to what is built and to the design (they are settings, like a damper slider) and logs them.</summary>
+        void ApplyController(List<ControllerChange> changes)
+        {
+            if (changes.Count == 0) return;
+            SmartController.Apply(Data, Committed, changes);
+            SmartController.Apply(Data, State, changes);
+            var lines = new List<string>();
+            foreach (ControllerChange c in changes) lines.Add(SmartController.Describe(c));
+            Record.ControllerLog.AddRange(lines);
+            int keep = Math.Max(1, ControllerDef?.LogSize ?? 20);
+            if (Record.ControllerLog.Count > keep) Record.ControllerLog.RemoveRange(0, Record.ControllerLog.Count - keep);
+            MarkDirty();
+            ControllerChanged?.Invoke(lines);
+        }
+
         /// <summary>Starts or ends the maintenance contract (a share of gross per cycle; crews come while you are away).</summary>
         public bool SetMaintenanceContract(bool on, bool preferEmergency)
         {
@@ -862,6 +961,7 @@ namespace HeadLoss.Game.Session
             Failures.TickRepairs(dt, Record);
             GasSafety.Tick(dt);
             Inspections.Tick(dt);
+            TickController(dt);
             if (Failures.Revision != _failRev)
             {
                 _failRev = Failures.Revision;
@@ -1051,19 +1151,25 @@ namespace HeadLoss.Game.Session
         }
 
         /// <summary>Ceiling capacity per tile in this city (the old-buildings modifier lowers it).</summary>
-        public int CeilingCapacity => CeilingCapacityOverride > 0 ? CeilingCapacityOverride : Data.Balancing.Building.CeilingCapacity;
+        public int CeilingCapacity => CeilingCapacityOverride > 0 ? CeilingCapacityOverride : Data.Balancing.Building.CeilingCapacityFor(Layout.Tier);
         /// <summary>Set by the city (modifier); 0 = the data default.</summary>
         public int CeilingCapacityOverride { get; set; }
 
         /// <summary>Every rule a new run must pass: geometry, ceiling space, the material's fluid and unlocks.</summary>
-        public DrawError ValidateRun(string fluid, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows)
+        /// <param name="cavity">A wall cavity run (D170): small pipes along walls, outside the ceiling's capacity.</param>
+        public DrawError ValidateRun(string fluid, IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, bool cavity = false)
         {
             DuctNetworkState net = State.Net(fluid);
             DrawError e = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree);
             if (e != DrawError.None) return e;
             MaterialDef? m = Data.FindMaterial(materialId);
             if (m == null || !m.Fluids.Contains(Data.FluidIdOf(fluid))) return DrawError.WrongMaterial;
-            if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
+            if (cavity)
+            {
+                e = ValidateCavity(net, path, diameterMm, materialId);
+                if (e != DrawError.None) return e;
+            }
+            else if (!DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
                 return DrawError.NoCeilingSpace;
             if (!Unlocked(Progression.Tech.SizeTier(Data, materialId, diameterMm)) || !ItemUnlocked(materialId)
                 || (smoothElbows && !Unlocked(Progression.Tech.SmoothFittingsTier(Data))))
@@ -1085,6 +1191,12 @@ namespace HeadLoss.Game.Session
             {
                 ev.InspectionBonus = true;
                 ev.ApplyPayFactor(Inspections.PayFactor);
+            }
+            if (Record.SmartController && ControllerDef is MetaUpgradeDef cd)
+            {
+                // The controller's own draw (07: 20 W).
+                ev.PowerW += cd.PowerW;
+                ev.Electricity += cd.PowerW / 1000.0 * Data.Balancing.Economy.ElectricityPricePerKWs * Data.Balancing.Economy.ElectricityTierFactor[Layout.Tier - 1];
             }
             ev.ApplyPayFactor(Progression.PrestigeEffects.PayFactor(Data, Game));
             ev.Electricity *= Progression.PrestigeEffects.ElectricityFactor(Data, Game);
@@ -1140,16 +1252,29 @@ namespace HeadLoss.Game.Session
             else _nextRateTry = Game.PlayTimeSeconds + 60;
         }
 
+        /// <summary>The wall cavity is open in this building: its tier reached and unlocked (<c>04</c>: tier 4).</summary>
+        public bool CavityAvailable => Layout.Tier >= Data.Balancing.Building.WallCavityTier && Unlocked(Data.Balancing.Building.WallCavityTier);
+
+        /// <summary>The wall cavity's own rules for a run (D170): open here, a small pipe, along walls, a free cavity.</summary>
+        DrawError ValidateCavity(DuctNetworkState net, IReadOnlyList<TilePos> path, double diameterMm, string materialId)
+        {
+            if (!CavityAvailable) return DrawError.CavityLocked;
+            if (Data.Material(materialId).Kind != "pipe" || diameterMm > Data.Balancing.Building.WallCavityMaxDiameterMm || CapacityUnits(materialId, diameterMm, "") != 1)
+                return DrawError.TooBigForCavity;
+            return DuctEditor.ValidateCavity(State, net, Layout, path);
+        }
+
         /// <summary>Validates a run in progress and solves the networks as if it were placed (state untouched).</summary>
-        public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air")
+        public DrawPreview Preview(IReadOnlyList<TilePos> path, double diameterMm, string materialId, bool smoothElbows, string fluid = "air", bool cavity = false)
         {
             DuctNetworkState net = State.Net(fluid);
             var p = new DrawPreview { Error = DuctEditor.Validate(net, Layout, path, Data.Balancing.Drawing.MaxNodeDegree) };
-            if (p.Error == DrawError.None && !DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
+            if (p.Error == DrawError.None && cavity) p.Error = ValidateCavity(net, path, diameterMm, materialId);
+            else if (p.Error == DrawError.None && !DuctEditor.FitsCeiling(State, net, path, CapacityUnits(materialId, diameterMm, ""), CapacityUnits, CeilingCapacity, out _))
                 p.Error = DrawError.NoCeilingSpace;
             if (p.Error != DrawError.None) return p;
             BuildingState copy = State.Clone();
-            DuctEditor.PlaceRun(copy.Net(fluid), path, diameterMm, materialId, smoothElbows);
+            DuctEditor.PlaceRun(copy.Net(fluid), path, diameterMm, materialId, smoothElbows, cavity);
             p.Snapshot = SolveCopy(copy);
             return p;
         }

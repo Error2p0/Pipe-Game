@@ -19,7 +19,7 @@ Example (3-floor apartment block):
 - Building tile = 1 m × 1 m. Room grid cell = 0.5 m (2 × 2 per tile).
 - Floor-to-floor height = 3 m (`balancing.building.floorHeight`). Elevation of a node = floor index × floor height + layer offset (floor layer 0.3 m, ceiling layer 2.7 m, wall cavity 1.5 m).
 - Footprints by tier (min–max tiles): T1 8×6–10×8, T2 10×8–14×10, T3 14×10–20×14, T4 20×14–32×22, T5 24×18–40×28.
-- Floors per tier as in the tier table in `03-city.md`. Tier 4–5 buildings may have one basement (floor −1) with 40% chance; basements are required for some codes and events (propane, flooding).
+- Floors per tier as in the tier table in `03-city.md`. Tier 4–5 buildings may have one basement (floor −1) with 40% chance; basements are required for some codes and events (propane, flooding). Tier 4 offices are 2–4 floors on at most 24 × 16 m, warehouses 1–2 floors (D162).
 
 ## Floors and risers [doc]
 
@@ -45,7 +45,7 @@ Example (3-floor apartment block):
 Ceiling capacity: each tile holds a capacity budget (for example 4 units). A large duct might take 3 units, a small water pipe 1. Older buildings or prestige modifiers can lower capacity.
 
 [impl]
-- Default ceiling capacity 4 units per tile (3 with the `old-buildings` modifier). Capacity units per pipe/duct size are in `pipes.json` (`capacityUnits`).
+- Default ceiling capacity 4 units per tile at tiers 1–3 and 6 at tiers 4–5 (deeper ceilings for 400–500 mm trunks, D165); the `old-buildings` modifier takes one unit off (3 and 5). Capacity units per pipe/duct size are in `pipes.json` (`capacityUnits`).
 - Wall cavity: unlocked at tier 4. Only pipes with `capacityUnits == 1` and diameter ≤ 22 mm. Capacity 1 per wall tile edge.
 - Floor layer: equipment footprints (1×1 to 4×3 tiles). Equipment cannot overlap furniture, outlets or doors. Furniture is generated decoration that blocks equipment, not pipes.
 - Connecting equipment (floor) to ceiling pipes: an automatic vertical drop at the equipment tile, no capacity cost.

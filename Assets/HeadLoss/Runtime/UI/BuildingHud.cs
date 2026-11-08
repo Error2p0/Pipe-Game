@@ -55,7 +55,8 @@ namespace HeadLoss.Unity.UI
         readonly List<(int floor, Button button)> _floorButtons = new List<(int, Button)>();
         Button _layerFloor = null!, _layerCeiling = null!, _layerCavity = null!;
         Label _ductHeader = null!, _partsHeader = null!, _protectHeader = null!;
-        Button _sensors = null!, _contract = null!, _crewChoice = null!;
+        Button _sensors = null!, _contract = null!, _crewChoice = null!, _controller = null!;
+        Label _controllerLog = null!;
         readonly List<(string id, Button button)> _safetyButtons = new List<(string, Button)>();
         VisualElement _leaks = null!, _leakRows = null!, _speciesRow = null!;
         Label _leakHead = null!, _legendNote = null!;
@@ -358,6 +359,8 @@ namespace HeadLoss.Unity.UI
             _sensors = _ui.Button(tools, "", () => _s.BuyLeakSensors(View.Fluid));
             _contract = _ui.Button(tools, "", () => _s.SetMaintenanceContract(!_s.Record.Failures.MaintenanceContract, _s.Record.Failures.PreferEmergency));
             _crewChoice = _ui.Button(tools, "", () => _s.SetMaintenanceContract(_s.Record.Failures.MaintenanceContract, !_s.Record.Failures.PreferEmergency));
+            _controller = _ui.Button(tools, "", () => _s.BuySmartController());
+            _controllerLog = UiKit.Text(tools, "", "hl-subtitle");
             foreach (string id in _data.Game.Toolbox.Safety)
             {
                 string part = id;
@@ -589,6 +592,17 @@ namespace HeadLoss.Unity.UI
                 StyleButton(_contract, _s.Record.Failures.MaintenanceContract);
                 _crewChoice.style.display = _s.Record.Failures.MaintenanceContract ? DisplayStyle.Flex : DisplayStyle.None;
                 _crewChoice.text = _s.Record.Failures.PreferEmergency ? "While away: emergency crew" : "While away: standard crew";
+            }
+            if (_s.ControllerDef is MetaUpgradeDef controller)
+            {
+                bool owned = _s.Record.SmartController, ok = _s.Unlocked(controller.Tier);
+                _controller.text = owned ? $"Smart controller on · {controller.PowerW:0} W" : ok ? $"Smart building controller · {Units.FormatMoney(controller.Price, _symbol)}" : $"Smart building controller · tier {controller.Tier}";
+                _controller.SetEnabled(ok && !owned);
+                StyleButton(_controller, owned);
+                List<string> log = _s.Record.ControllerLog;
+                string last = owned && log.Count > 0 ? "Last changes: " + string.Join(" · ", log.GetRange(System.Math.Max(0, log.Count - 3), System.Math.Min(3, log.Count))) : owned ? "Tuning every 30 s; nothing to change yet." : "";
+                if (_controllerLog.text != last) _controllerLog.text = last;
+                _controllerLog.style.display = last.Length > 0 ? DisplayStyle.Flex : DisplayStyle.None;
             }
             foreach ((string f, Button b) in _fluidButtons) StyleButton(b, f == View.Fluid);
             foreach ((int f, Button b) in _floorButtons) StyleButton(b, f == View.Floor);
@@ -849,6 +863,9 @@ namespace HeadLoss.Unity.UI
             }
             else if (_speedSlider != null && t.Kind == TargetKind.Intake && _s.State.EquipmentAt(t.Anchor) is EquipmentState se)
                 _speedSlider.SetValueWithoutNotify((float)se.Speed * 100);
+            else if (_settingSlider != null && t.Kind == TargetKind.Intake && _s.State.EquipmentAt(t.Anchor) is EquipmentState ge
+                && _data.EquipmentItem(ge.EquipmentId).Category == "gas-supply")
+                _settingSlider.SetValueWithoutNotify((float)((ge.SetpointPa > 0 ? ge.SetpointPa : _data.EquipmentItem(ge.EquipmentId).SetpointPa) / Units.PaPerMbar));
         }
 
         /// <summary>What the action buttons depend on; they are rebuilt only when it changes (a slider keeps its drag).</summary>
@@ -866,7 +883,7 @@ namespace HeadLoss.Unity.UI
                     _sb.Append('/').Append(_s.Record.Failures.Bursts.Count).Append('/').Append(_s.Record.Failures.Repairs.Count);
                     break;
                 case TargetKind.Node:
-                    if (net.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(net.Degree(n.Id));
+                    if (net.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(net.Degree(n.Id)).Append(n.PartId).Append(string.Join("/", n.ClosedBranches));
                     break;
                 case TargetKind.Intake:
                     if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On).Append(e.Vsd).Append(e.SparkFree);
@@ -908,7 +925,7 @@ namespace HeadLoss.Unity.UI
             if (seg == null) return i;
             MaterialDef mat = _data.Material(seg.MaterialId);
             bool air = fluid == "air", riser = DuctEditor.IsRiser(net, seg);
-            string word = riser ? "Riser" : air ? "Duct" : "Pipe";
+            string word = riser ? "Riser" : seg.Cavity ? "Wall cavity pipe" : air ? "Duct" : "Pipe";
             _readoutTitle.text = $"{word} · {seg.DiameterMm:0} mm {mat.DisplayName.ToLowerInvariant()}";
             string? burst = BurstEdge(fluid, net, seg);
             if (burst != null)
@@ -1444,6 +1461,7 @@ namespace HeadLoss.Unity.UI
                     if (n == null) break;
                     AddRiserButtons();
                     AddFittingButtons(net, n, fluid);
+                    ManifoldActions(net, n, fluid);
                     break;
                 }
                 case TargetKind.Intake:
@@ -1456,6 +1474,32 @@ namespace HeadLoss.Unity.UI
                     SafetyActions(t);
                     break;
             }
+        }
+
+        /// <summary>A gas junction: fit a gas manifold (tier 4), or a manifold's branch valves and its removal (D168).</summary>
+        void ManifoldActions(DuctNetworkState net, DuctNode n, string fluid)
+        {
+            EquipmentDef? def = _data.FindEquipment(GasManifold.Id);
+            if (def == null) return;
+            if (GasManifold.Is(n))
+            {
+                TilePos tile = n.Pos;
+                foreach ((DuctSegment _, string dir) in GasManifold.Branches(net, n))
+                {
+                    bool closed = n.ClosedBranches.Contains(dir);
+                    string d = dir;
+                    Button b = _ui.Button(_readoutActions, $"{GasManifold.DirectionName(dir)} branch · {(closed ? "closed: open it" : "open: close it")}",
+                        () => _s.Execute(new SetManifoldBranchCommand(tile, d, !closed, fluid)));
+                    StyleButton(b, closed);
+                }
+                _ui.Button(_readoutActions, "Remove gas manifold", () => _s.Execute(new FitManifoldCommand(n.Id, false, fluid)));
+                return;
+            }
+            if (!GasManifold.CanFit(_data, net, n)) return;
+            bool ok = _s.ItemUnlocked(GasManifold.Id);
+            Button fit = _ui.Button(_readoutActions, ok ? $"Fit gas manifold · {Units.FormatMoney(def.Price, _symbol)}" : $"Gas manifold · tier {def.Tier}",
+                () => _s.Execute(new FitManifoldCommand(n.Id, true, fluid)));
+            fit.SetEnabled(ok);
         }
 
         void SafetyActions(Target t)
@@ -1498,6 +1542,7 @@ namespace HeadLoss.Unity.UI
             }
             foreach (EquipmentDef def in Catalogue.OpeningEquipment(_data, o.Utility))
             {
+                if (!def.AllowedIn(_s.Layout.BuildingType)) continue;
                 string eqId = def.Id;
                 bool here = e != null && e.EquipmentId == eqId;
                 bool preplaced = false;
@@ -1523,6 +1568,15 @@ namespace HeadLoss.Unity.UI
             EquipmentDef placed = _data.EquipmentItem(e.EquipmentId);
             if (placed.Category == "gas-supply")
             {
+                if (SetRegulatorSetpointCommand.Adjustable(placed, _s.Layout.Tier))
+                {
+                    double set = e.SetpointPa > 0 ? e.SetpointPa : placed.SetpointPa;
+                    var slider = new Slider("Setpoint (mbar)", (float)(placed.SetpointMinPa / Units.PaPerMbar), (float)(placed.SetpointMaxPa / Units.PaPerMbar)) { value = (float)(set / Units.PaPerMbar), showInputField = false };
+                    slider.AddToClassList("hl-slider");
+                    slider.RegisterValueChangedCallback(ev => _s.Execute(new SetRegulatorSetpointCommand(opening, ev.newValue * Units.PaPerMbar)));
+                    _readoutActions.Add(slider);
+                    _settingSlider = slider;
+                }
                 _ui.Button(_readoutActions, "Remove", () => _s.Execute(new SetIntakeEquipmentCommand(opening, "")));
                 return;
             }

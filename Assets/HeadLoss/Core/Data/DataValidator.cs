@@ -13,7 +13,7 @@ namespace HeadLoss.Core.Data
         static readonly HashSet<string> FamilyKinds = new HashSet<string> { "duct", "pipe", "main", "cable" };
         static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "check", "regulator", "relief", "filter" };
         static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable", "none" };
-        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon", "room", "wall" };
+        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon", "room", "wall", "junction" };
         static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve", "heat" };
         static readonly HashSet<string> PortRoles = new HashSet<string> { "in", "fuel", "out", "return", "flow" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };
@@ -36,6 +36,7 @@ namespace HeadLoss.Core.Data
             ValidateEquipment(data, errors);
             ValidateOutlets(data, errors);
             ValidateCodes(data, errors);
+            ValidateRegulators(data, errors);
             ValidateHandmade(data, errors);
             ValidateCity(data, errors);
             ValidateBuildings(data, errors);
@@ -149,6 +150,8 @@ namespace HeadLoss.Core.Data
             if (b.Particles.MaxParticles < 1) errors.Add(f + " particles.maxParticles must be ≥ 1");
             if (!(b.Camera.ZoomMin > 0 && b.Camera.ZoomMax > b.Camera.ZoomMin)) errors.Add(f + " camera: need 0 < zoomMin < zoomMax");
             Positive(f + " building.budgetCapFactor", b.Building.BudgetCapFactor, errors);
+            if (b.Building.CeilingCapacityByTier.Count != 5 || b.Building.CeilingCapacityByTier.Exists(c => c < 1))
+                errors.Add(f + " building.ceilingCapacityByTier needs 5 entries, each at least 1");
 
             EconomyDef e = b.Economy;
             Positive(f + " economy.overdeliveryCapRatio", e.OverdeliveryCapRatio, errors);
@@ -477,7 +480,7 @@ namespace HeadLoss.Core.Data
                     Positive(w + " panelLimitKW", e.PanelLimitKW, errors);
                     continue;
                 }
-                if (e.Category == "gas-supply")
+                if (e.Category == "gas-supply" && e.Curve.Count == 0)  // a regulator; boosters are pumps with a curve
                 {
                     Positive(w + " setpointPa", e.SetpointPa, errors);
                     Positive(w + " regulatorK", e.RegulatorK, errors);
@@ -577,6 +580,17 @@ namespace HeadLoss.Core.Data
                 if (!RewardRules.Contains(e.RewardRule)) errors.Add($"{w}: rewardRule '{e.RewardRule}' unknown");
                 if ((e.RewardPayFactor != 1) != (e.RewardRule.Length > 0)) errors.Add($"{w}: a reward needs a rewardRule and a rewardPayFactor");
                 if (e.RewardRule == "adapt" && !(e.AdaptMinutes > 0 && e.RewardMinutes > 0)) errors.Add($"{w}: the adapt rule needs adaptMinutes and rewardMinutes");
+            }
+        }
+
+        static void ValidateRegulators(DataRepository data, List<string> errors)
+        {
+            foreach (EquipmentDef e in data.Equipment)
+            {
+                if (e.SetpointFromTier <= 0) continue;
+                if (!(e.SetpointMinPa > 0 && e.SetpointMinPa <= e.SetpointPa && e.SetpointPa <= e.SetpointMaxPa))
+                    errors.Add($"equipment.json '{e.Id}': setpoint range must hold its default (min ≤ setpointPa ≤ max)");
+                if (e.SetpointStepPa < 0) errors.Add($"equipment.json '{e.Id}': setpointStepPa must be ≥ 0");
             }
         }
 

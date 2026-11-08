@@ -156,5 +156,8 @@ namespace HeadLoss.Core.Data.Defs
         public double FireWallAreaM2;
         /// <summary>Chance each room gets its furniture.</summary>
         public double FurnitureChance;
+        /// <summary>Chance a building of tier ≥ <see cref="BasementFromTier"/> has one basement floor (<c>04-buildings.md</c> §Grid).</summary>
+        public double BasementChance;
+        public int BasementFromTier;
     }
 }

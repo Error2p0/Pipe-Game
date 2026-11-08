@@ -35,10 +35,25 @@ namespace HeadLoss.Core.Data.Defs
         public double ConnectionDiameterMm;
         /// <summary>Purchase price, $.</summary>
         public double Price;
+        /// <summary>Pumps with a pressure tank built in (the VS pump set, <c>07</c>): their network's surges shrink as with a separate tank.</summary>
+        public bool BuiltInPressureTank;
+        /// <summary>Gas manifold: most branches it serves (<c>07</c>: 6).</summary>
+        public int MaxBranches;
         /// <summary>Electrical panels: total kW limit.</summary>
         public double PanelLimitKW;
-        /// <summary>Gas regulators: fixed outlet pressure, Pa gauge.</summary>
+        /// <summary>Building types it may be placed in; empty = any (the transformer room: industrial buildings, <c>07</c>).</summary>
+        public List<string> BuildingTypes = new List<string>();
+
+        /// <summary>Whether it may go into a building of this type.</summary>
+        public bool AllowedIn(string buildingType) => BuildingTypes.Count == 0 || BuildingTypes.Contains(buildingType);
+        /// <summary>Gas regulators: outlet pressure, Pa gauge (the default when the setpoint can be adjusted).</summary>
         public double SetpointPa;
+        /// <summary>Gas regulators: from this tier the setpoint is adjustable between the min and max, Pa (0 = fixed; <c>07</c>: 18–30 mbar from tier 4).</summary>
+        public int SetpointFromTier;
+        public double SetpointMinPa;
+        public double SetpointMaxPa;
+        /// <summary>Setpoint step, Pa (<c>07</c>: 1 mbar).</summary>
+        public double SetpointStepPa;
         /// <summary>Gas regulators: loss coefficient when fully open, referenced to the connecting pipe.</summary>
         public double RegulatorK;
         /// <summary>

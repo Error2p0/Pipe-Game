@@ -112,6 +112,14 @@ namespace HeadLoss.Unity.View
                 Color tint = net.FluidId == "air" ? _palette.Walls : _palette.Fluid(net.FluidId);
                 foreach (DuctNode n in net.Nodes)
                 {
+                    if (Game.Networks.GasManifold.Is(n) && n.Floor == floor)
+                    {
+                        SymbolView mv = Child<SymbolView>("Gas manifold");
+                        mv.Build(DuctGeometry.Centre(n.Pos), Vector2.right, SymbolKind.Manifold, tint, _palette, _material);
+                        FadeIfOther(mv, net.FluidId, focus);
+                        _valves[(net.FluidId, n.Pos)] = mv;
+                        continue;
+                    }
                     if (n.Kind != DuctNodeKind.Inline || n.Floor != floor) continue;
                     Vector2 c = DuctGeometry.Centre(n.Pos), dir = new Vector2(n.DirX, n.DirY);
                     var key = (net.FluidId, n.Pos);
@@ -203,7 +211,7 @@ namespace HeadLoss.Unity.View
             foreach (SafetyDevice d in s.Safety) sb.Append(d.EquipmentId).Append(d.X).Append(',').Append(d.Y).Append(',').Append(d.Floor).Append(d.High).Append(';');
             foreach (DuctNetworkState net in s.Networks)
                 foreach (DuctNode n in net.Nodes)
-                    if (n.Kind == DuctNodeKind.Inline) sb.Append(net.FluidId).Append(n.X).Append(',').Append(n.Y).Append(',').Append(n.Floor).Append(n.PartId).Append(n.DirX).Append(n.DirY).Append(n.SparkFree).Append(';');
+                    if (n.Kind == DuctNodeKind.Inline || n.PartId.Length > 0) sb.Append(net.FluidId).Append(n.X).Append(',').Append(n.Y).Append(',').Append(n.Floor).Append(n.PartId).Append(n.DirX).Append(n.DirY).Append(n.SparkFree).Append(';');
             return sb.ToString();
         }
 

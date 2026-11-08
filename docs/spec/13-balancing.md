@@ -161,6 +161,8 @@ Spark-free variants ×1.5.
 | --- | --- |
 | `building.floorHeight` | 3 m |
 | `building.budgetCapFactor` | 1.6 × reference layout cost |
+| `building.ceilingCapacityByTier` | 4, 4, 4, 6, 6 units per tile (old buildings: one less), D165 |
+| `generation.basementChance` / `basementFromTier` | 0.4 / tier 4 |
 | Ceiling capacity | 4 units (3 with `old-buildings`) |
 | Reference equipment for solvability | T1 small-axial-fan (starter: hand crank at 70%) · T2 inline-duct-fan, small-booster-pump or mains · T3 centrifugal-blower, multistage-pump, gas-regulator · T4 ec-fan or industrial-ahu, vs-pump-set, gas-manifold, district-heat-exchanger · T5 industrial-ahu, vs-pump-set, special-gas-manifold |
 
@@ -178,7 +180,7 @@ Spark-free variants ×1.5.
 | Heavy / light damage thresholds | 0.6 / 0.1 |
 | Repair, standard | 2 h; $5 × metres × (D/D_ref) × `tierFactor`, min $10 × `tierFactor` |
 | Repair, emergency | 3 min; 5 × standard price |
-| `ageingRate` | on, tier 4+ (D134); rate to tune |
+| `ageingRate` | 8.3e-8 stress/s from tier 4 (`ageingFromTier`), D134, D166 |
 | `hammer.durationSeconds` | 2 |
 | Accumulator surge factor | 0.2 |
 
