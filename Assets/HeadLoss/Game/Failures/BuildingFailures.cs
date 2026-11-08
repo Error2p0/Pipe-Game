@@ -67,6 +67,28 @@ namespace HeadLoss.Game.Failures
         }
 
         /// <summary>The tile edges of a segment as stress keys.</summary>
+        /// <summary>
+        /// <see cref="Edges"/> of a segment, kept per network until it is replaced (what is built changes only on Commit, which
+        /// clones it): the per-tick stress, the catch-up's burst draws and its stress steps read them for every segment.
+        /// </summary>
+        public List<string> EdgesOf(string fluid, DuctNetworkState net, DuctSegment s)
+        {
+            if (!_edgeCache.TryGetValue(fluid, out var c) || !ReferenceEquals(c.net, net))
+            {
+                c = (net, new Dictionary<int, List<string>>());
+                _edgeCache[fluid] = c;
+            }
+            if (!c.map.TryGetValue(s.Id, out List<string>? e))
+            {
+                e = Edges(fluid, net, s);
+                c.map[s.Id] = e;
+            }
+            return e;
+        }
+
+        readonly Dictionary<string, (DuctNetworkState net, Dictionary<int, List<string>> map)> _edgeCache =
+            new Dictionary<string, (DuctNetworkState, Dictionary<int, List<string>>)>();
+
         public static List<string> Edges(string fluid, DuctNetworkState net, DuctSegment s)
         {
             List<TilePos> tiles = DuctEditor.Tiles(net, s);
@@ -85,7 +107,8 @@ namespace HeadLoss.Game.Failures
         }
 
         /// <summary>Stress rate at an overpressure ratio, 1/s: k_s · max(0, x − 1)^a (+ optional ageing).</summary>
-        public double StressRate(double x) => F.StressRate * Math.Pow(Math.Max(0, x - 1), F.StressExponent) + F.AgeingRate;
+        /// <remarks>Slow ageing adds <c>failure.ageingRate</c> to every segment of a tier ≥ <c>failure.ageingFromTier</c> building, even below its rating (D166).</remarks>
+        public double StressRate(double x) => F.StressRate * Math.Pow(Math.Max(0, x - 1), F.StressExponent) + (_layout.Tier >= F.AgeingFromTier ? F.AgeingRate : 0);
 
         /// <summary>Weibull hazard per unit stress, h(S) = (β/η)(S/η)^(β−1).</summary>
         public double Hazard(double s) => F.WeibullBeta / F.WeibullEta * Math.Pow(Math.Max(0, s) / F.WeibullEta, F.WeibullBeta - 1);
@@ -143,7 +166,7 @@ namespace HeadLoss.Game.Failures
                 double x = RatingRatio(fs, net, s, surge);
                 double dS = StressRate(x) * dt;
                 if (dS <= 0) continue;
-                List<string> edges = Edges(fs.Fluid, net, s);
+                List<string> edges = EdgesOf(fs.Fluid, net, s);
                 double sMax = 0;
                 string worst = edges.Count > 0 ? edges[0] : "";
                 foreach (string e in edges)
@@ -363,7 +386,7 @@ namespace HeadLoss.Game.Failures
                     if (burst.Contains(s.Id)) continue;
                     string worst = "";
                     double sNow = -1;
-                    foreach (string e in Edges(fs.Fluid, net, s))
+                    foreach (string e in EdgesOf(fs.Fluid, net, s))
                     {
                         double v = State.Stress.TryGetValue(e, out double old) ? old : 0;
                         if (v > sNow) { sNow = v; worst = e; }
@@ -392,7 +415,7 @@ namespace HeadLoss.Game.Failures
                     if (dS <= 0) continue;
                     burst ??= BurstSegments(fs.Fluid, net);
                     if (burst.Contains(s.Id)) continue;
-                    foreach (string e in Edges(fs.Fluid, net, s)) State.Stress[e] = (State.Stress.TryGetValue(e, out double old) ? old : 0) + dS;
+                    foreach (string e in EdgesOf(fs.Fluid, net, s)) State.Stress[e] = (State.Stress.TryGetValue(e, out double old) ? old : 0) + dS;
                 }
             }
         }

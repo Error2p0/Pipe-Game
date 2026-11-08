@@ -167,7 +167,7 @@ Started 2026-11-07.
   - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
   - [ ] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set`.
   - [ ] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (`07`; D110 covers the fixed 25 mbar only).
-  - [ ] Slow ageing on, tier 4+ (D134): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
+  - [x] Slow ageing on, tier 4+ (D134, rate in D166): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
   - [ ] Tier 4 opens (D104 lifts): unlocks, tree, milestone and tests that assume tier 3 is the top.
 - [x] 4. Indoor air quality code (`09`, `05` §3)
   - [x] 1 000 ppm room mean CO₂: every air outlet in that room pays 0, on the sheet and in the code list, with tests. Tiers 4–5 (D155); zone "CO₂ too high" (D156).

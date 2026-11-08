@@ -215,8 +215,10 @@ namespace HeadLoss.Core.Data.Defs
         public double WeibullEta;
         /// <summary>Stress at which a segment weeps (and leak sensors alert).</summary>
         public double WeepThreshold;
-        /// <summary>Optional slow ageing below rating, stress per second (0 = off, the default).</summary>
+        /// <summary>Slow ageing below rating, stress per second (from <see cref="AgeingFromTier"/>, D166).</summary>
         public double AgeingRate;
+        /// <summary>Slow ageing applies from this tier (<c>08-failures.md</c>: tier 4+).</summary>
+        public int AgeingFromTier;
         /// <summary>Standard crew repair time, s.</summary>
         public double RepairStandardSeconds;
         /// <summary>Emergency crew repair time, s.</summary>
