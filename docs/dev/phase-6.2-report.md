@@ -34,7 +34,7 @@ Tier 4 cannot be reached in play yet (that is the finish pass). What can be seen
 
 No play-mode screenshots this session: nothing new is reachable in play before tier 4 opens.
 
-## Decisions waiting for your confirmation
+## Decisions confirmed by you after the session (2026-11-08)
 
 - **D163** · the warehouse and office room programs.
 - **D166** · the ageing rate.
