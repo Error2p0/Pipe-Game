@@ -30,7 +30,7 @@ namespace HeadLoss.Unity.View
     }
 
     /// <summary>Roof icons (<c>11-ui-visuals-audio.md</c> §Screens): a shape each, never colour alone.</summary>
-    public enum RoofIcon { None, Burst, Weeping, Crew, PanelTripped, Leak, Alarm, Evacuated, Certificate }
+    public enum RoofIcon { None, Burst, Weeping, Crew, PanelTripped, Leak, Alarm, Evacuated, Certificate, Inspection }
 
     /// <summary>What the map draws over the plots: mains and cables, corridors, the route being dragged, violations and roof icons.</summary>
     public sealed class CityOverlay
@@ -52,6 +52,8 @@ namespace HeadLoss.Unity.View
         public double RouteDiameterMm;
         public List<CityViolation>? RouteViolations;
         public readonly List<RoofIcon> Icons = new List<RoofIcon>();
+        /// <summary>Inspectors walking to a building: plot index and share of the walk done (cosmetic, <c>10-events.md</c>).</summary>
+        public readonly List<(int plot, float progress)> Inspectors = new List<(int, float)>();
         /// <summary>Explosion rings still expanding.</summary>
         public List<CityRing>? Rings;
         /// <summary>Now, unscaled seconds (the rings' age).</summary>
@@ -368,6 +370,8 @@ namespace HeadLoss.Unity.View
 
             for (int i = 0; i < o.Icons.Count && i < _city.Plots.Count; i++)
                 if (o.Icons[i] != RoofIcon.None) RoofIconAt(m, _city.Plots[i], o.Icons[i], p);
+            foreach ((int plot, float progress) in o.Inspectors)
+                if (plot >= 0 && plot < _city.Plots.Count) InspectorAt(m, _city.Plots[plot], o.ReduceMotion ? 1 : progress, p);
             if (o.Rings != null)
                 foreach (CityRing ring in o.Rings)
                 {
@@ -387,6 +391,23 @@ namespace HeadLoss.Unity.View
             float t = T;
             c.a = alpha;
             m.Outline(x * t + 0.4f, y * t + 0.4f, (x + 1) * t - 0.4f, (y + 1) * t - 0.4f, 0.7f, ZLines - 0.04f, c);
+        }
+
+        /// <summary>
+        /// A small figure with a clipboard walking up to the building from its left over the inspector's walk (cosmetic). With
+        /// reduce motion it simply stands at the building.
+        /// </summary>
+        void InspectorAt(MeshBuilder m, Plot plot, float progress, ViewPalette p)
+        {
+            float t = T;
+            float k = Mathf.SmoothStep(0, 1, Mathf.Clamp01(progress));
+            var to = new Vector2(plot.X * t - 1.5f, (plot.Y + plot.Height * 0.5f) * t);
+            Vector2 c = to + Vector2.left * (1 - k) * 6 * t;
+            const float z = ZIcons - 0.04f;
+            m.Disc(c, 2.2f, 16, z + 0.01f, p.Paper);
+            m.Disc(c + new Vector2(0, 0.9f), 0.55f, 12, z, p.Text);
+            m.Line(c + new Vector2(0, 0.3f), c + new Vector2(0, -0.9f), 0.5f, z, p.Text);
+            m.Outline(c.x + 0.25f, c.y - 0.6f, c.x + 1.05f, c.y + 0.4f, 0.22f, z, p.Text);
         }
 
         /// <summary>A small badge floating over the roof, with a glyph that says what happened.</summary>
@@ -432,6 +453,13 @@ namespace HeadLoss.Unity.View
                     m.Line(c + new Vector2(-r * 0.5f, 0), c + new Vector2(r * 0.45f, 0), 0.55f, z, g);
                     m.Line(c + new Vector2(r * 0.45f, 0), c + new Vector2(r * 0.1f, r * 0.35f), 0.55f, z, g);
                     m.Line(c + new Vector2(r * 0.45f, 0), c + new Vector2(r * 0.1f, -r * 0.35f), 0.55f, z, g);
+                    break;
+                case RoofIcon.Inspection:
+                    // A clipboard with a mark: findings to fix.
+                    m.Outline(c.x - r * 0.4f, c.y - r * 0.55f, c.x + r * 0.4f, c.y + r * 0.55f, 0.3f, z, g);
+                    m.Line(c + new Vector2(-r * 0.15f, r * 0.62f), c + new Vector2(r * 0.15f, r * 0.62f), 0.4f, z, g);
+                    m.Line(c + new Vector2(0, r * 0.3f), c + new Vector2(0, -r * 0.1f), 0.32f, z, g);
+                    m.Disc(c + new Vector2(0, -r * 0.3f), 0.2f, 8, z, g);
                     break;
                 case RoofIcon.Certificate:
                     // A sheet with lines.

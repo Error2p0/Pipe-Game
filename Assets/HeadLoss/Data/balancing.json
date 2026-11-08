@@ -436,7 +436,11 @@
     "inspectorWalkSeconds": 10,
     "passPayFactor": 1.25,
     "passMinutes": 60,
-    "fixDeadlineMinutes": 30
+    "fixDeadlineMinutes": 30,
+    "tickHz": 1,
+    "ratingFlowExponent": 3,
+    "ratingPressureExponent": 1.5,
+    "ratingMinReferenceW": 1
   },
   "prestige": {
     "shareOnline": 0.6,

@@ -117,6 +117,8 @@ namespace HeadLoss.Unity
                 if (_input.HeatmapKeys[i].WasPressedThisFrame()) _heatmap.SetMode((HeatmapMode)(i + 1));
             if (_input.DebugOverlay.WasPressedThisFrame()) Hud.ToggleDebug();
             if (Hud.DebugAvailable && _input.DebugLeak.WasPressedThisFrame()) StartDebugLeak();
+            // Dev only (F5): an inspector sets off for this building now (a visit otherwise comes about every 12 hours).
+            if (Hud.DebugAvailable && _input.DebugInspection.WasPressedThisFrame()) s.Inspections.Begin();
             if (_input.RoomLayer.WasPressedThisFrame()) _heatmap.CycleLayer();
             if (_input.FloorUp.WasPressedThisFrame()) ViewState.StepFloor(1);
             if (_input.FloorDown.WasPressedThisFrame()) ViewState.StepFloor(-1);

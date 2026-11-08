@@ -241,16 +241,16 @@ namespace HeadLoss.Sim.Rooms
         }
 
         /// <summary>
-        /// Between the two layers of each cell: when the lower layer is lighter (warmer) the layers overturn at
-        /// k_b·|Δρ|/ρ per second, always plus the slow mixing; heavy CO₂ above the outdoor level settles at
-        /// k_b·(M_CO₂ − M_air)/M_air. Transfers conserve each scalar's amount (volume-weighted).
+        /// Between the two layers of each cell: when the lower layer is lighter (warmer, or poorer in CO₂) the layers
+        /// overturn at k_b·|Δρ|/ρ per second, always plus the slow mixing. CO₂ moves with the mixture's density only: at
+        /// room levels it does not settle out of the air by itself (D157), while a denser pocket still sinks. Natural gas
+        /// keeps its own rise or fall. Transfers conserve each scalar's amount (volume-weighted).
         /// </summary>
         static void Stratify(RoomGridLayout l, RoomGridState s, RoomGridInputs inp, RoomGridParams p, float dt)
         {
             int n = l.Cells;
             float vl = p.LowerHeight, vu = p.UpperHeight, wv = vl * vu / (vl + vu);
-            float settle = p.Stratification * Math.Abs(p.Co2MolarMass - p.AirMolarMass) / p.AirMolarMass;
-            float buoyancy = Math.Min(0.5f, p.Stratification * Math.Abs(p.GasMolarMass - p.AirMolarMass) / p.AirMolarMass * dt);
+                float buoyancy = Math.Min(0.5f, p.Stratification * Math.Abs(p.GasMolarMass - p.AirMolarMass) / p.AirMolarMass * dt);
             bool light = p.GasMolarMass < p.AirMolarMass;
             for (int c = 0; c < n; c++)
             {
@@ -262,13 +262,6 @@ namespace HeadLoss.Sim.Rooms
                 Exchange(s.Co2, c, n, f, vl, vu, wv);
                 Exchange(s.O2, c, n, f, vl, vu, wv);
                 if (inp.GasActive) Exchange(s.Gas, c, n, f, vl, vu, wv);
-                float excess = s.Co2[n + c] - inp.OutdoorCo2Ppm;
-                if (excess > 0)
-                {
-                    float m = Math.Min(0.5f, settle * dt) * excess * vu;
-                    s.Co2[n + c] -= m / vu;
-                    s.Co2[c] += m / vl;
-                }
                 if (inp.GasActive)
                 {
                     // Light gas rises out of the lower layer, heavy gas sinks out of the upper one.

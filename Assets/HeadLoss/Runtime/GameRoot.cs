@@ -324,6 +324,7 @@ namespace HeadLoss.Unity
             s.Commands.Executed += OnCommand;
             s.SolveProblem += message => Debug.LogWarning("Head Loss (dev report): " + message);
             s.Failures.Alert += text => _notice?.Show($"{s.Layout.DisplayName}: {text}", Time.unscaledTime);
+            s.Inspections.Alert += text => _notice?.Show($"{s.Layout.DisplayName}: {text}", Time.unscaledTime);
             s.PanelTrippedEvent += () => _notice?.Show($"{s.Layout.DisplayName}: panel tripped · reduce the load and reset it", Time.unscaledTime);
             s.GasSafety.AlarmRaised += () =>
             {

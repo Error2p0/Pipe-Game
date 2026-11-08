@@ -237,6 +237,28 @@ namespace HeadLoss.Game.Thermal
             if (!GasPresent) Array.Clear(State.Gas, 0, State.Gas.Length);
         }
 
+        /// <summary>
+        /// Sets each room's CO₂, both layers, to a value (the well-mixed steady state when a building loads). Rooms given 0,
+        /// NaN or infinity keep what they have. The summaries follow at once.
+        /// </summary>
+        /// <param name="ppm">CO₂ per room, ppm.</param>
+        public void SeedCo2(IReadOnlyList<double> ppm)
+        {
+            int n = Grid.Cells;
+            bool any = false;
+            for (int c = 0; c < n; c++)
+            {
+                int room = Grid.Room[c];
+                if (room < 0 || room >= ppm.Count) continue;
+                double v = ppm[room];
+                if (!(v > 0) || double.IsInfinity(v)) continue;
+                State.Co2[c] = (float)v;
+                State.Co2[n + c] = (float)v;
+                any = true;
+            }
+            if (any) Rooms = RoomGridMath.Summaries(Grid, State, Inputs, Params);
+        }
+
         /// <summary>Sets the gas share of a room's upper layer to at least a value (the offline well-mixed estimate carried into the grid).</summary>
         public void SeedRoomGas(int room, double share)
         {

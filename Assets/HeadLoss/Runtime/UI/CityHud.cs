@@ -547,9 +547,16 @@ namespace HeadLoss.Unity.UI
             if (s.GasSafety.Evacuated) return "Evacuated · the gas is stopped; waiting for the repair and clear air" + paying;
             if (s.Record.Failures.Leaks.Count > 0) return $"Gas leak · {s.Record.Failures.Leaks.Count} to repair";
             if (s.Record.Failures.DamagedEquipment.Count > 0) return $"Damaged · {s.Record.Failures.DamagedEquipment.Count} part{(s.Record.Failures.DamagedEquipment.Count == 1 ? "" : "s")} knocked offline";
+            if (s.Inspections.Closed) return "Offline · closed by the inspector until the findings are fixed" + paying;
             if (s.Record.PanelTripped) return $"Offline · panel tripped: {Units.FormatPower(s.RequestedPowerW)} of {s.PanelLimitKW:0.#} kW";
             if (ev.Burst) return $"Burst · {Units.FormatMoneyRate(ev.Gross, _symbol)} until it is repaired{paying}";
-            if (ev.Online) return $"Online · {Units.FormatMoneyRate(ev.Net, _symbol)}{(ev.CertificateExpired ? " · gas certificate expired: pay halved" : "")}";
+            if (ev.Online)
+            {
+                string grade = s.Record.Inspection.Grade.Length > 0 ? $" · energy rating {s.Record.Inspection.Grade}" : "";
+                string insp = s.Inspections.Failed ? $" · inspection: fix within {Units.FormatDuration(s.Record.Inspection.DeadlineLeft)}"
+                    : s.Inspections.Bonus ? " · inspection passed" : "";
+                return $"Online · {Units.FormatMoneyRate(ev.Net, _symbol)}{grade}{insp}{(ev.CertificateExpired ? " · gas certificate expired: pay halved" : "")}";
+            }
             if (s.HasWater && !s.Supply.Connected) return "Offline · no city water: route a main here" + paying;
             if (s.HasGas && !s.GasSupply.Connected) return "Offline · no city gas: route a gas main here" + paying;
             if (ev.BlockingViolations > 0) return $"Offline · blocked by {ev.BlockingViolations} code violation{(ev.BlockingViolations == 1 ? "" : "s")}" + paying;

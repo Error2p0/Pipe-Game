@@ -588,6 +588,10 @@ namespace HeadLoss.Core.Data
             Positive("balancing.json inspection.passMinutes", i.PassMinutes, errors);
             Positive("balancing.json inspection.fixDeadlineMinutes", i.FixDeadlineMinutes, errors);
             if (i.InspectorWalkSeconds < 0) errors.Add("balancing.json inspection.inspectorWalkSeconds must be ≥ 0");
+            Positive("balancing.json inspection.tickHz", i.TickHz, errors);
+            Positive("balancing.json inspection.ratingFlowExponent", i.RatingFlowExponent, errors);
+            Positive("balancing.json inspection.ratingPressureExponent", i.RatingPressureExponent, errors);
+            Positive("balancing.json inspection.ratingMinReferenceW", i.RatingMinReferenceW, errors);
             Positive("balancing.json fines.inspectionFailGrossMinutes", data.Balancing.Fines.InspectionFailGrossMinutes, errors);
             Positive("balancing.json fines.inspectionFailMinimum", data.Balancing.Fines.InspectionFailMinimum, errors);
             var kinds = new HashSet<string>();
@@ -646,6 +650,8 @@ namespace HeadLoss.Core.Data
                 if (c.Tiers.Count == 0 && c.BuildingTypes.Count == 0) errors.Add($"{w}: in force nowhere (no tiers, no building types)");
                 foreach (int t in c.Tiers) Tier(w, t, errors);
                 if (string.IsNullOrWhiteSpace(c.Reason) || string.IsNullOrWhiteSpace(c.Why)) errors.Add($"{w}: reason and why are needed for the requirement sheet");
+                if (c.Id == "indoor-air-quality" && !(c.Parameters.TryGetValue("maxCo2Ppm", out double ppm) && ppm > data.Balancing.Climate.OutdoorCo2Ppm))
+                    errors.Add($"{w}: maxCo2Ppm must be above the outdoor CO₂ ({data.Balancing.Climate.OutdoorCo2Ppm} ppm)");
             }
         }
 

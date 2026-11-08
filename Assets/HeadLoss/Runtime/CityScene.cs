@@ -276,10 +276,12 @@ namespace HeadLoss.Unity
             o.ReduceMotion = _reduceMotion();
             o.Rings?.RemoveAll(r => o.Time - r.Start > CityRenderer.RingSeconds);
             o.Icons.Clear();
-            foreach (Plot p in _city.Plots)
+            o.Inspectors.Clear();
+            for (int i = 0; i < _city.Plots.Count; i++)
             {
-                BuildingSession? s = _ctx.FindSession(p.Id);
+                BuildingSession? s = _ctx.FindSession(_city.Plots[i].Id);
                 o.Icons.Add(s == null ? RoofIcon.None : IconOf(s));
+                if (s != null && s.Inspections.InspectorComing) o.Inspectors.Add((i, (float)s.Inspections.WalkProgress));
             }
         }
 
@@ -292,6 +294,7 @@ namespace HeadLoss.Unity
             if (gas.CertificateExpired || (s.Record.Failures.Certificate.Issued && s.Record.Failures.Certificate.Reminded)) return RoofIcon.Certificate;
             if (s.Record.Failures.Bursts.Count > 0 || s.Record.Failures.DamagedEquipment.Count > 0) return s.Record.Failures.Repairs.Count > 0 ? RoofIcon.Crew : RoofIcon.Burst;
             if (s.Record.PanelTripped) return RoofIcon.PanelTripped;
+            if (s.Inspections.Failed) return RoofIcon.Inspection;
             // Only what leak sensors can see floats over the roof; otherwise weeping shows on the stress heatmap.
             foreach (var kv in s.Record.Failures.Stress)
                 if (kv.Value >= _ctx.Data.Balancing.Failure.WeepThreshold && s.Record.Failures.WeepAlerted.Contains(kv.Key)) return RoofIcon.Weeping;

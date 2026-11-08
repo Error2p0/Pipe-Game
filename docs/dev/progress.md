@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 starts with tasks 4 and 6.
+Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 did tasks 4 and 6 (report: `docs/dev/phase-6.1-report.md`). Next: task 3 (tier 4 shell, no heating yet).
 
 ## Phase 1 · Physics core
 
@@ -161,6 +161,7 @@ Started 2026-11-07.
 - [ ] 3. Tier 4 (`04`, `07`, `13`)
   - [ ] Warehouse and office: footprints, 1–6 floors, L and U shapes, 40% chance of a basement, room programs, codes, occupants and machines.
   - [ ] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`).
+  - [ ] Indoor air quality at generation (D155): occupied rooms get vents for their people, the router aims at each room's CO₂, and the solvability check includes the code.
   - [ ] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it.
   - [ ] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only.
   - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
@@ -168,9 +169,9 @@ Started 2026-11-07.
   - [ ] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (`07`; D110 covers the fixed 25 mbar only).
   - [ ] Slow ageing on, tier 4+ (D134): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
   - [ ] Tier 4 opens (D104 lifts): unlocks, tree, milestone and tests that assume tier 3 is the top.
-- [ ] 4. Indoor air quality code (`09`, `05` §3)
-  - [ ] 1 000 ppm room mean CO₂: every air outlet in that room pays 0, on the sheet and in the code list, with tests.
-  - [ ] Room-level CO₂ for background buildings and offline, so the code holds while the building is not open.
+- [x] 4. Indoor air quality code (`09`, `05` §3)
+  - [x] 1 000 ppm room mean CO₂: every air outlet in that room pays 0, on the sheet and in the code list, with tests. Tiers 4–5 (D155); zone "CO₂ too high" (D156).
+  - [x] Room-level CO₂ for background buildings and offline, so the code holds while the building is not open: each room's well-mixed steady state, the same everywhere (D158). People's CO₂ no longer pools in the lower layer of the room grid (D157).
 - [ ] 5. Events (`10`, `12`, `11`)
   - [ ] Scheduler at 1 Hz: mean 3 h, 45 min gap, one per district and two city-wide, seeded; only targets where it makes sense.
   - [ ] Calm banner with "Show me", log of the last 20, "temporarily raised" tag on outlets.
@@ -181,9 +182,9 @@ Started 2026-11-07.
   - [ ] Outage, lab branch: built in task 7 (tanks are tier 5).
   - [ ] `backup-generator` 5, 20, 100 kW: 5 s start, `safetyCritical` first, fuel cost. Water hammer on outage (`05` §6).
   - [ ] Cascade tests with every protection on and off; offline equivalence including events.
-- [ ] 6. Inspections (`10`)
-  - [ ] Random inspection: 0.08 per hour per online building, inspector icon, pass ×1.25 for 60 min, fail fine and 30 min deadline (pauses offline), second fine and offline if missed.
-  - [ ] Energy rating A–G from `P_actual / P_reference`, pay multipliers in income, recomputed on Commit, "Projected rating: B" in design mode, on the status line.
+- [x] 6. Inspections (`10`)
+  - [x] Random inspection: 0.08 per hour per online building, inspector icon, pass ×1.25 for 60 min, fail fine and 30 min deadline (pauses offline), second fine and offline if missed. In game only; the bonus runs on while away (D161).
+  - [x] Energy rating A–G from `P_actual / P_reference`, pay multipliers in income, recomputed on Commit, "Projected rating: B" in design mode, on the status line. Reference scaled by delivery³ (D159); details in D160.
 - [ ] 7. Tier 5 (`03`, `04`, `06`, `07`, `08`, `09`, `10`)
   - [ ] Factory, lab and hospital: footprints, 2–10 floors, basements, lab and ward programs; solvability over 200 seeds; tier 5 opens.
   - [ ] Propane: fluid, `propane-outlet`, pools low, basement code. **The spec names no source for propane**; decide and log it when building.

@@ -380,7 +380,6 @@ namespace HeadLoss.Unity.Jobs
             {
                 int n = N;
                 float vl = Lower, vu = Upper, wv = vl * vu / (vl + vu);
-                float settle = Strat * math.abs(MCo2 - MAir) / MAir;
                 float buoyancy = math.min(0.5f, Strat * math.abs(MGas - MAir) / MAir * Dt);
                 bool light = MGas < MAir;
                 for (int c = _c0; c < _c1; c++)
@@ -393,13 +392,6 @@ namespace HeadLoss.Unity.Jobs
                     Exchange(Co2, c, n, f, vl, vu, wv);
                     Exchange(O2, c, n, f, vl, vu, wv);
                     if (GasActive) Exchange(Gas, c, n, f, vl, vu, wv);
-                    float excess = Co2[n + c] - OutCo2;
-                    if (excess > 0)
-                    {
-                        float m = math.min(0.5f, settle * Dt) * excess * vu;
-                        Co2[n + c] -= m / vu;
-                        Co2[c] += m / vl;
-                    }
                     if (GasActive)
                     {
                         if (light)

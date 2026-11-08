@@ -51,7 +51,7 @@ Each code in `codes.json`: `id`, `displayName`, `kind` (layout / operating / cit
 | Code | Kind | Parameters | Check |
 | --- | --- | --- | --- |
 | Legionella | operating | 55 °C | Hot tap below → tap counts as below minimum (it is a requirement, not a max) |
-| Indoor air quality | operating | 1 000 ppm | Room mean CO₂ above → every air outlet in that room pays 0 |
+| Indoor air quality | operating, tiers 4–5 (D155) | 1 000 ppm | Room mean CO₂ above → every air outlet in that room pays 0. The room mean is the well-mixed steady state of the room's ventilation, `420 ppm + G / Q` (D158) |
 | Condensation | layout | dew point from room RH (`05-simulation.md` §4) | Uninsulated cold segment whose fluid temperature is below the dew point of a room it passes over |
 | Propane | layout | — | No propane equipment or outlet on a basement floor |
 | Hydrogen | layout | ≥ 1 high-level exhaust grille or high passive vent per hydrogen room | — |
