@@ -163,7 +163,7 @@ Started 2026-11-07.
   - [x] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`). Router fixes (D164), deeper ceilings from tier 4 (D165). The gas manifold joins the references when it is built.
   - [x] Indoor air quality at generation (D155): occupied rooms get vents for their people, the router aims at each room's CO₂, and the solvability check includes the code.
   - [ ] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it.
-  - [ ] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only.
+  - [x] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only (D167).
   - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
   - [ ] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set`.
   - [x] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (a live setting in 1 mbar steps, like a valve setting) (`07`; D110 covers the fixed 25 mbar only).

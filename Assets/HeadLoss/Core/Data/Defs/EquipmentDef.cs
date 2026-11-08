@@ -37,6 +37,11 @@ namespace HeadLoss.Core.Data.Defs
         public double Price;
         /// <summary>Electrical panels: total kW limit.</summary>
         public double PanelLimitKW;
+        /// <summary>Building types it may be placed in; empty = any (the transformer room: industrial buildings, <c>07</c>).</summary>
+        public List<string> BuildingTypes = new List<string>();
+
+        /// <summary>Whether it may go into a building of this type.</summary>
+        public bool AllowedIn(string buildingType) => BuildingTypes.Count == 0 || BuildingTypes.Contains(buildingType);
         /// <summary>Gas regulators: outlet pressure, Pa gauge (the default when the setpoint can be adjusted).</summary>
         public double SetpointPa;
         /// <summary>Gas regulators: from this tier the setpoint is adjustable between the min and max, Pa (0 = fixed; <c>07</c>: 18–30 mbar from tier 4).</summary>

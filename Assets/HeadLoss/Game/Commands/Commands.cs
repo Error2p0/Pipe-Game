@@ -310,7 +310,7 @@ namespace HeadLoss.Game.Commands
                 return true;
             }
             EquipmentDef? def = s.Data.FindEquipment(_equipmentId);
-            if (def == null || def.Placement != "intake" || !s.ItemUnlocked(_equipmentId)) return false;
+            if (def == null || def.Placement != "intake" || !s.ItemUnlocked(_equipmentId) || !def.AllowedIn(s.Layout.BuildingType)) return false;
             if (!EquipmentFits.Opening(s.Data, s.Layout.FindOpening(_openingId)!, def)) return false;
             LastError = EquipmentFits.FloorSpace(s, _openingId, def, out _);
             if (LastError != DrawError.None) return false;

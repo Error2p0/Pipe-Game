@@ -1501,6 +1501,7 @@ namespace HeadLoss.Unity.UI
             }
             foreach (EquipmentDef def in Catalogue.OpeningEquipment(_data, o.Utility))
             {
+                if (!def.AllowedIn(_s.Layout.BuildingType)) continue;
                 string eqId = def.Id;
                 bool here = e != null && e.EquipmentId == eqId;
                 bool preplaced = false;

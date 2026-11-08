@@ -261,7 +261,12 @@ namespace HeadLoss.Game.Generation
             if (water && !PlaceOpening(data, type, b, openings, "water", WaterId, tier.ReferenceWaterEquipment)) return false;
             bool gas = b.Outlets.Exists(o => BuildingState.OutletFluid(o.Type) == BuildingState.GasFluid);
             if (gas && !PlaceOpening(data, type, b, openings, "gas", GasId, tier.ReferenceGasEquipment)) return false;
-            if (!PlaceOpening(data, type, b, openings, "power", PowerId, new List<string> { "panel-basic" })) return false;
+            // Floor space at the power connection for the largest panel this building may take (a transformer room in
+            // industrial buildings, 07); other buildings keep the basic panel's.
+            var panels = new List<string> { "panel-basic" };
+            foreach (EquipmentDef e in data.Equipment)
+                if (e.Category == "panel" && e.BuildingTypes.Contains(type.Id)) panels.Add(e.Id);
+            if (!PlaceOpening(data, type, b, openings, "power", PowerId, panels)) return false;
             Windows(data, b);
             Columns(data, b, rng);
             FireWalls(data, b);
