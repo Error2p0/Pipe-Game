@@ -20,7 +20,8 @@
       "relief-valve",
       "pressure-tank",
       "inline-booster-pump",
-      "circulation-pump"
+      "circulation-pump",
+      "gas-booster-inline"
     ],
     "safety": [
       "gas-detector",

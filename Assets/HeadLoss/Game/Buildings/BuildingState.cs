@@ -48,9 +48,15 @@ namespace HeadLoss.Game.Buildings
         public double Speed = 1;
         /// <summary>Inline electrical parts: the spark-free variant (not an ignition source).</summary>
         public bool SparkFree;
-
+        /// <summary>A gas manifold: the branches whose valve is closed, by the direction they leave in (e, w, n, s, up, down).</summary>
+        public List<string> ClosedBranches = new List<string>();
         public TilePos Pos => new TilePos(X, Y, Floor);
-        public DuctNode Clone() => (DuctNode)MemberwiseClone();
+        public DuctNode Clone()
+        {
+            var c = (DuctNode)MemberwiseClone();
+            c.ClosedBranches = new List<string>(ClosedBranches);
+            return c;
+        }
     }
 
     /// <summary>A straight duct run between two nodes.</summary>
@@ -259,11 +265,12 @@ namespace HeadLoss.Game.Buildings
                 }
                 foreach (DuctNode n in net.Nodes)
                 {
-                    if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings) continue;
+                    if (n.Kind == DuctNodeKind.Free && !n.SmoothFittings && n.PartId.Length == 0) continue;
                     string f = n.Floor == 0 ? "" : $"f{n.Floor},";
                     string set = n.Setting == 0 ? "" : $",{n.Setting}";
                     string spark = n.SparkFree ? ",spark" : "";
-                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}{spark}");
+                    string closed = n.ClosedBranches.Count == 0 ? "" : ",closed:" + string.Join("/", n.ClosedBranches);
+                    parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}{spark}{closed}");
                 }
             }
             foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}{(e.SetpointPa > 0 ? $",set{e.SetpointPa}" : "")}");

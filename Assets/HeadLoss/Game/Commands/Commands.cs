@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
+using HeadLoss.Game.Networks;
 using HeadLoss.Game.Progression;
 using HeadLoss.Game.Session;
 
@@ -982,6 +983,89 @@ namespace HeadLoss.Game.Commands
             if (!(next is SetValveSettingCommand d) || d._tile != _tile || d._fluid != _fluid || d._hadCommitted != _hadCommitted) return false;
             _setting = d._setting;
             return true;
+        }
+    }
+
+    /// <summary>Fits a gas manifold on a gas junction, or takes it off (<c>07</c>, D168). A design change: it is bought on Commit.</summary>
+    public sealed class FitManifoldCommand : DesignCommand
+    {
+        readonly int _nodeId;
+        readonly string _fluid;
+        readonly bool _fit;
+
+        public FitManifoldCommand(int nodeId, bool fit, string fluid)
+        {
+            _nodeId = nodeId;
+            _fit = fit;
+            _fluid = fluid;
+        }
+
+        public override string Description => _fit ? "Fit gas manifold" : "Remove gas manifold";
+
+        protected override bool Apply(BuildingSession s)
+        {
+            DuctNetworkState net = s.State.Net(_fluid);
+            DuctNode? n = net.FindNode(_nodeId);
+            if (n == null) return false;
+            if (!_fit)
+            {
+                if (!GasManifold.Is(n)) return false;
+                n.PartId = "";
+                n.ClosedBranches.Clear();
+                return true;
+            }
+            EquipmentDef? def = s.Data.FindEquipment(GasManifold.Id);
+            if (def == null || GasManifold.Is(n) || !GasManifold.CanFit(s.Data, net, n) || !s.ItemUnlocked(GasManifold.Id)) return false;
+            if (def.MaxBranches > 0 && net.Degree(n.Id) > def.MaxBranches) return false;
+            n.PartId = GasManifold.Id;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Opens or closes one branch valve of a gas manifold: live and free like a shutoff, on the design and on what is built
+    /// (D168). A closed branch is cut off and its outlets are exempt from the minimum check (<c>07</c> §Shutoff semantics).
+    /// </summary>
+    public sealed class SetManifoldBranchCommand : OperationalCommand
+    {
+        readonly TilePos _tile;
+        readonly string _direction;
+        readonly bool _closed;
+        readonly string _fluid;
+        bool _hadCommitted;
+
+        public SetManifoldBranchCommand(TilePos tile, string direction, bool closed, string fluid)
+        {
+            _tile = tile;
+            _direction = direction;
+            _closed = closed;
+            _fluid = fluid;
+        }
+
+        public override string Description => $"{(_closed ? "Close" : "Open")} {GasManifold.DirectionName(_direction).ToLowerInvariant()} branch";
+
+        static bool Set(DuctNode n, string dir, bool closed)
+        {
+            bool has = n.ClosedBranches.Contains(dir);
+            if (has == closed) return false;
+            if (closed) n.ClosedBranches.Add(dir);
+            else n.ClosedBranches.Remove(dir);
+            return true;
+        }
+
+        public override bool Execute(BuildingSession s)
+        {
+            DuctNode? n = s.State.Net(_fluid).NodeAt(_tile);
+            if (n == null || !GasManifold.Is(n) || !Set(n, _direction, _closed)) return false;
+            DuctNode? c = s.Committed.Net(_fluid).NodeAt(_tile);
+            _hadCommitted = c != null && GasManifold.Is(c) && Set(c, _direction, _closed);
+            return true;
+        }
+
+        public override void Undo(BuildingSession s)
+        {
+            if (s.State.Net(_fluid).NodeAt(_tile) is DuctNode n) Set(n, _direction, !_closed);
+            if (_hadCommitted && s.Committed.Net(_fluid).NodeAt(_tile) is DuctNode c) Set(c, _direction, !_closed);
         }
     }
 

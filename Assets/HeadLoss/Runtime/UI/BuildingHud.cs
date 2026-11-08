@@ -869,7 +869,7 @@ namespace HeadLoss.Unity.UI
                     _sb.Append('/').Append(_s.Record.Failures.Bursts.Count).Append('/').Append(_s.Record.Failures.Repairs.Count);
                     break;
                 case TargetKind.Node:
-                    if (net.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(net.Degree(n.Id));
+                    if (net.FindNode(t.Id) is DuctNode n) _sb.Append(n.SmoothFittings).Append(net.Degree(n.Id)).Append(n.PartId).Append(string.Join("/", n.ClosedBranches));
                     break;
                 case TargetKind.Intake:
                     if (_s.State.EquipmentAt(t.Anchor) is EquipmentState e) _sb.Append(e.EquipmentId).Append(e.On).Append(e.Vsd).Append(e.SparkFree);
@@ -1447,6 +1447,7 @@ namespace HeadLoss.Unity.UI
                     if (n == null) break;
                     AddRiserButtons();
                     AddFittingButtons(net, n, fluid);
+                    ManifoldActions(net, n, fluid);
                     break;
                 }
                 case TargetKind.Intake:
@@ -1459,6 +1460,32 @@ namespace HeadLoss.Unity.UI
                     SafetyActions(t);
                     break;
             }
+        }
+
+        /// <summary>A gas junction: fit a gas manifold (tier 4), or a manifold's branch valves and its removal (D168).</summary>
+        void ManifoldActions(DuctNetworkState net, DuctNode n, string fluid)
+        {
+            EquipmentDef? def = _data.FindEquipment(GasManifold.Id);
+            if (def == null) return;
+            if (GasManifold.Is(n))
+            {
+                TilePos tile = n.Pos;
+                foreach ((DuctSegment _, string dir) in GasManifold.Branches(net, n))
+                {
+                    bool closed = n.ClosedBranches.Contains(dir);
+                    string d = dir;
+                    Button b = _ui.Button(_readoutActions, $"{GasManifold.DirectionName(dir)} branch · {(closed ? "closed: open it" : "open: close it")}",
+                        () => _s.Execute(new SetManifoldBranchCommand(tile, d, !closed, fluid)));
+                    StyleButton(b, closed);
+                }
+                _ui.Button(_readoutActions, "Remove gas manifold", () => _s.Execute(new FitManifoldCommand(n.Id, false, fluid)));
+                return;
+            }
+            if (!GasManifold.CanFit(_data, net, n)) return;
+            bool ok = _s.ItemUnlocked(GasManifold.Id);
+            Button fit = _ui.Button(_readoutActions, ok ? $"Fit gas manifold · {Units.FormatMoney(def.Price, _symbol)}" : $"Gas manifold · tier {def.Tier}",
+                () => _s.Execute(new FitManifoldCommand(n.Id, true, fluid)));
+            fit.SetEnabled(ok);
         }
 
         void SafetyActions(Target t)

@@ -88,6 +88,8 @@ namespace HeadLoss.Game.Codes
             foreach (DuctNode tee in net.Nodes)
             {
                 if (tee.Kind != DuctNodeKind.Free || net.Degree(tee.Id) < 3) continue;
+                // A gas manifold has a valve on every branch it feeds (07).
+                if (Networks.GasManifold.Is(tee)) continue;
                 int at = hops.TryGetValue(tee.Id, out int h) ? h : int.MaxValue;
                 foreach (DuctSegment first in net.Segments)
                 {

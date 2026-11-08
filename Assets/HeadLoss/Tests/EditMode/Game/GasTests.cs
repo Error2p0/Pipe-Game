@@ -564,6 +564,85 @@ namespace HeadLoss.Game.Tests
             Assert.IsTrue(s.GasSafety.CertificateExpired);
             Assert.AreEqual(1, r.CertificatesExpired);
         }
+
+        // ---------- tier 4: gas manifold and boosters (07, D168) ----------
+
+        static DuctNode Tee(BuildingSession s) => s.State.Gas.NodeAt(new TilePos(9, 2))!;
+
+        [Test]
+        public void Manifold_IsTheShutoffForEveryBranch_AndCostsItsPrice()
+        {
+            BuildingSession s = Plumbed("", commit: false);
+            // The gas house only has the noise code: check against a copy with the accessible shutoffs code in force.
+            BuildingLayoutDef def = Newtonsoft.Json.JsonConvert.DeserializeObject<BuildingLayoutDef>(Newtonsoft.Json.JsonConvert.SerializeObject(Data.HandmadeBuilding("gas-house")))!;
+            def.Codes = new List<string> { "accessible-shutoffs" };
+            var coded = BuildingLayout.From(Data, def);
+            Assert.IsTrue(CodeChecker.Check(s.Data, coded, s.State).Exists(v => v.CodeId == "accessible-shutoffs"), "a bare tee: the kitchen branch has no shutoff");
+            double before = s.NetCommitCost();
+            Assert.IsTrue(s.Execute(new FitManifoldCommand(Tee(s).Id, true, Gas)));
+            Assert.IsFalse(CodeChecker.Check(s.Data, coded, s.State).Exists(v => v.CodeId == "accessible-shutoffs"), "the manifold has a valve on each branch");
+            Assert.AreEqual(before + s.Data.EquipmentItem("gas-manifold").Price, s.NetCommitCost(), 1e-6);
+            Assert.IsFalse(s.Execute(new FitManifoldCommand(s.State.Gas.NodeAt(new TilePos(9, 3))?.Id ?? -1, true, Gas)), "only on a junction");
+        }
+
+        [Test]
+        public void Manifold_ClosingABranchIsolatesIt_TheBuildingStaysOnline()
+        {
+            BuildingSession s = Plumbed("", commit: false);
+            Assert.IsTrue(s.Execute(new FitManifoldCommand(Tee(s).Id, true, Gas)));
+            Assert.IsTrue(s.Commit(), s.CheckCommit().Reason);
+            s.SolveNow();
+            Assert.IsTrue(s.CommittedEvaluation.Online);
+            Assert.IsTrue(s.Execute(new SetManifoldBranchCommand(new TilePos(9, 2), "w", true, Gas)));
+            Assert.IsFalse(s.HasPendingDesign, "a valve, not a design change");
+            s.SolveNow();
+            Assert.AreEqual(OutletZone.Isolated, Stove(s, "stove-1").Zone);
+            Assert.AreNotEqual(OutletZone.Isolated, Stove(s, "stove-2").Zone);
+            Assert.IsTrue(s.CommittedEvaluation.Online, "an isolated branch does not keep the building offline");
+            Assert.IsTrue(s.Execute(new SetManifoldBranchCommand(new TilePos(9, 2), "w", false, Gas)));
+            s.SolveNow();
+            Assert.AreNotEqual(OutletZone.Isolated, Stove(s, "stove-1").Zone);
+        }
+
+        [Test]
+        public void Manifold_ItsDetectorAlarmsAtAFifthOfTheLimit()
+        {
+            BuildingSession s = Plumbed("", commit: false);
+            Assert.IsTrue(s.Execute(new FitManifoldCommand(Tee(s).Id, true, Gas)));
+            Assert.IsTrue(s.Commit(), s.CheckCommit().Reason);
+            s.SolveNow();
+            s.Data.Balancing.Gas.DetectionSeconds = 0;
+            try
+            {
+                FillRoom(s, "kitchen-0", 0.015f);  // 30% of LFL: only a detector notices
+                TickFor(s, 2);
+                Assert.IsTrue(s.GasSafety.Evacuated);
+            }
+            finally { s.Data.Balancing.Gas.DetectionSeconds = 30; }
+        }
+
+        [Test]
+        public void BoosterCompressor_AtTheConnection_AddsUpTo50Mbar()
+        {
+            double regulated = Stove(Plumbed(), "stove-1").Delivery;
+            BuildingSession s = Plumbed(regulator: "gas-booster-compressor");
+            double boosted = Stove(s, "stove-1").Delivery;
+            Assert.Greater(boosted, BuildingSession.ReferenceGasPressure(s.Data) + 4000, "the city's pressure plus most of 50 mbar at a stove's small flow");
+            Assert.Greater(boosted, regulated);
+            Assert.Greater(s.CommittedEvaluation.PowerW, 0, "it runs on electricity");
+        }
+
+        [Test]
+        public void InlineBooster_RaisesThePressureDownstream()
+        {
+            BuildingSession plain = Plumbed();
+            double before = Stove(plain, "stove-2").Delivery;
+            BuildingSession s = Plumbed(commit: false);
+            Assert.IsTrue(s.Execute(new PlaceInlineCommand(new TilePos(9, 4), "gas-booster-inline", false, Gas)));
+            Assert.IsTrue(s.Commit(), s.CheckCommit().Reason);
+            s.SolveNow();
+            Assert.Greater(Stove(s, "stove-2").Delivery, before + 3000, "the upper stove, past the booster");
+        }
     }
 
     static class GasTestExtensions

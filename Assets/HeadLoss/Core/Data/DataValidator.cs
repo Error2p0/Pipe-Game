@@ -13,7 +13,7 @@ namespace HeadLoss.Core.Data
         static readonly HashSet<string> FamilyKinds = new HashSet<string> { "duct", "pipe", "main", "cable" };
         static readonly HashSet<string> FittingModels = new HashSet<string> { "fixed", "elbow", "tee", "reducer", "valve", "check", "regulator", "relief", "filter" };
         static readonly HashSet<string> SpeedControls = new HashSet<string> { "crank", "on-off", "variable", "none" };
-        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon", "room", "wall" };
+        static readonly HashSet<string> Placements = new HashSet<string> { "intake", "inline", "addon", "room", "wall", "junction" };
         static readonly HashSet<string> PowerModels = new HashSet<string> { "none", "curve", "heat" };
         static readonly HashSet<string> PortRoles = new HashSet<string> { "in", "fuel", "out", "return", "flow" };
         static readonly HashSet<string> Layers = new HashSet<string> { "floor", "ceiling" };

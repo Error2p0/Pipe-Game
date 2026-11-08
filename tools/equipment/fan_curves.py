@@ -69,6 +69,7 @@ PUMPS = [
     ("inline-booster-pump", "Inline booster pump", 3, 30, 5, 0.50, "on-off", (1, 1, "ceiling"), "inline", 28, 1500, "Mid-line water booster"),
 ]
 for fid, name, tier, head, qmax, peak, speed, fp, place, conn, price, notes in PUMPS:
+    extra = {"builtInPressureTank": True} if fid == "vs-pump-set" else {}
     items.append({
         "id": fid, "displayName": name, "tier": tier, "category": "water-mover",
         "footprint": {"width": fp[0], "height": fp[1], "layer": fp[2]},
@@ -76,6 +77,21 @@ for fid, name, tier, head, qmax, peak, speed, fp, place, conn, price, notes in P
         "fluids": ["hot-water", "heating-water"] if fid == "circulation-pump" else ["water"], "powerModel": "curve", "isIgnitionSource": True,
         "speedControl": speed, "placement": place,
         "curve": curve(round(RHO_G * head, 1), qmax, peak), "reverseK": 5.0, "connectionDiameterMm": conn, **spin(fid), "price": price, "notes": notes,
+        **extra,
+    })
+
+# Gas boosters (07 Gas supply): adds up to 50 mbar, Qmax 30 m3/h, peak efficiency 0.5; at the gas connection after the city
+# main, or inline on a long run (07 Mid-line boosters). Category gas-supply so the connection offers it.
+for fid, name, place, fp, notes in [
+    ("gas-booster-compressor", "Gas booster compressor", "intake", (2, 1, "floor"), "At the gas connection: adds up to 50 mbar to the city's pressure"),
+    ("gas-booster-inline", "Inline gas booster", "inline", (1, 1, "ceiling"), "On a long gas run: adds up to 50 mbar where losses pile up"),
+]:
+    items.append({
+        "id": fid, "displayName": name, "tier": 4, "category": "gas-supply",
+        "footprint": {"width": fp[0], "height": fp[1], "layer": fp[2]},
+        "fluids": ["natural-gas"], "powerModel": "curve", "isIgnitionSource": True, "speedControl": "on-off", "placement": place,
+        "curve": curve(5000, 30, 0.5), "reverseK": 5.0, "connectionDiameterMm": 28, "runDownSeconds": 4, "spinUpSeconds": 2,
+        "price": 8000, "notes": notes,
     })
 
 
@@ -107,14 +123,20 @@ for fid, name, tier, kw, price, fp, notes in [
     items.append(plain(fid, name, tier, "panel", [], "intake", price, notes, fp=fp, ignition=True, panelLimitKW=kw))
 # Gas supply and safety gear (07 Gas, 08 Failures).
 items.append(plain("gas-regulator", "Gas regulator", 3, "gas-supply", ["natural-gas"], "intake", 150,
-                   "At the gas connection: fixed outlet pressure 25 mbar", setpointPa=2500, regulatorK=2.0))
+                   "At the gas connection: outlet pressure 25 mbar, adjustable 18-30 mbar from tier 4", setpointPa=2500,
+                   setpointFromTier=4, setpointMinPa=1800, setpointMaxPa=3000, setpointStepPa=100, regulatorK=2.0))
+# The gas manifold (07): fitted on a gas junction, a shutoff for each of its branches (up to 6) and a detector in its room.
+items.append(plain("gas-manifold", "Gas manifold", 4, "gas-fitting", ["natural-gas"], "junction", 2000,
+                   "Fitted on a gas tee or cross: a shutoff valve on each branch (up to 6) and a built-in detector; counts as the accessible shutoff for every branch",
+                   fp=(1, 1, "ceiling"), maxBranches=6))
 items.append(plain("gas-detector", "Gas detector", 3, "safety", ["natural-gas"], "room", 80,
                    "Wall-mounted in one room: alarm at 20% of the lower flammable limit at its cell", fp=(1, 1, "none")))
 items.append(plain("passive-vent-opening", "Passive vent", 3, "safety", ["air"], "wall", 120,
                    "Exterior-wall opening, high or low: power-free ventilation, about 1 air change an hour for a 30 m\u00b3 room, more or less with the wind",
                    fp=(1, 1, "none")))
 items.append(plain("transformer-room", "Transformer room", 4, "panel", [], "intake", 60000,
-                   "Needs a 3x3 room on the ground floor or basement; industrial buildings only", fp=(3, 3, "floor"), ignition=True, panelLimitKW=250))
+                   "Needs a 3x3 room on the ground floor or basement; industrial buildings only", fp=(3, 3, "floor"), ignition=True, panelLimitKW=250,
+                   buildingTypes=["warehouse", "factory", "lab-building"]))
 
 # Climate devices that join networks (07 Climate equipment, 05 1.5 coupling nodes). Ports are tile offsets in the footprint
 # before it is turned: "in" draws the same flow the "out" port sends, "fuel" draws gas for the heat made, "flow"/"return" feed a

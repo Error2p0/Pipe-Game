@@ -35,6 +35,10 @@ namespace HeadLoss.Core.Data.Defs
         public double ConnectionDiameterMm;
         /// <summary>Purchase price, $.</summary>
         public double Price;
+        /// <summary>Pumps with a pressure tank built in (the VS pump set, <c>07</c>): their network's surges shrink as with a separate tank.</summary>
+        public bool BuiltInPressureTank;
+        /// <summary>Gas manifold: most branches it serves (<c>07</c>: 6).</summary>
+        public int MaxBranches;
         /// <summary>Electrical panels: total kW limit.</summary>
         public double PanelLimitKW;
         /// <summary>Building types it may be placed in; empty = any (the transformer room: industrial buildings, <c>07</c>).</summary>

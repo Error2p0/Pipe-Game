@@ -3,7 +3,7 @@ using UnityEngine;
 namespace HeadLoss.Unity.View
 {
     /// <summary>Glyphs for parts that are not fans or dampers.</summary>
-    public enum SymbolKind { Valve, Check, Regulator, Relief, Tank, Panel, FireDamper }
+    public enum SymbolKind { Valve, Check, Regulator, Relief, Tank, Panel, FireDamper, Manifold }
 
     /// <summary>
     /// A small housing with a glyph: shutoff and ball valves (an hourglass, a bar across when closed), check valves (an
@@ -63,6 +63,12 @@ namespace HeadLoss.Unity.View
                     m.Line(new Vector2(r * 0.15f, r * 0.8f), new Vector2(-r * 0.3f, 0), 0.06f, -0.002f, palette.Warning);
                     m.Line(new Vector2(-r * 0.3f, 0), new Vector2(r * 0.3f, 0), 0.06f, -0.002f, palette.Warning);
                     m.Line(new Vector2(r * 0.3f, 0), new Vector2(-r * 0.15f, -r * 0.8f), 0.06f, -0.002f, palette.Warning);
+                    break;
+                case SymbolKind.Manifold:
+                    // A bar with valve stubs: a gas manifold on a junction.
+                    m.Rect(-r * 0.7f, -r * 0.18f, r * 0.7f, r * 0.18f, -0.002f, tint);
+                    m.Rect(-r * 0.5f, r * 0.18f, -r * 0.3f, r * 0.55f, -0.002f, tint);
+                    m.Rect(r * 0.3f, r * 0.18f, r * 0.5f, r * 0.55f, -0.002f, tint);
                     break;
                 case SymbolKind.FireDamper:
                     m.Line(-n * r, n * r, 0.07f, -0.002f, palette.Danger);

@@ -165,7 +165,7 @@ Started 2026-11-07.
   - [ ] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it.
   - [x] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only (D167).
   - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.
-  - [ ] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set`.
+  - [x] `gas-booster-compressor` and its inline variant, `gas-manifold` (6 valves, a detector, counts as accessible shutoffs), `vs-pump-set` (its built-in pressure tank now counts). D168.
   - [x] `gas-regulator` setpoint adjustable 18–30 mbar from tier 4 (a live setting in 1 mbar steps, like a valve setting) (`07`; D110 covers the fixed 25 mbar only).
   - [x] Slow ageing on, tier 4+ (D134, rate in D166): `failure.ageingRate` applies to every tier today, so add the tier limit, pick and log a rate (`08` gives none), and test it. Every aged segment then has stress building, so check offline catch-up stays within budget, and gas pipes can now reach a leak through ageing.
   - [ ] Tier 4 opens (D104 lifts): unlocks, tree, milestone and tests that assume tier 3 is the top.

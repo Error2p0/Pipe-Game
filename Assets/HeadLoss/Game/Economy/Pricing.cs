@@ -223,6 +223,11 @@ namespace HeadLoss.Game.Economy
                         if (adjacent.Count == 2 && DuctEditor.IsElbow(net, n)) Add(n.SmoothFittings ? "elbow-90-long-radius" : "elbow-90-sharp", dMax);
                         else if (adjacent.Count == 3) Add(n.SmoothFittings ? "tee-smooth" : "tee-sharp", dMax);
                         else if (adjacent.Count >= 4) Add("cross-sharp", dMax);
+                        if (Networks.GasManifold.Is(n) && data.FindEquipment(n.PartId) is EquipmentDef manifold)
+                        {
+                            specs.Add(manifold.Id);
+                            price += manifold.Price;
+                        }
                     }
                     else if (n.Kind == DuctNodeKind.Inline)
                     {

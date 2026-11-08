@@ -266,7 +266,7 @@ namespace HeadLoss.Game.Networks
                 c.SupplyNode = city;
                 int connection = city;
                 bool damaged = IsDamaged(o, Failures.DamageKeys.Opening(n.AnchorId));
-                if (gas && def != null && def.Category == "gas-supply" && first != null)
+                if (gas && def != null && def.Category == "gas-supply" && def.SetpointPa > 0 && first != null)
                 {
                     // A damaged regulator lets no gas through.
                     connection = g.AddJunction(z, $"connection-{n.AnchorId}");
@@ -450,6 +450,13 @@ namespace HeadLoss.Game.Networks
 
             AssignFittings(net, data, c, segLink, water);
             foreach (CompiledFitting f in c.Fittings) g.Links[f.LinkIndex].SumK += f.K;
+            // A gas manifold's closed branch valves cut their branches off, like a closed shutoff (D168).
+            foreach (DuctNode mn in net.Nodes)
+            {
+                if (!GasManifold.Is(mn) || mn.ClosedBranches.Count == 0) continue;
+                foreach ((DuctSegment seg, string dir) in GasManifold.Branches(net, mn))
+                    if (mn.ClosedBranches.Contains(dir) && c.SegmentLink.TryGetValue(seg.Id, out int ml)) g.Links[ml].Closed = true;
+            }
             if (c.SupplyNode >= 0) MarkIsolated(net, c);
             if (water && c.SupplyNode >= 0) LoadSpin(c, o.SupplyFor(fluid).pressurePa);
             return c;

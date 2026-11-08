@@ -502,12 +502,24 @@ namespace HeadLoss.Game.Failures
             if (waveSpeed <= 0 || dv <= 0) return 0;
             double rho = fs.Result.Density.Length > 0 ? fs.Result.Density[0] : 1000;
             double dp = Hammer.Surge(rho, waveSpeed, dv, distance, changeSeconds);
-            foreach (DuctNode n in net.Nodes)
-                if (n.Kind == DuctNodeKind.Inline && _data.FindEquipment(n.PartId)?.Category == "water-accessory") { dp *= F.AccumulatorSurgeFactor; break; }
+            if (HasPressureTank(fs.Fluid, net)) dp *= F.AccumulatorSurgeFactor;
             double current = SurgePa(fs.Fluid);
             _surges[fs.Fluid] = (Math.Max(current, dp), F.HammerDurationSeconds);
             LastSurgePa = dp;
             return dp;
+        }
+
+        /// <summary>The network has a pressure tank: a separate one on its pipes, or one built into the pump at its connection (vs-pump-set).</summary>
+        bool HasPressureTank(string fluid, DuctNetworkState net)
+        {
+            foreach (DuctNode n in net.Nodes)
+                if (n.Kind == DuctNodeKind.Inline && _data.FindEquipment(n.PartId)?.Category == "water-accessory") return true;
+            foreach (EquipmentState e in _record.Committed.Equipment)
+            {
+                EquipmentDef? d = _data.FindEquipment(e.EquipmentId);
+                if (d != null && d.BuiltInPressureTank && d.Fluids.Contains(_data.FluidIdOf(fluid))) return true;
+            }
+            return false;
         }
 
         /// <summary>The last surge raised, Pa (the hover note "Surge: +3.1 bar").</summary>
