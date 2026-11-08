@@ -35,13 +35,13 @@ New test files:
 - `AirQualityTests` (9): the steady-state formula, cut and no cut, not in force, a fix paying at once on Commit, the seed on load, offline, the room grid settling near the well-mixed value with no pool in the lower layer.
 - `InspectionTests` (12): rating bands, cubic and 1.5-power scaling, not rated without an electric reference or while offline, the reference rating itself near C, the projected rating and the re-rating on Commit, the starter not being rated, a pass and its end, a fail with its fine and fix, a missed deadline, visit rates over many hours, offline pauses and the bonus's end, the save round trip.
 
-The Editor was closed this session, so tests ran in batch mode, and there was no play-mode screenshot check of the new UI (status line, design bar, city figure and badge). Please look at those when you open the game.
+Tests ran in batch mode while the Editor was closed. Once it was open, a play-mode check with a 20-building city showed the inspectors walking up in the city view (`screenshots/phase-6.1-city-inspectors.png`; the figure was enlarged 1.4× after the first look) and the status line "Online · earning $0.33/s · energy rating C (×1.00) · inspection passed: ×1.25 pay for 60 min" (`screenshots/phase-6.1-building-rating.png`), with no console errors or warnings. The roof badge for open findings was not captured.
 
 ## Decisions
 
 Decided by you this session: D155 (IAQ at tiers 4–5), D157 (CO₂ moves with the mixture's density), D158 (the code reads each room's steady state), D159 (the rating's reference scales with delivery³).
 
-Waiting for your confirmation:
+Confirmed by you after the session (2026-11-08):
 - **D160 · Rating details.** Rated from a steady solve; rated when first online after a Commit (old saves: on load) and kept until the next Commit; the hand-cranked starter is not rated; not online at steady state means not rated; the projection reads the design preview as it is.
 - **D161 · Inspection details.** In game only, with the bonus running on while away; one visit at a time; the inspector checks the code list and outlets above their code maximum; a building that goes offline during the walk is skipped; findings clear as soon as nothing is found; fines use potential gross and insurance halves them; inspection rolls have their own seeded stream.
 

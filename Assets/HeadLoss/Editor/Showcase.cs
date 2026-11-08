@@ -204,6 +204,35 @@ namespace HeadLoss.Editor
             return "open";
         }
 
+        /// <summary>Sends inspectors to the first <paramref name="n"/> online buildings, <paramref name="progress"/> of the way there.</summary>
+        public static string Inspectors(int n = 3, float progress = 0.5f)
+        {
+            GameRoot root = Root;
+            int sent = 0;
+            foreach (BuildingSession s in root.Context!.Sessions)
+            {
+                if (sent >= n || !s.CommittedEvaluation.Online) continue;
+                s.Inspections.Begin();
+                s.Record.Inspection.WalkLeft = root.Data!.Balancing.Inspection.InspectorWalkSeconds * (1 - progress);
+                sent++;
+            }
+            return $"{sent} inspectors";
+        }
+
+        /// <summary>Opens the first online building that has an energy rating; returns its id and grade.</summary>
+        public static string OpenRated()
+        {
+            GameRoot root = Root;
+            foreach (BuildingSession s in root.Context!.Sessions)
+            {
+                if (!s.CommittedEvaluation.Online || s.Record.Inspection.Grade.Length == 0) continue;
+                root.OpenBuilding(s.Record.BuildingId);
+                if (root.Hud != null && root.Hud.SheetVisible) root.Hud.ToggleSheet();
+                return $"{s.Record.BuildingId} {s.Record.Inspection.Grade} score {s.Record.Inspection.Score:0.00}";
+            }
+            return "none rated";
+        }
+
         /// <summary>Back to the city from the open building.</summary>
         public static string BackToCity()
         {

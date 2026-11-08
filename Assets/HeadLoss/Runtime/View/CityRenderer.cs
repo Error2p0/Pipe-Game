@@ -404,10 +404,11 @@ namespace HeadLoss.Unity.View
             var to = new Vector2(plot.X * t - 1.5f, (plot.Y + plot.Height * 0.5f) * t);
             Vector2 c = to + Vector2.left * (1 - k) * 6 * t;
             const float z = ZIcons - 0.04f;
-            m.Disc(c, 2.2f, 16, z + 0.01f, p.Paper);
-            m.Disc(c + new Vector2(0, 0.9f), 0.55f, 12, z, p.Text);
-            m.Line(c + new Vector2(0, 0.3f), c + new Vector2(0, -0.9f), 0.5f, z, p.Text);
-            m.Outline(c.x + 0.25f, c.y - 0.6f, c.x + 1.05f, c.y + 0.4f, 0.22f, z, p.Text);
+            const float k2 = 1.4f;
+            m.Disc(c, 2.2f * k2, 18, z + 0.01f, p.Paper);
+            m.Disc(c + new Vector2(-0.2f, 0.9f) * k2, 0.55f * k2, 12, z, p.Text);
+            m.Line(c + new Vector2(-0.2f, 0.3f) * k2, c + new Vector2(-0.2f, -1.1f) * k2, 0.6f * k2, z, p.Text);
+            m.Outline(c.x + 0.25f * k2, c.y - 0.6f * k2, c.x + 1.15f * k2, c.y + 0.5f * k2, 0.25f * k2, z, p.Text);
         }
 
         /// <summary>A small badge floating over the roof, with a glyph that says what happened.</summary>
