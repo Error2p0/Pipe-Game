@@ -193,6 +193,10 @@ Spark-free variants ×1.5.
 | `inspection.chancePerHour` | 0.08 per online building |
 | Inspection pass multiplier / duration | ×1.25 / 60 min |
 | Inspection fix deadline | 30 min (pauses offline) |
+| `inspection.tickHz` | 1 |
+| Energy rating reference scaling (`inspection.ratingFlowExponent`, `ratingPressureExponent`) | 3 for flow and heat outlets, 1.5 for pressure outlets (D159) |
+| `inspection.ratingMinReferenceW` | 1 W (a reference below this is not rated) |
+| Indoor air quality limit (`codes.json`) | 1 000 ppm room mean CO₂, tiers 4–5 (D155) |
 | `inspection.gasCertHours` | 48 |
 | Gas certificate renewal | $100 × `tierFactor`, 10 min check |
 | Expired certificate pay factor | 0.5 |

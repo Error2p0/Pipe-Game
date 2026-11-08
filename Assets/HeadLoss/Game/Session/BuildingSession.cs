@@ -8,6 +8,7 @@ using HeadLoss.Core.Data.Defs;
 using HeadLoss.Game.Buildings;
 using HeadLoss.Game.Commands;
 using HeadLoss.Game.Economy;
+using HeadLoss.Game.Generation;
 using HeadLoss.Game.Networks;
 using HeadLoss.Game.Thermal;
 using HeadLoss.Sim.Fluids;
@@ -267,7 +268,9 @@ namespace HeadLoss.Game.Session
 
         /// <param name="budgetCap">Budget cap when already known (generated buildings), $; else the auto-router computes it.</param>
         /// <param name="climate">Outside conditions (a fixed default temperature when null: tests and tools).</param>
-        public BuildingSession(DataRepository data, BuildingLayout layout, BuildingRecord record, GameState game, double? budgetCap = null, Climate? climate = null)
+        /// <param name="reference">The auto-router's reference layout when already known (generated buildings); else it is routed when first needed.</param>
+        public BuildingSession(DataRepository data, BuildingLayout layout, BuildingRecord record, GameState game, double? budgetCap = null, Climate? climate = null,
+            ReferenceResult? reference = null)
         {
             Data = data;
             Layout = layout;
@@ -292,10 +295,13 @@ namespace HeadLoss.Game.Session
                 RepairTimeFactor = Progression.PrestigeEffects.RepairTimeFactor(data, game),
             };
             GasSafety = new Failures.GasSafety(this);
+            Inspections = new Inspections.BuildingInspections(this, Seeds.Derive(0x1A5B_0000UL, layout.Id));
             CeilingCapacityOverride = layout.Def.CeilingCapacity;
             _airQuality = Codes.IndoorAirQuality.InForce(data, layout);
             if (record.PanelTripped) PowerSpeed = 0;
-            BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
+            if (budgetCap == null && reference == null) reference = ReferenceLayout.Route(data, layout);
+            BudgetCap = budgetCap ?? data.Balancing.Building.BudgetCapFactor * reference!.Cost;
+            if (reference != null) _energyReference = HeadLoss.Game.Inspections.EnergyReference.From(reference.Evaluation);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
             CommittedEvaluation = DesignEvaluation;
             RefreshPending();
@@ -304,6 +310,21 @@ namespace HeadLoss.Game.Session
 
         /// <summary>Gas leaks, alarm, explosion timer and the certificate.</summary>
         public Failures.GasSafety GasSafety { get; }
+
+        /// <summary>Random inspections (<c>10-events.md</c> §Inspections).</summary>
+        public Inspections.BuildingInspections Inspections { get; }
+
+        Inspections.EnergyReference? _energyReference;
+
+        /// <summary>The reference layout's power and delivery the energy rating compares against (routed when first needed).</summary>
+        public Inspections.EnergyReference EnergyReference =>
+            _energyReference ??= HeadLoss.Game.Inspections.EnergyReference.From(ReferenceLayout.Route(Data, Layout).Evaluation);
+
+        /// <summary>The design's energy rating while a design is pending ("Projected rating: B"), else what is built has.</summary>
+        public string ProjectedGrade { get; private set; } = "";
+        /// <summary>Score behind <see cref="ProjectedGrade"/>.</summary>
+        public double ProjectedScore { get; private set; }
+        double _nextRateTry;
 
         /// <summary>Connection pressure the reference layouts (and fixtures without a city) assume for gas, Pa: a share of the LP pressure.</summary>
         public static double ReferenceGasPressure(DataRepository data) =>
@@ -840,6 +861,7 @@ namespace HeadLoss.Game.Session
             Failures.Tick(dt, CommittedSnapshot, Committed, Game.PlayTimeSeconds);
             Failures.TickRepairs(dt, Record);
             GasSafety.Tick(dt);
+            Inspections.Tick(dt);
             if (Failures.Revision != _failRev)
             {
                 _failRev = Failures.Revision;
@@ -971,8 +993,9 @@ namespace HeadLoss.Game.Session
                 Codes.IndoorAirQuality.Apply(Data, Layout, DesignEvaluation, d.State, d);
                 Codes.IndoorAirQuality.Apply(Data, Layout, CommittedEvaluation, CommittedSnapshot.State, CommittedSnapshot);
             }
-            ApplyEffects(CommittedEvaluation, CommittedSnapshot, Committed, OfflineRules);
-            ApplyEffects(DesignEvaluation, d, State, OfflineRules);
+            UpdateRating();
+            ApplyEffects(CommittedEvaluation, CommittedSnapshot, Committed, OfflineRules, Record.Inspection.Grade);
+            ApplyEffects(DesignEvaluation, d, State, OfflineRules, HasPendingDesign ? ProjectedGrade : Record.Inspection.Grade);
             GasSafety.UpdateInjections();
             SolveRevision++;
             Solved?.Invoke();
@@ -1052,8 +1075,17 @@ namespace HeadLoss.Game.Session
         /// Everything after the outlets, in the order of the income formula (<c>02-economy.md</c>): prestige pay and electricity,
         /// the certificate penalty, the burst factor (0 in game, 0.25 offline, while a burst is not isolated), evacuation, a tripped panel.
         /// </summary>
-        void ApplyEffects(BuildingEvaluation ev, NetworkSnapshot snap, BuildingState state, bool offline)
+        void ApplyEffects(BuildingEvaluation ev, NetworkSnapshot snap, BuildingState state, bool offline, string grade)
         {
+            // gross ×= energyRatingMultiplier × inspectionMultiplier × eventMultiplier × prestigePayMultiplier (02 §Income formula).
+            ev.EnergyGrade = grade;
+            ev.EnergyFactor = HeadLoss.Game.Inspections.EnergyRating.PayFactor(Data, grade);
+            ev.ApplyPayFactor(ev.EnergyFactor);
+            if (Inspections.Bonus)
+            {
+                ev.InspectionBonus = true;
+                ev.ApplyPayFactor(Inspections.PayFactor);
+            }
             ev.ApplyPayFactor(Progression.PrestigeEffects.PayFactor(Data, Game));
             ev.Electricity *= Progression.PrestigeEffects.ElectricityFactor(Data, Game);
             if (GasSafety.CertificateExpired)
@@ -1068,6 +1100,44 @@ namespace HeadLoss.Game.Session
             }
             if (GasSafety.Evacuated) ev.ApplyEvacuation();
             if (Record.PanelTripped) ev.ApplyPanelTrip();
+            if (Inspections.Closed) ev.ApplyInspectionClosed();
+        }
+
+        /// <summary>
+        /// The energy rating (<c>10-events.md</c>): what is built is rated the first time it is online after a Commit (or a
+        /// load), from a steady solve, and keeps its grade until the next Commit; the design's projected grade follows each
+        /// preview. Runs before the effects, on evaluations that are online by their outlets and codes.
+        /// </summary>
+        void UpdateRating()
+        {
+            HeadLoss.Game.Inspections.InspectionState st = Record.Inspection;
+            if (!st.Rated && CommittedEvaluation.Online && Game.PlayTimeSeconds >= _nextRateTry) RateCommitted();
+            if (HasPendingDesign)
+            {
+                ProjectedGrade = HeadLoss.Game.Inspections.EnergyRating.Grade(Data, EnergyReference, DesignEvaluation, out double score);
+                ProjectedScore = score;
+            }
+            else
+            {
+                ProjectedGrade = st.Grade;
+                ProjectedScore = st.Score;
+            }
+        }
+
+        /// <summary>Rates what is built from a steady solve: crank at 0, every device at full speed, today's outside air.</summary>
+        void RateCommitted()
+        {
+            var none = new Dictionary<int, double>();
+            NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, AirTemperatureK, none, none, true));
+            BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
+            ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State, snap));
+            HeadLoss.Game.Inspections.InspectionState st = Record.Inspection;
+            st.Grade = HeadLoss.Game.Inspections.EnergyRating.Grade(Data, EnergyReference, ev, out double score);
+            st.Score = score;
+            // Not online at steady state (a crank building, a moment without supply): try again in a minute.
+            bool reference = EnergyReference.PowerW >= Data.Balancing.Inspection.RatingMinReferenceW;
+            if (st.Grade.Length > 0 || !reference) st.Rated = true;
+            else _nextRateTry = Game.PlayTimeSeconds + 60;
         }
 
         /// <summary>Validates a run in progress and solves the networks as if it were placed (state untouched).</summary>
@@ -1122,7 +1192,7 @@ namespace HeadLoss.Game.Session
                 if (_airQuality) Codes.IndoorAirQuality.Apply(Data, Layout, intact, snap.State, intactSnap);
                 ev.Gross = intact.Gross;
             }
-            ApplyEffects(ev, snap, snap.State, true);
+            ApplyEffects(ev, snap, snap.State, true, Record.Inspection.Grade);
             return ev;
         }
 
@@ -1210,6 +1280,8 @@ namespace HeadLoss.Game.Session
             BuildingState before = Record.Committed;
             UseStarterItems(before, Record.Design);
             Record.Committed = Record.Design.Clone();
+            Record.Inspection.Rated = false;
+            _nextRateTry = 0;
             Failures.OnCommit(before, Record.Committed);
             GasSafety.OnCommit();
             MarkDirty();

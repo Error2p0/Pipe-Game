@@ -143,6 +143,13 @@ namespace HeadLoss.Game.Offline
                             adv = f.State.Repairs[0].Remaining;
                             bursts = false;
                         }
+                        // A passed inspection's bonus keeps running while away; its end changes the income (D161).
+                        double bonus = s.Record.Inspection.BonusLeft;
+                        if (bonus > 1e-9 && bonus < adv)
+                        {
+                            adv = bonus;
+                            bursts = false;
+                        }
                         OfflineGas? gas = s.HasGas ? GasFor(s, gasRooms) : null;
                         OfflineGasStop stop = gas != null ? gas.NextStop(snap, adv, f) : default;
                         if (stop.Kind != OfflineGasStopKind.None)
@@ -173,6 +180,7 @@ namespace HeadLoss.Game.Offline
                         now += adv;
                         bool changed = false;
                         if (gas != null) changed |= gas.Advance(snap, adv, stop, now, line, r);
+                        changed |= s.Inspections.AdvanceOffline(adv);
                         if (repairing && f.TickRepairs(adv, s.Record))
                         {
                             line.RepairsDone++;

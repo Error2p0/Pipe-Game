@@ -23,6 +23,8 @@ namespace HeadLoss.Game.Buildings
         public bool PanelTripped;
         /// <summary>Pipe stress, bursts and repairs (<c>08-failures.md</c>).</summary>
         public Failures.FailureState Failures = new Failures.FailureState();
+        /// <summary>Random inspections and the energy rating (<c>10-events.md</c> §Inspections).</summary>
+        public Inspections.InspectionState Inspection = new Inspections.InspectionState();
 
         /// <summary>A fresh record: anchors and pre-placed equipment, committed for free.</summary>
         public static BuildingRecord CreateFor(BuildingLayout layout)

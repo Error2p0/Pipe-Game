@@ -624,6 +624,12 @@ namespace HeadLoss.Unity.UI
                 _status.style.color = _p.Danger;
                 return;
             }
+            if (_s.Inspections.Closed)
+            {
+                _status.text = $"Offline · closed by the inspector until the findings are fixed: {string.Join(" · ", _s.Record.Inspection.Findings)}";
+                _status.style.color = _p.Warning;
+                return;
+            }
             if (_s.Record.PanelTripped)
             {
                 _status.text = $"Offline · panel tripped: {Units.FormatPower(_s.RequestedPowerW)} of {_s.PanelLimitKW:0.#} kW · reduce the load and reset it at the power connection";
@@ -670,6 +676,20 @@ namespace HeadLoss.Unity.UI
             }
             if (ev.CertificateExpired) _status.text += " · gas certificate expired: pay halved";
             if (_s.Record.Failures.Leaks.Count > 0) _status.text += " · gas leak";
+            _status.text += InspectionStatus(ev);
+        }
+
+        /// <summary>The energy rating, an inspector on the way, a pass bonus or open findings, for the end of the status line.</summary>
+        string InspectionStatus(BuildingEvaluation ev)
+        {
+            var insp = _s.Inspections;
+            HeadLoss.Game.Inspections.InspectionState st = _s.Record.Inspection;
+            string text = st.Grade.Length > 0 ? $" · energy rating {st.Grade} (×{ev.EnergyFactor:0.00})" : "";
+            if (insp.InspectorComing) text += " · an inspector is on the way";
+            if (insp.Bonus) text += $" · inspection passed: ×{_data.Balancing.Inspection.PassPayFactor:0.##} pay for {Units.FormatDuration(st.BonusLeft)}";
+            if (insp.Failed && !insp.Closed)
+                text += $" · inspection: fix within {Units.FormatDuration(st.DeadlineLeft)}: {string.Join(" · ", st.Findings)}";
+            return text;
         }
 
         void RefreshDesignBar()
@@ -680,7 +700,8 @@ namespace HeadLoss.Unity.UI
                 double net = _s.NetCommitCost();
                 string cost = net >= 0 ? $"cost {Units.FormatMoney(net, _symbol)}" : $"refund {Units.FormatMoney(-net, _symbol)}";
                 string online = projected.Online ? "" : " (offline)";
-                _designText.text = $"Design · not committed · {cost} · projected income {Units.FormatMoneyRate(projected.Net, _symbol)}{online}";
+                string rating = _s.ProjectedGrade.Length > 0 ? $" · projected rating: {_s.ProjectedGrade}" : "";
+                _designText.text = $"Design · not committed · {cost} · projected income {Units.FormatMoneyRate(projected.Net, _symbol)}{online}{rating}";
             }
             else
             {

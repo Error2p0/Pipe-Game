@@ -170,6 +170,14 @@ namespace HeadLoss.Game.Save
             foreach (BuildingRecord r in game.Buildings)
             {
                 BuildingLayout layout = known[r.BuildingId];
+                r.Inspection ??= new Inspections.InspectionState();
+                r.Inspection.Findings ??= new List<string>();
+                // A grade the data no longer has is worked out again.
+                if (r.Inspection.Grade.Length > 0 && !data.Inspections.EnergyRating.Exists(b => b.Grade == r.Inspection.Grade))
+                {
+                    r.Inspection.Grade = "";
+                    r.Inspection.Rated = false;
+                }
                 int dropped = SanitizeState(r.Committed, layout, data) + SanitizeState(r.Design, layout, data);
                 if (dropped > 0) notes.Add($"{r.BuildingId}: dropped {dropped} parts that no longer fit");
             }

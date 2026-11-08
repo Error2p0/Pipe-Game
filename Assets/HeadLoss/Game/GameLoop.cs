@@ -448,7 +448,7 @@ namespace HeadLoss.Game
         {
             GeneratedBuilding? g = CityBuildings != null ? CityBuildings.Get(r.BuildingId) : null;
             BuildingLayout layout = g?.Layout ?? FindLayout(r.BuildingId)!;
-            var s = new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate);
+            var s = new BuildingSession(Data, layout, r, Game, g?.BudgetCap, Climate, g?.Reference);
             // Golden-ratio steps spread any number of sessions evenly over their intervals.
             s.SetPhase(++_sessionsMade * 0.6180339887498949 % 1);
             // In a city, water and gas come only through routed mains (the first city solve sets them).

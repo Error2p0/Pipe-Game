@@ -1,6 +1,6 @@
 # Progress
 
-Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 starts with tasks 4 and 6.
+Current phase: **6 · Full content**, started 2026-11-07. Order agreed in D135. Session 6.0 did task 0 (report: `docs/dev/phase-6.0-report.md`). Session 6.1 did tasks 4 and 6 (report: `docs/dev/phase-6.1-report.md`). Next: task 3 (tier 4 shell, no heating yet).
 
 ## Phase 1 · Physics core
 
@@ -182,9 +182,9 @@ Started 2026-11-07.
   - [ ] Outage, lab branch: built in task 7 (tanks are tier 5).
   - [ ] `backup-generator` 5, 20, 100 kW: 5 s start, `safetyCritical` first, fuel cost. Water hammer on outage (`05` §6).
   - [ ] Cascade tests with every protection on and off; offline equivalence including events.
-- [ ] 6. Inspections (`10`)
-  - [ ] Random inspection: 0.08 per hour per online building, inspector icon, pass ×1.25 for 60 min, fail fine and 30 min deadline (pauses offline), second fine and offline if missed.
-  - [ ] Energy rating A–G from `P_actual / P_reference`, pay multipliers in income, recomputed on Commit, "Projected rating: B" in design mode, on the status line.
+- [x] 6. Inspections (`10`)
+  - [x] Random inspection: 0.08 per hour per online building, inspector icon, pass ×1.25 for 60 min, fail fine and 30 min deadline (pauses offline), second fine and offline if missed. In game only; the bonus runs on while away (D161).
+  - [x] Energy rating A–G from `P_actual / P_reference`, pay multipliers in income, recomputed on Commit, "Projected rating: B" in design mode, on the status line. Reference scaled by delivery³ (D159); details in D160.
 - [ ] 7. Tier 5 (`03`, `04`, `06`, `07`, `08`, `09`, `10`)
   - [ ] Factory, lab and hospital: footprints, 2–10 floors, basements, lab and ward programs; solvability over 200 seeds; tier 5 opens.
   - [ ] Propane: fluid, `propane-outlet`, pools low, basement code. **The spec names no source for propane**; decide and log it when building.
