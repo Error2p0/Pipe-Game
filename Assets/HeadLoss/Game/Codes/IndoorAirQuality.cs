@@ -26,6 +26,37 @@ namespace HeadLoss.Game.Codes
         public static double MaxPpm(DataRepository data) =>
             data.FindCode(CodeId)?.Parameters.GetValueOrDefault("maxCo2Ppm", 1000) ?? 1000;
 
+        /// <summary>
+        /// Where the code is in force, the generator gives a room enough vents that each needs at most this share of its ideal
+        /// flow for the room's people (D155), so the reference can meet the code with room to spare.
+        /// </summary>
+        public static double VentShareOfIdeal(DataRepository data) =>
+            data.FindCode(CodeId)?.Parameters.GetValueOrDefault("ventShareOfIdeal", 0.8) ?? 0.8;
+
+        /// <summary>
+        /// Fresh air each air outlet of a room needs for the code, m³/s by outlet id: the room's need split evenly over its air
+        /// outlets (the auto-router's floor under each one). Empty where the code is not in force.
+        /// </summary>
+        public static Dictionary<string, double> NeedPerOutlet(DataRepository data, BuildingLayout layout)
+        {
+            var need = new Dictionary<string, double>();
+            if (!InForce(data, layout)) return need;
+            var count = new int[layout.Rooms.Count];
+            foreach (OutletPlacementDef o in layout.Outlets)
+            {
+                int r = layout.RoomIndexAt(BuildingLayout.PosOf(o));
+                if (r >= 0 && data.Outlet(o.Type).Fluid == "air" && data.Outlet(o.Type).Measured == "flow") count[r]++;
+            }
+            foreach (OutletPlacementDef o in layout.Outlets)
+            {
+                int r = layout.RoomIndexAt(BuildingLayout.PosOf(o));
+                if (r < 0 || count[r] == 0 || data.Outlet(o.Type).Fluid != "air" || data.Outlet(o.Type).Measured != "flow") continue;
+                double occupants = layout.Rooms[r].Occupants;
+                if (occupants > 0) need[o.Id] = RequiredSupply(data, occupants) / count[r];
+            }
+            return need;
+        }
+
         /// <summary>CO₂ the occupants of a room breathe out, m³/s.</summary>
         public static double Generation(DataRepository data, double occupants) =>
             Math.Max(0, occupants) * data.Balancing.Climate.OccupantCo2Lps * 1e-3;

@@ -159,9 +159,9 @@ Started 2026-11-07.
   - [ ] `heat-recovery-unit` and `hr-unit-high-eff`, with both networks running through them.
   - [ ] `industrial-ahu` slots: filter, heat recovery, `heating-coil`, `cooling-coil`.
 - [ ] 3. Tier 4 (`04`, `07`, `13`)
-  - [ ] Warehouse and office: footprints, 1–6 floors, L and U shapes, 40% chance of a basement, room programs, codes, occupants and machines.
-  - [ ] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`).
-  - [ ] Indoor air quality at generation (D155): occupied rooms get vents for their people, the router aims at each room's CO₂, and the solvability check includes the code.
+  - [x] Warehouse and office: footprints, L and U shapes, 40% chance of a basement, room programs (D163), codes, occupants and machines. Offices 2–4 floors on ≤ 24 × 16 m, warehouses 1–2 floors (D162).
+  - [x] Auto-router and reference layouts with T4 equipment; solvability over 200 seeds (fall back a tier if it fails, `04`). Router fixes (D164), deeper ceilings from tier 4 (D165). The gas manifold joins the references when it is built.
+  - [x] Indoor air quality at generation (D155): occupied rooms get vents for their people, the router aims at each room's CO₂, and the solvability check includes the code.
   - [ ] Wall cavity layer: pipes ≤ 22 mm, capacity 1 per wall tile edge, `L` cycles to it.
   - [ ] `transformer-room`: 250 kW, 3×3 room on the ground floor or basement, industrial only.
   - [ ] `smart-building-controller`: re-balances every 30 s and once at offline catch-up, at most 40 solves, with a change log. It is tier 3 in `07`, so tier 3 buildings can use it.

@@ -28,6 +28,7 @@
     "wallCavityLayerOffset": 1.5,
     "budgetCapFactor": 1.6,
     "ceilingCapacity": 4,
+    "ceilingCapacityByTier": [4, 4, 4, 6, 6],
     "coreDrillPrice": 20,
     "coreDrillTier": 2,
     "wallCavityTier": 4
@@ -264,7 +265,8 @@
     "balancingPasses": 80,
     "balanceTarget": 0.4,
     "coreDrillPenalty": 4,
-    "gasVelocity": 3.0
+    "gasVelocity": 3.0,
+    "freeCeilingFromTier": 4
   },
   "difficulty": {
     "demandReferenceM3h": 120,

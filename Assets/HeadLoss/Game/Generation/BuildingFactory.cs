@@ -45,7 +45,8 @@ namespace HeadLoss.Game.Generation
             {
                 BuildingLayoutDef? def = BuildingGenerator.Generate(data, req, attempt);
                 if (def == null) continue;
-                def.CeilingCapacity = ceilingCapacity;
+                // 0 = the tier's own capacity; a modifier's capacity takes the same unit off every tier (D165).
+                def.CeilingCapacity = ceilingCapacity > 0 ? data.Balancing.Building.CeilingCapacityFor(def.Tier, ceilingCapacity) : 0;
                 var layout = BuildingLayout.From(data, def);
                 ReferenceResult r = AutoRouter.Build(data, layout);
                 last = new GeneratedBuilding

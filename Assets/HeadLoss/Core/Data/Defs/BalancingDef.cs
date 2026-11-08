@@ -407,6 +407,8 @@ namespace HeadLoss.Core.Data.Defs
     /// <summary>Auto-router for reference layouts (<c>04-buildings.md</c> §Auto-router).</summary>
     public sealed class AutoRouterDef
     {
+        /// <summary>From this tier, a reference layout with pipes keeps one unit of every ceiling tile free (D164).</summary>
+        public int FreeCeilingFromTier;
         /// <summary>Duct sizing velocity limit on trunks (serving two or more outlets), m/s.</summary>
         public double AirTrunkVelocity;
         /// <summary>Duct sizing velocity limit on branches (one outlet), m/s.</summary>
@@ -505,6 +507,19 @@ namespace HeadLoss.Core.Data.Defs
         public double BudgetCapFactor;
         /// <summary>Ceiling capacity units per tile (the old-buildings modifier lowers it).</summary>
         public int CeilingCapacity;
+        /// <summary>Ceiling capacity units per tile by tier, 1-based tier at index tier − 1 (D165: deeper ceilings from tier 4).</summary>
+        public List<int> CeilingCapacityByTier = new List<int>();
+
+        /// <summary>
+        /// Capacity units per ceiling tile in a building of a tier. A city modifier's capacity (old buildings: 3) is taken as
+        /// that many units fewer than the default (4), so every tier loses the same one unit.
+        /// </summary>
+        /// <param name="modifierCapacity">The city modifier's capacity, 0 = none.</param>
+        public int CeilingCapacityFor(int tier, int modifierCapacity = 0)
+        {
+            int baseUnits = tier >= 1 && tier <= CeilingCapacityByTier.Count ? CeilingCapacityByTier[tier - 1] : CeilingCapacity;
+            return modifierCapacity > 0 ? System.Math.Max(1, baseUnits - (CeilingCapacity - modifierCapacity)) : baseUnits;
+        }
         /// <summary>Core drilling a wall tile to pass a pipe (tier 2+), $ each.</summary>
         public double CoreDrillPrice;
         /// <summary>Lowest tier that may core-drill walls.</summary>

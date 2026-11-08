@@ -1051,7 +1051,7 @@ namespace HeadLoss.Game.Session
         }
 
         /// <summary>Ceiling capacity per tile in this city (the old-buildings modifier lowers it).</summary>
-        public int CeilingCapacity => CeilingCapacityOverride > 0 ? CeilingCapacityOverride : Data.Balancing.Building.CeilingCapacity;
+        public int CeilingCapacity => CeilingCapacityOverride > 0 ? CeilingCapacityOverride : Data.Balancing.Building.CeilingCapacityFor(Layout.Tier);
         /// <summary>Set by the city (modifier); 0 = the data default.</summary>
         public int CeilingCapacityOverride { get; set; }
 

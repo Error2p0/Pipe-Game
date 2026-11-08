@@ -103,7 +103,7 @@ namespace HeadLoss.Game.Generation
             DuctNetworkState net = state.Air;
 
             Tree tree = Tree.Of(net, layout, data);
-            List<double> sizes = SizesFor(data, layout.Tier, material);
+            List<double> sizes = AirSizes(data, layout);
             AutoRouterDef ar = data.Balancing.AutoRouter;
             foreach (DuctSegment s in net.Segments)
             {
@@ -135,11 +135,19 @@ namespace HeadLoss.Game.Generation
             }
             else foreach (string id in data.BuildingTier(layout.Tier).ReferenceEquipment) candidates.Add((id, 0));
 
+            // Sum of the vents' minimum flows: a fan whose free flow is below it can never serve them all (skipped, it only costs time).
+            double needed = 0;
+            foreach (OutletPlacementDef o in layout.Outlets)
+                if (data.Outlet(o.Type).Fluid == "air" && data.Outlet(o.Type).Measured == "flow")
+                    needed += BuildingEconomy.Requirement(data, layout, o).Min;
             ReferenceResult? last = null;
             foreach ((string id, double crank) in candidates)
             {
                 BuildingState s = state.Clone();
                 EquipmentDef eq = data.EquipmentItem(id);
+                double maxFlow = 0;
+                foreach (CurvePointDef pt in eq.Curve) maxFlow = Math.Max(maxFlow, Units.M3hToM3s(pt.FlowM3h));
+                if (crank <= 0 && maxFlow > 0 && maxFlow < needed && id != candidates[candidates.Count - 1].id) continue;
                 if (eq.Placement == "intake")
                     s.Equipment.Add(new EquipmentState { EquipmentId = id, OpeningId = intake.Id, On = true });
                 else if (!PlaceInlineNearIntake(data, layout, s.Air, id)) continue;
@@ -263,7 +271,7 @@ namespace HeadLoss.Game.Generation
             var usage = new Dictionary<TilePos, int>();
             foreach (DuctNetworkState n in state.Networks)
                 if (n.FluidId != fluid) DuctEditor.AddUsage(n, (net, s) => CapUnits(data, s), usage);
-            int capacity = layout.Def.CeilingCapacity > 0 ? layout.Def.CeilingCapacity : data.Balancing.Building.CeilingCapacity;
+            int capacity = layout.CeilingCapacity(data);
             TilePos? panel = layout.PanelTile;
             if (fluid == BuildingState.GasFluid)
             {
@@ -326,6 +334,28 @@ namespace HeadLoss.Game.Generation
                 }
                 if (!placed) return;
             }
+        }
+
+        /// <summary>
+        /// Duct sizes the reference may use. From tier 4, in a building with pipes, none that fills a whole ceiling tile, so a
+        /// pipe can always cross the trunk (D164); the player may still choose the larger sizes where nothing has to cross.
+        /// </summary>
+        static List<double> AirSizes(DataRepository data, BuildingLayout layout)
+        {
+            string material = data.Balancing.Drawing.DefaultMaterial;
+            List<double> all = SizesFor(data, layout.Tier, material);
+            bool pipes = false;
+            foreach (EntryOpeningDef o in layout.EntryOpenings) if (o.Utility != "air" && o.Utility != "power") pipes = true;
+            if (layout.Tier < data.Balancing.AutoRouter.FreeCeilingFromTier || !pipes) return all;
+            int capacity = layout.CeilingCapacity(data);
+            string kind = data.Material(material).Kind;
+            var list = new List<double>();
+            foreach (double mm in all)
+                foreach (PipeFamilyDef fam in data.PipeFamilies)
+                    if (fam.Kind == kind)
+                        foreach (PipeSizeDef sz in fam.Sizes)
+                            if (sz.DiameterMm == mm && sz.CapacityUnits < capacity && !list.Contains(mm)) list.Add(mm);
+            return list.Count > 0 ? list : all;
         }
 
         /// <summary>Duct sizes available to a tier, ascending, mm.</summary>
@@ -397,6 +427,31 @@ namespace HeadLoss.Game.Generation
             }
         }
 
+        /// <summary>
+        /// A duct crosses a fire wall only going straight, never as its first step, and goes on straight after it, so a
+        /// straight tile for the fire damper stays on both sides of the wall (09: Fire dampers).
+        /// </summary>
+        /// <param name="ud">Direction the search arrived at <paramref name="u"/> in (−1 at a start).</param>
+        static bool FireWallStepOk(BuildingLayout layout, TilePos u, int ud, int d)
+        {
+            if (layout.FireWalls.Count == 0) return true;
+            if (d < 4 && layout.IsFireWall(u, Step(u, d)) && ud != d) return false;
+            if (ud >= 0 && ud < 4 && layout.IsFireWall(Step(u, ud ^ 1), u) && d != ud) return false;
+            return true;
+        }
+
+        /// <summary>A branch may not tee into a duct on a tile where that duct crosses a fire wall (its damper's neighbour).</summary>
+        static bool NextToFireWallCrossing(BuildingLayout layout, Dictionary<TilePos, TileOccupant> occ, TilePos v)
+        {
+            if (layout.FireWalls.Count == 0) return false;
+            for (int d = 0; d < 4; d++)
+            {
+                TilePos w = Step(v, d);
+                if (layout.IsFireWall(v, w) && occ.ContainsKey(w)) return true;
+            }
+            return false;
+        }
+
         static double StepCost(DataRepository data, int fromDir, int dir) =>
             (dir >= 4 ? data.Balancing.Building.FloorHeight : 1) + (fromDir >= 0 && fromDir % DirCount != dir ? data.Balancing.AutoRouter.TurnPenalty : 0);
 
@@ -438,6 +493,7 @@ namespace HeadLoss.Game.Generation
                 {
                     TilePos v = Step(u, d);
                     if (!layout.IsInside(v) || !layout.CanPass(u, v) || occ.ContainsKey(v) || avoid.Contains(v) || blocked(v)) continue;
+                    if (!FireWallStepOk(layout, u, ud, d)) continue;
                     double wall = WallCost(data, layout, u, v, drill);
                     if (double.IsInfinity(wall)) continue;
                     s.Push(v, d, uc + StepCost(data, ud, d) + wall, (u, ud));
@@ -472,6 +528,7 @@ namespace HeadLoss.Game.Generation
                     if (ud >= 0 && d == (ud ^ 1)) continue;  // no turning back
                     TilePos v = Step(u, d);
                     if (!layout.IsInside(v) || !layout.CanPass(u, v) || blocked(v)) continue;
+                    if (!FireWallStepOk(layout, u, ud, d)) continue;
                     double wall = WallCost(data, layout, u, v, drill);
                     if (double.IsInfinity(wall)) continue;
                     double vc = uc + StepCost(data, ud, d) + wall;
@@ -482,7 +539,7 @@ namespace HeadLoss.Game.Generation
                     {
                         if (phase == 0) vc += penalty;
                         if (double.IsInfinity(vc)) continue;
-                        if (reserved.Contains(v) || !CanJoin(net, o, u, v, maxDegree) || vc >= cost) continue;
+                        if (reserved.Contains(v) || !CanJoin(net, o, u, v, maxDegree) || vc >= cost || NextToFireWallCrossing(layout, occ, v)) continue;
                         List<TilePos> path = s.Back(u, key);
                         path.Add(v);
                         if (new HashSet<TilePos>(path).Count != path.Count) continue;
@@ -663,9 +720,18 @@ namespace HeadLoss.Game.Generation
             AutoRouterDef ar = data.Balancing.AutoRouter;
             FittingDef damper = data.Fitting("damper");
             var dampers = new Dictionary<string, TilePos>();
+            // Where the indoor air quality code is in force, each vent also carries its share of its room's fresh air (D155).
+            Dictionary<string, double> need = Codes.IndoorAirQuality.NeedPerOutlet(data, layout);
+            double Floor(OutletStatus o) => need.TryGetValue(o.OutletId, out double n) ? Math.Max(o.Requirement.Min, n) : o.Requirement.Min;
+            int Short(BuildingEvaluation e)
+            {
+                int k = 0;
+                foreach (OutletStatus o in e.Outlets) if (need.ContainsKey(o.OutletId) && o.Delivery < Floor(o) && o.Delivery >= o.Requirement.Min) k++;
+                return k;
+            }
             TilePos? trunk = null;
             (BuildingEvaluation ev, CompiledNetwork c, SolveResult res) = Solve(data, layout, s, crank);
-            List<double> sizes = SizesFor(data, layout.Tier, data.Balancing.Drawing.DefaultMaterial);
+            List<double> sizes = AirSizes(data, layout);
             const double gain = 0.8;
             // A variable-speed source (built in, or a drive fitted where the tier has drives) sets the level by speed
             // instead of throttling: far less electricity. A trunk damper is the fallback below the minimum speed.
@@ -700,10 +766,11 @@ namespace HeadLoss.Game.Generation
                     var line = new System.Text.StringBuilder($"pass {pass}:");
                     foreach (OutletStatus o in ev.Outlets) line.Append($" {o.OutletId}={Units.M3sToM3h(o.Delivery):0}/{Units.M3sToM3h(o.Requirement.Min):0}");
                     if (trunk.HasValue) line.Append($" trunk θ={s.Air.NodeAt(trunk.Value)!.Opening:0.00}");
+                    if (getSpeed != null) line.Append($" speed={getSpeed():0.00}");
                     foreach (var kv in dampers) line.Append($" d[{kv.Key}]={s.Air.NodeAt(kv.Value)!.Opening:0.00}");
                     trace.Add(line.ToString());
                 }
-                if (ev.Online && ev.AboveCodeMax == 0) break;
+                if (ev.Online && ev.AboveCodeMax == 0 && Short(ev) == 0) break;
                 bool changed = false;
 
                 OutletStatus? weakest = null;
@@ -734,9 +801,16 @@ namespace HeadLoss.Game.Generation
                 int count = 0;
                 foreach (OutletStatus o in ev.Outlets)
                 {
-                    if (o != weakest && dampers.ContainsKey(o.OutletId)) continue;
+                    if (o != weakest && dampers.TryGetValue(o.OutletId, out TilePos own))
+                    {
+                        // A damper already at its least opening cannot hold its outlet down any more: its code maximum caps the level.
+                        DuctNode? dn = s.Air.NodeAt(own);
+                        if (o.Requirement.HasMax && dn != null && dn.Opening <= damper.MinOpening + 1e-6)
+                            hi = Math.Min(hi, o.Requirement.Max / Math.Max(o.Delivery, 1e-9));
+                        continue;
+                    }
                     double q = Math.Max(o.Delivery, 1e-9);
-                    lo = Math.Max(lo, o.Requirement.Min / q);
+                    lo = Math.Max(lo, Floor(o) / q);
                     if (o.Requirement.HasMax) hi = Math.Min(hi, o.Requirement.Max / q);
                     logSum += Math.Log(Target(o.Requirement, ar) / q);
                     count++;
@@ -783,9 +857,9 @@ namespace HeadLoss.Game.Generation
                     if (dampers.TryGetValue(weakest.OutletId, out TilePos wt) && wt == t) weakestOpen = n.Opening >= 1;
                 }
 
-                if (ev.BelowMinimum > 0 && scale > 1 && trunkOpen && weakestOpen)
+                if (ev.BelowMinimum + Short(ev) > 0 && scale > 1 && trunkOpen && weakestOpen)
                 {
-                    bool grown = UpsizeWorstPath(data, layout, s, ev, c, res, sizes);
+                    bool grown = UpsizeWorstPath(data, layout, s, ev, c, res, sizes, Floor);
                     if (trace != null) trace.Add(grown ? "  upsized" : "  nothing left to upsize");
                     changed |= grown;
                 }
@@ -798,9 +872,11 @@ namespace HeadLoss.Game.Generation
                 Evaluation = ev,
                 Cost = Pricing.Value(data, layout, s),
                 Dampers = dampers.Count + (trunk.HasValue ? 1 : 0),
-                Solvable = ev.Online && ev.AboveCodeMax == 0,
+                Solvable = ev.Online && ev.AboveCodeMax == 0 && Short(ev) == 0,
             };
-            if (!r.Solvable) r.Reason = ev.BelowMinimum > 0 ? $"{ev.BelowMinimum} outlets below minimum" : $"{ev.AboveCodeMax} outlets above code max";
+            if (!r.Solvable)
+                r.Reason = ev.BelowMinimum > 0 ? $"{ev.BelowMinimum} outlets below minimum" : ev.AboveCodeMax > 0 ? $"{ev.AboveCodeMax} outlets above code max"
+                    : $"{Short(ev)} vents short of their room's fresh air (indoor air quality)";
             return r;
         }
 
@@ -821,11 +897,11 @@ namespace HeadLoss.Game.Generation
 
         /// <summary>Grows the fastest duct on the path to the outlet furthest below its minimum by one size.</summary>
         static bool UpsizeWorstPath(DataRepository data, BuildingLayout layout, BuildingState s, BuildingEvaluation ev,
-            CompiledNetwork c, SolveResult res, List<double> sizes)
+            CompiledNetwork c, SolveResult res, List<double> sizes, Func<OutletStatus, double> floor)
         {
             OutletStatus? worst = null;
             foreach (OutletStatus o in ev.Outlets)
-                if (worst == null || o.Delivery / o.Requirement.Min < worst.Delivery / worst.Requirement.Min) worst = o;
+                if (worst == null || o.Delivery / floor(o) < worst.Delivery / floor(worst)) worst = o;
             if (worst == null) return false;
             DuctNetworkState net = s.Air;
             Tree tree = Tree.Of(net, layout, data);

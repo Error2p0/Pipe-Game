@@ -233,6 +233,90 @@ namespace HeadLoss.Editor
             return "none rated";
         }
 
+        /// <summary>
+        /// Dev timing: generates one building of a type (its tier made available for the call) and routes its reference,
+        /// reporting the sizes, the time of each stage and the router's balancing passes.
+        /// </summary>
+        public static string GenerationTiming(string type, int seed, int attempt = 0, int traceLines = 0)
+        {
+            var data = HeadLoss.Core.Data.DataRepository.Load(new HeadLoss.Core.Data.FileDataSource(System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "HeadLoss", "Data")));
+            data.BuildingTier(data.BuildingType(type).Tier).Available = true;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var def = HeadLoss.Game.Generation.BuildingGenerator.Generate(data, new HeadLoss.Game.Generation.BuildingRequest("p", type, (ulong)seed, "south"), attempt);
+            long gen = sw.ElapsedMilliseconds;
+            if (def == null) return $"no layout ({gen} ms)";
+            var layout = HeadLoss.Game.Buildings.BuildingLayout.From(data, def);
+            int vents = 0;
+            foreach (var o in layout.Outlets) if (data.Outlet(o.Type).Fluid == "air") vents++;
+            var trace = new List<string>();
+            sw.Restart();
+            var r = HeadLoss.Game.Generation.AutoRouter.Build(data, layout, trace);
+            long route = sw.ElapsedMilliseconds;
+            int passes = trace.FindAll(t => t.StartsWith("pass")).Count;
+            string tail = "";
+            for (int i = System.Math.Max(0, trace.Count - traceLines); i < trace.Count; i++) tail += "\n" + trace[i];
+            return $"{layout.Width}x{layout.Height} floors {layout.Floors} (lowest {layout.LowestFloor}) rooms {layout.Rooms.Count} outlets {layout.Outlets.Count} vents {vents} | gen {gen} ms, route {route} ms, {passes} passes | solvable {r.Solvable} '{r.Reason}' fan {r.EquipmentId} water {r.WaterEquipmentId} cost {r.Cost:0} power {r.Evaluation.PowerW:0} W" + tail;
+        }
+
+        /// <summary>Dev: vents, outlets and floors of <paramref name="n"/> generated layouts of a type (no routing): min, median, max.</summary>
+        public static string GenerationStats(string type, int n = 40)
+        {
+            var data = HeadLoss.Core.Data.DataRepository.Load(new HeadLoss.Core.Data.FileDataSource(System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "HeadLoss", "Data")));
+            data.BuildingTier(data.BuildingType(type).Tier).Available = true;
+            var vents = new List<int>();
+            var floors = new List<int>();
+            var areas = new List<int>();
+            for (int seed = 1; seed <= n; seed++)
+            {
+                var def = HeadLoss.Game.Generation.BuildingGenerator.Generate(data, new HeadLoss.Game.Generation.BuildingRequest("p", type, (ulong)seed, "south"), 0);
+                if (def == null) continue;
+                int v = 0;
+                foreach (var o in def.Outlets) if (data.Outlet(o.Type).Fluid == "air") v++;
+                vents.Add(v);
+                floors.Add(def.Floors);
+                areas.Add(def.Width * def.Height);
+            }
+            vents.Sort(); floors.Sort(); areas.Sort();
+            string S(List<int> l) => l.Count == 0 ? "-" : $"{l[0]}/{l[l.Count / 2]}/{l[l.Count - 1]}";
+            return $"{type}: {vents.Count} layouts · vents {S(vents)} · floors {S(floors)} · floor area m² {S(areas)}";
+        }
+
+        /// <summary>Dev: the ASCII picture of a generated layout with the auto-router's state, and the router's verdict.</summary>
+        public static string GenerationPicture(string type, int seed, int attempt = 0, int ceiling = 0, bool picture = true)
+        {
+            var data = HeadLoss.Core.Data.DataRepository.Load(new HeadLoss.Core.Data.FileDataSource(System.IO.Path.Combine(System.IO.Directory.GetCurrentDirectory(), "Assets", "HeadLoss", "Data")));
+            data.BuildingTier(data.BuildingType(type).Tier).Available = true;
+            var def = HeadLoss.Game.Generation.BuildingGenerator.Generate(data, new HeadLoss.Game.Generation.BuildingRequest("p", type, (ulong)seed, "south"), attempt);
+            if (def == null) return "no layout";
+            if (ceiling > 0) def.CeilingCapacity = ceiling;
+            var layout = HeadLoss.Game.Buildings.BuildingLayout.From(data, def);
+            var r = HeadLoss.Game.Generation.AutoRouter.Build(data, layout);
+            if (!picture)
+            {
+                var sizes = new SortedDictionary<double, int>();
+                foreach (var seg in r.State.Air.Segments) sizes[seg.DiameterMm] = sizes.TryGetValue(seg.DiameterMm, out int k) ? k + 1 : 1;
+                var line = new System.Text.StringBuilder($"{r.Solvable} {r.Reason} fan {r.EquipmentId} · duct mm×count:");
+                foreach (var kv in sizes) line.Append($" {kv.Key}×{kv.Value}");
+                foreach (var v in HeadLoss.Game.Codes.CodeChecker.Check(data, layout, r.State))
+                {
+                    line.Append($" | {v.CodeId} seg {v.SegmentId}:");
+                    foreach (var t in v.Tiles) line.Append($" ({t.X},{t.Y},{t.F})");
+                    foreach (var t in v.Tiles)
+                    {
+                        var n = r.State.Air.NodeAt(t);
+                        if (n != null) line.Append($" node@({t.X},{t.Y},{t.F})={n.Kind}/{n.PartId}");
+                    }
+                }
+                foreach (var fw in layout.FireWalls) { }
+                return line.ToString();
+            }
+            var sb = new System.Text.StringBuilder($"{r.Solvable} {r.Reason}\n");
+            foreach (var o in layout.Outlets) if (data.Outlet(o.Type).Fluid != "air") sb.Append($"{o.Id} {o.Type} ({o.X},{o.Y},{o.Floor})  ");
+            foreach (var o in layout.EntryOpenings) sb.Append($"\nopening {o.Utility} ({o.X},{o.Y},{o.Floor}) {o.Facing}");
+            sb.Append("\n").Append(HeadLoss.Game.Generation.LayoutAscii.Render(layout, r.State));
+            return sb.ToString();
+        }
+
         /// <summary>Back to the city from the open building.</summary>
         public static string BackToCity()
         {

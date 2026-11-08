@@ -149,6 +149,8 @@ namespace HeadLoss.Core.Data
             if (b.Particles.MaxParticles < 1) errors.Add(f + " particles.maxParticles must be ≥ 1");
             if (!(b.Camera.ZoomMin > 0 && b.Camera.ZoomMax > b.Camera.ZoomMin)) errors.Add(f + " camera: need 0 < zoomMin < zoomMax");
             Positive(f + " building.budgetCapFactor", b.Building.BudgetCapFactor, errors);
+            if (b.Building.CeilingCapacityByTier.Count != 5 || b.Building.CeilingCapacityByTier.Exists(c => c < 1))
+                errors.Add(f + " building.ceilingCapacityByTier needs 5 entries, each at least 1");
 
             EconomyDef e = b.Economy;
             Positive(f + " economy.overdeliveryCapRatio", e.OverdeliveryCapRatio, errors);

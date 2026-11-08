@@ -143,11 +143,23 @@ namespace HeadLoss.Game.Tests
             Assert.AreNotEqual(JsonConvert.SerializeObject(a.Rooms), JsonConvert.SerializeObject(c.Rooms), "new rooms afterwards");
         }
 
-        /// <summary>15-testing: every generated tier-1–3 building passes the solvability check (200 seeds per tier).</summary>
+        /// <summary>15-testing: every generated tier-1–4 building passes the solvability check (200 seeds per tier).</summary>
         [TestCase(1)]
         [TestCase(2)]
         [TestCase(3)]
+        [TestCase(4)]
+        [Timeout(3600000)]
         public void Solvability_EveryGeneratedBuildingOfTheTierPasses(int tier)
+        {
+            // Tier 4 is generated before it opens to players (Phase 6 task 3, D135).
+            BuildingTierDef def = Data.BuildingTier(tier);
+            bool available = def.Available;
+            def.Available = true;
+            try { Solvability(tier); }
+            finally { def.Available = available; }
+        }
+
+        static void Solvability(int tier)
         {
             var failures = new List<string>();
             int lowered = 0;
