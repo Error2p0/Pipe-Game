@@ -37,8 +37,14 @@ namespace HeadLoss.Core.Data.Defs
         public double Price;
         /// <summary>Electrical panels: total kW limit.</summary>
         public double PanelLimitKW;
-        /// <summary>Gas regulators: fixed outlet pressure, Pa gauge.</summary>
+        /// <summary>Gas regulators: outlet pressure, Pa gauge (the default when the setpoint can be adjusted).</summary>
         public double SetpointPa;
+        /// <summary>Gas regulators: from this tier the setpoint is adjustable between the min and max, Pa (0 = fixed; <c>07</c>: 18–30 mbar from tier 4).</summary>
+        public int SetpointFromTier;
+        public double SetpointMinPa;
+        public double SetpointMaxPa;
+        /// <summary>Setpoint step, Pa (<c>07</c>: 1 mbar).</summary>
+        public double SetpointStepPa;
         /// <summary>Gas regulators: loss coefficient when fully open, referenced to the connecting pipe.</summary>
         public double RegulatorK;
         /// <summary>

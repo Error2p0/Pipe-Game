@@ -270,7 +270,7 @@ namespace HeadLoss.Game.Networks
                 {
                     // A damaged regulator lets no gas through.
                     connection = g.AddJunction(z, $"connection-{n.AnchorId}");
-                    int reg = g.AddRegulator(city, connection, def.RegulatorK, InnerD(first), def.SetpointPa, def.Id);
+                    int reg = g.AddRegulator(city, connection, def.RegulatorK, InnerD(first), eq != null && eq.SetpointPa > 0 ? eq.SetpointPa : def.SetpointPa, def.Id);
                     g.Links[reg].Temperature = tWater;
                     if (damaged) g.Links[reg].Closed = true;
                 }

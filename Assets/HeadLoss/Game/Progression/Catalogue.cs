@@ -56,7 +56,7 @@ namespace HeadLoss.Game.Progression
                 }
                 if (e.Category == "gas-supply" || e.Category == "safety")
                 {
-                    string gs = e.Category == "gas-supply" ? $"Holds the gas at {Units.FormatMbar(e.SetpointPa)} · at the gas connection" : e.Notes;
+                    string gs = e.Category == "gas-supply" ? $"Holds the gas at {Units.FormatMbar(e.SetpointPa)}{(e.SetpointFromTier > 0 ? $" (adjustable {Units.FormatMbar(e.SetpointMinPa)}–{Units.FormatMbar(e.SetpointMaxPa)} from tier {e.SetpointFromTier})" : "")} · at the gas connection" : e.Notes;
                     list.Add(new ShopItem { Id = e.Id, Name = e.DisplayName, Category = ShopCategory.GasAndSafety, Tier = e.Tier, Price = Units.FormatMoney(e.Price, sym), Stats = gs });
                     continue;
                 }

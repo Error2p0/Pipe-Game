@@ -128,6 +128,8 @@ namespace HeadLoss.Game.Buildings
         public bool Vsd;
         /// <summary>The spark-free variant: not an ignition source (<c>07-equipment.md</c> §Safety gear).</summary>
         public bool SparkFree;
+        /// <summary>Gas regulator outlet pressure set by the player, Pa (0 = its default).</summary>
+        public double SetpointPa;
 
         public EquipmentState Clone() => (EquipmentState)MemberwiseClone();
     }
@@ -264,7 +266,7 @@ namespace HeadLoss.Game.Buildings
                     parts.Add($"{w}n{f}{n.X},{n.Y},{(int)n.Kind},{n.AnchorId},{n.SmoothFittings},{n.PartId},{n.DirX},{n.DirY},{n.Opening},{n.On},{n.Vsd},{n.Speed}{set}{spark}");
                 }
             }
-            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}");
+            foreach (EquipmentState e in Equipment) parts.Add($"e{e.OpeningId},{e.EquipmentId},{e.On},{e.Speed},{e.Vsd}{(e.SparkFree ? ",spark" : "")}{(e.SetpointPa > 0 ? $",set{e.SetpointPa}" : "")}");
             foreach (SafetyDevice d in Safety) parts.Add($"d{d.EquipmentId},{d.X},{d.Y},{d.Floor},{d.Facing},{d.High}");
             foreach (PlacedDevice d in Devices) parts.Add($"x{d.Key},{d.Facing},{d.On},{d.SetpointC}");
             parts.Sort(System.StringComparer.Ordinal);

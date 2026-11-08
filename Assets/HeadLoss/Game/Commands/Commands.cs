@@ -703,6 +703,70 @@ namespace HeadLoss.Game.Commands
         }
     }
 
+    /// <summary>
+    /// Sets the outlet pressure of the gas regulator at a connection (<c>07</c>: 18–30 mbar from tier 4): live and free like a
+    /// valve setting, applied to the design and to what is built; consecutive moves merge into one undo step.
+    /// </summary>
+    public sealed class SetRegulatorSetpointCommand : OperationalCommand
+    {
+        readonly string _openingId;
+        double _pa;
+        double _wasDesign, _wasCommitted;
+        bool _hadCommitted;
+
+        public SetRegulatorSetpointCommand(string openingId, double pa)
+        {
+            _openingId = openingId;
+            _pa = pa;
+        }
+
+        public override string Description => $"Set {_pa / 100:0} mbar";
+
+        /// <summary>Whether the regulator's setpoint can be changed in this building's tier.</summary>
+        public static bool Adjustable(EquipmentDef def, int tier) => def.SetpointFromTier > 0 && tier >= def.SetpointFromTier && def.SetpointMaxPa > def.SetpointMinPa;
+
+        public static double Snap(EquipmentDef def, double pa)
+        {
+            double v = System.Math.Max(def.SetpointMinPa, System.Math.Min(def.SetpointMaxPa, pa));
+            return def.SetpointStepPa > 0 ? System.Math.Round(v / def.SetpointStepPa) * def.SetpointStepPa : v;
+        }
+
+        public override bool Execute(BuildingSession s)
+        {
+            EquipmentState? e = s.State.EquipmentAt(_openingId);
+            if (e == null) return false;
+            EquipmentDef def = s.Data.EquipmentItem(e.EquipmentId);
+            if (def.Category != "gas-supply" || !Adjustable(def, s.Layout.Tier)) return false;
+            double v = Snap(def, _pa);
+            double current = e.SetpointPa > 0 ? e.SetpointPa : def.SetpointPa;
+            if (System.Math.Abs(current - v) < 1e-9) return false;
+            _pa = v;
+            EquipmentState? c = s.CommittedTwin(e);
+            _wasDesign = e.SetpointPa;
+            e.SetpointPa = v;
+            _hadCommitted = c != null;
+            if (c != null)
+            {
+                _wasCommitted = c.SetpointPa;
+                c.SetpointPa = v;
+            }
+            return true;
+        }
+
+        public override void Undo(BuildingSession s)
+        {
+            if (s.State.EquipmentAt(_openingId) is EquipmentState e) e.SetpointPa = _wasDesign;
+            if (_hadCommitted && s.Committed.EquipmentAt(_openingId) is EquipmentState c) c.SetpointPa = _wasCommitted;
+        }
+
+        public override bool TryMerge(ICommand next)
+        {
+            if (!(next is SetRegulatorSetpointCommand d) || d._openingId != _openingId || d._hadCommitted != _hadCommitted) return false;
+            _pa = d._pa;
+            return true;
+        }
+    }
+
     /// <summary>Sets the speed of an inline fan with a variable-speed drive (live, free, merging like the intake version).</summary>
     public sealed class SetInlineSpeedCommand : OperationalCommand
     {

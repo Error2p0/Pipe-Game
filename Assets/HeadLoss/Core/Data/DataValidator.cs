@@ -36,6 +36,7 @@ namespace HeadLoss.Core.Data
             ValidateEquipment(data, errors);
             ValidateOutlets(data, errors);
             ValidateCodes(data, errors);
+            ValidateRegulators(data, errors);
             ValidateHandmade(data, errors);
             ValidateCity(data, errors);
             ValidateBuildings(data, errors);
@@ -579,6 +580,17 @@ namespace HeadLoss.Core.Data
                 if (!RewardRules.Contains(e.RewardRule)) errors.Add($"{w}: rewardRule '{e.RewardRule}' unknown");
                 if ((e.RewardPayFactor != 1) != (e.RewardRule.Length > 0)) errors.Add($"{w}: a reward needs a rewardRule and a rewardPayFactor");
                 if (e.RewardRule == "adapt" && !(e.AdaptMinutes > 0 && e.RewardMinutes > 0)) errors.Add($"{w}: the adapt rule needs adaptMinutes and rewardMinutes");
+            }
+        }
+
+        static void ValidateRegulators(DataRepository data, List<string> errors)
+        {
+            foreach (EquipmentDef e in data.Equipment)
+            {
+                if (e.SetpointFromTier <= 0) continue;
+                if (!(e.SetpointMinPa > 0 && e.SetpointMinPa <= e.SetpointPa && e.SetpointPa <= e.SetpointMaxPa))
+                    errors.Add($"equipment.json '{e.Id}': setpoint range must hold its default (min ≤ setpointPa ≤ max)");
+                if (e.SetpointStepPa < 0) errors.Add($"equipment.json '{e.Id}': setpointStepPa must be ≥ 0");
             }
         }
 

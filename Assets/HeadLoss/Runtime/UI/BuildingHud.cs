@@ -849,6 +849,9 @@ namespace HeadLoss.Unity.UI
             }
             else if (_speedSlider != null && t.Kind == TargetKind.Intake && _s.State.EquipmentAt(t.Anchor) is EquipmentState se)
                 _speedSlider.SetValueWithoutNotify((float)se.Speed * 100);
+            else if (_settingSlider != null && t.Kind == TargetKind.Intake && _s.State.EquipmentAt(t.Anchor) is EquipmentState ge
+                && _data.EquipmentItem(ge.EquipmentId).Category == "gas-supply")
+                _settingSlider.SetValueWithoutNotify((float)((ge.SetpointPa > 0 ? ge.SetpointPa : _data.EquipmentItem(ge.EquipmentId).SetpointPa) / Units.PaPerMbar));
         }
 
         /// <summary>What the action buttons depend on; they are rebuilt only when it changes (a slider keeps its drag).</summary>
@@ -1523,6 +1526,15 @@ namespace HeadLoss.Unity.UI
             EquipmentDef placed = _data.EquipmentItem(e.EquipmentId);
             if (placed.Category == "gas-supply")
             {
+                if (SetRegulatorSetpointCommand.Adjustable(placed, _s.Layout.Tier))
+                {
+                    double set = e.SetpointPa > 0 ? e.SetpointPa : placed.SetpointPa;
+                    var slider = new Slider("Setpoint (mbar)", (float)(placed.SetpointMinPa / Units.PaPerMbar), (float)(placed.SetpointMaxPa / Units.PaPerMbar)) { value = (float)(set / Units.PaPerMbar), showInputField = false };
+                    slider.AddToClassList("hl-slider");
+                    slider.RegisterValueChangedCallback(ev => _s.Execute(new SetRegulatorSetpointCommand(opening, ev.newValue * Units.PaPerMbar)));
+                    _readoutActions.Add(slider);
+                    _settingSlider = slider;
+                }
                 _ui.Button(_readoutActions, "Remove", () => _s.Execute(new SetIntakeEquipmentCommand(opening, "")));
                 return;
             }
