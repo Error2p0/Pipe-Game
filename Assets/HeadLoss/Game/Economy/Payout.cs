@@ -19,6 +19,8 @@ namespace HeadLoss.Game.Economy
         AboveCodeMax,
         /// <summary>Cut off by a closed shutoff: pays 0 but does not keep the building offline.</summary>
         Isolated,
+        /// <summary>An air outlet in a room above the indoor air quality limit: pays 0 but does not keep the building offline.</summary>
+        AirQuality,
     }
 
     /// <summary>An outlet requirement in SI delivery units (flow m³/s, pressure Pa, heat W).</summary>

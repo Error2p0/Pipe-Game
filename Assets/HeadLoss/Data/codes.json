@@ -110,5 +110,20 @@
     "parameters": {},
     "reason": "Every gas branch needs a shutoff valve before its first outlet.",
     "why": "Isolation for repair."
+  },
+  {
+    "id": "indoor-air-quality",
+    "displayName": "Indoor air quality",
+    "kind": "operating",
+    "tiers": [
+      4,
+      5
+    ],
+    "buildingTypes": [],
+    "parameters": {
+      "maxCo2Ppm": 1000
+    },
+    "reason": "A room above 1 000 ppm CO₂ gets nothing for its air outlets until its air is fresher.",
+    "why": "Ventilation standards: the fresh air a room needs grows with the people in it, not just with its outlets."
   }
 ]

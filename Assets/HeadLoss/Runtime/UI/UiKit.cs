@@ -101,6 +101,7 @@ namespace HeadLoss.Unity.UI
             OutletZone.Overdelivery => "overdelivery",
             OutletZone.AboveCodeMax => "above code max",
             OutletZone.Isolated => "isolated",
+            OutletZone.AirQuality => "CO₂ too high",
             _ => z.ToString(),
         };
     }

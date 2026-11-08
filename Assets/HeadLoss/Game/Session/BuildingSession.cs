@@ -293,6 +293,7 @@ namespace HeadLoss.Game.Session
             };
             GasSafety = new Failures.GasSafety(this);
             CeilingCapacityOverride = layout.Def.CeilingCapacity;
+            _airQuality = Codes.IndoorAirQuality.InForce(data, layout);
             if (record.PanelTripped) PowerSpeed = 0;
             BudgetCap = budgetCap ?? ReferenceLayout.BudgetCap(data, layout);
             DesignEvaluation = BuildingEconomy.Evaluate(data, layout, (NetworkSnapshot?)null);
@@ -958,10 +959,18 @@ namespace HeadLoss.Game.Session
             Current = d;
             CommittedSnapshot = c ?? d;
             Failures.DetectSurges(before, CommittedSnapshot);
+            // A building that has just loaded (or come back from the time away) starts its rooms' CO₂ where the built
+            // ventilation holds it, not at the outdoor level, so the indoor air quality code does not wait an hour to bite.
+            if (before == null) Rooms.SeedCo2(Codes.IndoorAirQuality.SteadyPpm(Data, Layout, Committed, CommittedSnapshot));
             DesignEvaluation = BuildingEconomy.Evaluate(Data, Layout, d);
             CommittedEvaluation = c == null ? BuildingEconomy.Evaluate(Data, Layout, d) : BuildingEconomy.Evaluate(Data, Layout, c);
             DesignEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, d.State, d));
             CommittedEvaluation.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, CommittedSnapshot.State, CommittedSnapshot));
+            if (_airQuality)
+            {
+                Codes.IndoorAirQuality.Apply(Data, Layout, DesignEvaluation, d.State, d);
+                Codes.IndoorAirQuality.Apply(Data, Layout, CommittedEvaluation, CommittedSnapshot.State, CommittedSnapshot);
+            }
             ApplyEffects(CommittedEvaluation, CommittedSnapshot, Committed, OfflineRules);
             ApplyEffects(DesignEvaluation, d, State, OfflineRules);
             GasSafety.UpdateInjections();
@@ -971,6 +980,9 @@ namespace HeadLoss.Game.Session
 
         /// <summary>Raised on the main thread after a new solve is accepted.</summary>
         public event Action? Solved;
+
+        /// <summary>The indoor air quality code is in force here (<c>09-codes.md</c>).</summary>
+        readonly bool _airQuality;
 
         /// <summary>
         /// Stress a segment shows on the heatmap: what it has, or with the engineering software and a design pending, what it
@@ -1096,6 +1108,7 @@ namespace HeadLoss.Game.Session
             NetworkSnapshot snap = SolveState(Committed.Clone(), CommittedSnapshot, _offlineSolver, OptionsFor(0, Units.CToK(outsideTemperatureC), none, none, true));
             BuildingEvaluation ev = BuildingEconomy.Evaluate(Data, Layout, snap);
             ev.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State, snap));
+            if (_airQuality) Codes.IndoorAirQuality.Apply(Data, Layout, ev, snap.State, snap);
             LastSteadySnapshot = snap;
             if (Failures.HasActiveBurst(snap, snap.State))
             {
@@ -1106,6 +1119,7 @@ namespace HeadLoss.Game.Session
                 NetworkSnapshot intactSnap = SolveState(Committed.Clone(), null, _offlineSolver, whole);
                 BuildingEvaluation intact = BuildingEconomy.Evaluate(Data, Layout, intactSnap);
                 intact.ApplyViolations(Codes.CodeChecker.Check(Data, Layout, snap.State, intactSnap));
+                if (_airQuality) Codes.IndoorAirQuality.Apply(Data, Layout, intact, snap.State, intactSnap);
                 ev.Gross = intact.Gross;
             }
             ApplyEffects(ev, snap, snap.State, true);

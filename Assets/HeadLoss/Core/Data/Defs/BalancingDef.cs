@@ -115,6 +115,14 @@ namespace HeadLoss.Core.Data.Defs
         public double PassMinutes;
         /// <summary>Time to fix after a fail before the second fine, min (pauses offline).</summary>
         public double FixDeadlineMinutes;
+        /// <summary>Inspections and their timers run at this rate, Hz (<c>05-simulation.md</c> §Tick rates: 1 Hz).</summary>
+        public double TickHz;
+        /// <summary>Energy rating: the reference's power scales with (delivery ÷ its delivery) to this power for flow and heat outlets (affinity laws, D159).</summary>
+        public double RatingFlowExponent;
+        /// <summary>The same for pressure outlets (taps, stoves): P ∝ Q³ and Δp ∝ Q², so P ∝ Δp^1.5.</summary>
+        public double RatingPressureExponent;
+        /// <summary>A reference drawing less than this is not rated (a hand crank uses no electricity), W.</summary>
+        public double RatingMinReferenceW;
     }
 
     /// <summary>The event scheduler (<c>10-events.md</c> §Event scheduler).</summary>

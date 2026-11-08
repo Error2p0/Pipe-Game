@@ -37,12 +37,16 @@ namespace HeadLoss.Game.Economy
         public int BelowMinimum;
         /// <summary>Outlets above their code maximum (they pay 0).</summary>
         public int AboveCodeMax;
+        /// <summary>Air outlets paying 0 because their room is above the indoor air quality limit.</summary>
+        public int AirQualityCut;
         /// <summary>Gross income, $/s (0 when offline).</summary>
         public double Gross;
         /// <summary>What the outlets would pay if the building were online, $/s.</summary>
         public double PotentialGross;
         /// <summary>Electrical input power of all running devices, W.</summary>
         public double PowerW;
+        /// <summary>Electrical input power per network, W (the energy rating compares network by network).</summary>
+        public readonly Dictionary<string, double> PowerByNetwork = new Dictionary<string, double>();
         /// <summary>Electricity cost, $/s.</summary>
         public double Electricity;
         /// <summary>Recurring fines, $/s (none before city routing exists).</summary>
@@ -57,6 +61,13 @@ namespace HeadLoss.Game.Economy
         public bool Evacuated;
         /// <summary>The gas safety certificate has expired: pay × the certificate penalty.</summary>
         public bool CertificateExpired;
+        /// <summary>Energy rating grade applied to the pay ("" = not rated), and its pay factor.</summary>
+        public string EnergyGrade = "";
+        public double EnergyFactor = 1;
+        /// <summary>A passed inspection's pay bonus is running.</summary>
+        public bool InspectionBonus;
+        /// <summary>A missed inspection deadline keeps the building offline until the findings are fixed.</summary>
+        public bool InspectionClosed;
 
         /// <summary>Layout code violations (each blocking one keeps the building offline).</summary>
         public readonly List<Codes.Violation> Violations = new List<Codes.Violation>();
@@ -97,6 +108,15 @@ namespace HeadLoss.Game.Economy
         public void ApplyEvacuation()
         {
             Evacuated = true;
+            Online = false;
+            Gross = 0;
+            foreach (OutletStatus o in Outlets) o.Pay = 0;
+        }
+
+        /// <summary>The inspector closed the building after a missed deadline: offline until the findings are fixed (<c>10-events.md</c>).</summary>
+        public void ApplyInspectionClosed()
+        {
+            InspectionClosed = true;
             Online = false;
             Gross = 0;
             foreach (OutletStatus o in Outlets) o.Pay = 0;
@@ -210,11 +230,14 @@ namespace HeadLoss.Game.Economy
             if (solves != null)
                 foreach (FluidSolve fs in solves)
                 {
-                    foreach (var kv in fs.Compiled.FanLink) ev.PowerW += DevicePower(fs.Compiled, fs.Result, kv.Value);
-                    foreach (var kv in fs.Compiled.InlineLink) ev.PowerW += DevicePower(fs.Compiled, fs.Result, kv.Value);
+                    double p = 0;
+                    foreach (var kv in fs.Compiled.FanLink) p += DevicePower(fs.Compiled, fs.Result, kv.Value);
+                    foreach (var kv in fs.Compiled.InlineLink) p += DevicePower(fs.Compiled, fs.Result, kv.Value);
                     // Electric heaters draw the heat they add over their efficiency (02 §Electricity: P = Q_heat / COP for heat devices).
                     if (fs.Thermal != null)
-                        foreach (var kv in fs.Compiled.HeaterEfficiency) ev.PowerW += System.Math.Max(0, fs.Thermal.HeatAdded[kv.Key]) / kv.Value;
+                        foreach (var kv in fs.Compiled.HeaterEfficiency) p += System.Math.Max(0, fs.Thermal.HeatAdded[kv.Key]) / kv.Value;
+                    ev.PowerW += p;
+                    ev.PowerByNetwork[fs.Fluid] = ev.PowerByNetwork.TryGetValue(fs.Fluid, out double had) ? had + p : p;
                 }
             ev.Electricity = ev.PowerW / 1000.0 * e.ElectricityPricePerKWs * e.ElectricityTierFactor[layout.Tier - 1];
             return ev;
